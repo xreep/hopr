@@ -5,6 +5,7 @@ import api, { errorMessage } from '../utils/api'
 import usePolling from '../hooks/usePolling'
 import { StatusBadge, EmptyState, PageLoader } from '../components/ui'
 import DemoSeedButton from '../components/DemoSeedButton'
+import DispatchPreviewDialog from '../components/DispatchPreviewDialog'
 import { formatKm, formatDuration, formatINR } from '../utils/format'
 import { formatDateTime } from '../utils/time'
 
@@ -24,6 +25,8 @@ export default function RoutesPage() {
   const [routes, setRoutes] = useState(null)
   const [drivers, setDrivers] = useState([])
   const [busy, setBusy] = useState(null)
+  const [dispatching, setDispatching] = useState(false)
+  const closeDispatch = useCallback(() => setDispatching(false), [])
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +90,7 @@ export default function RoutesPage() {
         </div>
         <div className="flex gap-2 flex-wrap" id="dispatch-actions">
           <DemoSeedButton />
+          <button type="button" className="btn btn-secondary" onClick={() => setDispatching(true)}>⚡ Auto-dispatch</button>
           <Link to="/route-planner" className="btn btn-primary">+ New batch</Link>
         </div>
       </div>
@@ -157,6 +161,19 @@ export default function RoutesPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {dispatching && (
+        <DispatchPreviewDialog
+          onClose={closeDispatch}
+          onApplied={result => {
+            setDispatching(false)
+            const n = result.assigned.length
+            toast.success(n ? `Auto-dispatch assigned ${n} route${n === 1 ? '' : 's'}` : 'No routes were assigned')
+            if (result.skipped.length) toast(`${result.skipped.length} skipped: ${result.skipped[0].reason}`, { icon: '⚠️' })
+            load()
+          }}
+        />
       )}
     </div>
   )

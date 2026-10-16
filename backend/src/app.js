@@ -18,6 +18,7 @@ import dashboardRoutes from './routes/dashboard.js'
 import demoRoutes from './routes/demo.js'
 import uploadRoutes from './routes/uploads.js'
 import trackRoutes from './routes/track.js'
+import dispatchRoutes from './routes/dispatch.js'
 
 const app = express()
 
@@ -139,6 +140,7 @@ app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/demo', demoRoutes)
 app.use('/api/uploads', uploadRoutes)
 app.use('/api/track', trackRoutes)
+app.use('/api/dispatch', dispatchRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
