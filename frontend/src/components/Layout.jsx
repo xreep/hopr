@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { initials } from '../utils/format'
+import MuteToggle from './MuteToggle'
 
 const Icon = ({ d, className = 'w-5 h-5' }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -113,6 +114,7 @@ export default function Layout({ headerExtras = null }) {
           </div>
           <div className="flex items-center gap-2">
             {headerExtras}
+            <MuteToggle />
           </div>
         </header>
         <main id="main" className="page-content">

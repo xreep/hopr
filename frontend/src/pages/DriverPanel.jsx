@@ -12,6 +12,7 @@ import { stopVariant, isStale } from '../utils/routeView'
 import { useAuth } from '../context/AuthContext'
 import useDriverLocation from '../hooks/useDriverLocation'
 import { relativeTime } from '../utils/time'
+import { speak } from '../utils/speak'
 
 const FAILURE_REASONS = ['Customer not available', 'Address not found', 'Customer refused delivery', 'Access restricted / gate locked', 'Package damaged']
 
@@ -30,6 +31,11 @@ export default function DriverPanel() {
     if (knownIds.current) {
       const fresh = list.filter(r => !knownIds.current.has(r._id))
       fresh.forEach(r => toast.success(`New route assigned: ${r.name} (${r.stops.length} stops)`))
+      if (fresh.length) {
+        speak(fresh.length === 1
+          ? `New route assigned. ${fresh[0].name}, ${fresh[0].stops.length} stops.`
+          : `${fresh.length} new routes assigned.`)
+      }
     }
     knownIds.current = new Set(list.map(r => r._id))
     setRoutes(list)
@@ -69,7 +75,10 @@ export default function DriverPanel() {
   const startRoute = () => call(() => api.patch(`/routes/${route._id}/start`), () => 'Route started. Drive safe!')
   const setStatus = (stop, status, reason) => call(
     () => api.patch(`/routes/${route._id}/stops/${stop._id}/status`, { status, ...(reason && { reason }) }),
-    updated => (updated.status === 'completed' ? 'All stops done. Route complete!' : 'Marked as failed')
+    updated => {
+      speak(updated.status === 'completed' ? 'Delivery marked as failed. All stops are done.' : `Delivery marked as failed. ${nextStopPhrase(updated)}`)
+      return updated.status === 'completed' ? 'All stops done. Route complete!' : 'Marked as failed'
+    }
   )
 
   const mapData = useMemo(() => {
@@ -203,6 +212,7 @@ export default function DriverPanel() {
           applyRoute(updated)
           setDialog(null)
           toast.success(updated.status === 'completed' ? 'All stops done. Route complete!' : 'Delivery completed with proof')
+          speak(updated.status === 'completed' ? 'Delivery completed. Route complete, great work!' : `Delivery completed. ${nextStopPhrase(updated)}`)
         }} />
       )}
       {dialog?.kind === 'fail' && (
@@ -276,6 +286,11 @@ function IssueDialog({ stop, onClose, onSubmit }) {
       </div>
     </Modal>
   )
+}
+
+function nextStopPhrase(route) {
+  const next = route.stops?.find(s => s.status === 'pending' || s.status === 'in_progress')
+  return next ? `Next stop: ${next.customerName || next.address.split(',')[0]}.` : ''
 }
 
 const GPS_LABELS = {

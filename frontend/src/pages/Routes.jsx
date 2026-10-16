@@ -6,6 +6,7 @@ import usePolling from '../hooks/usePolling'
 import { StatusBadge, EmptyState, PageLoader } from '../components/ui'
 import DemoSeedButton from '../components/DemoSeedButton'
 import DispatchPreviewDialog from '../components/DispatchPreviewDialog'
+import { speak } from '../utils/speak'
 import { formatKm, formatDuration, formatINR } from '../utils/format'
 import { formatDateTime } from '../utils/time'
 
@@ -170,6 +171,7 @@ export default function RoutesPage() {
             setDispatching(false)
             const n = result.assigned.length
             toast.success(n ? `Auto-dispatch assigned ${n} route${n === 1 ? '' : 's'}` : 'No routes were assigned')
+            speak(`Auto-dispatch finished. ${n} route${n === 1 ? '' : 's'} assigned.`)
             if (result.skipped.length) toast(`${result.skipped.length} skipped: ${result.skipped[0].reason}`, { icon: '⚠️' })
             load()
           }}

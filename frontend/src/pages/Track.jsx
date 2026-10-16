@@ -4,6 +4,8 @@ import MapView from '../components/MapView'
 import usePolling from '../hooks/usePolling'
 import { planMove, positionAt, remainingFrom } from '../utils/tracking'
 import { formatClock } from '../utils/time'
+import { speak } from '../utils/speak'
+import MuteToggle from '../components/MuteToggle'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 const POLL_MS = 5000
@@ -44,7 +46,8 @@ export default function Track() {
       setError('')
     }
   }, [token])
-  usePolling(load, POLL_MS)
+  // Keep polling (slower) in a background tab so the "arriving" announcement still plays
+  usePolling(load, POLL_MS, true, { backgroundIntervalMs: 15000 })
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -89,6 +92,19 @@ export default function Track() {
     return () => cancelAnimationFrame(frame.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixKey])
+
+  // Speak once each time the delivery enters the "arriving" state
+  const lastStatus = useRef(null)
+  useEffect(() => {
+    const status = data?.status
+    if (!status) return
+    if (status === 'arriving' && lastStatus.current !== 'arriving') {
+      speak(`${data.driver?.firstName || 'Your driver'} is arriving with your delivery. Please be ready.`)
+    } else if (status === 'delivered' && lastStatus.current && lastStatus.current !== 'delivered') {
+      speak('Your order has been delivered.')
+    }
+    lastStatus.current = status
+  }, [data?.status, data?.driver?.firstName])
 
   const stale = Boolean(data?.location) && (data.location.stale || now - lastOk.current > (data.staleAfterSec || 60) * 1000)
 
@@ -168,7 +184,7 @@ function TrackHeader({ deliveryId }) {
       </span>
       <span className="flex items-center gap-2">
         {deliveryId && <span className="text-xs text-muted font-mono">{deliveryId}</span>}
-        <span id="track-header-extras" />
+        <MuteToggle />
       </span>
     </header>
   )
