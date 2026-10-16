@@ -18,6 +18,7 @@ const AdminPanel = lazy(() => import('./pages/AdminPanel'))
 const Profile = lazy(() => import('./pages/Profile'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Track = lazy(() => import('./pages/Track'))
+const DesignSystem = lazy(() => import('./pages/DesignSystem'))
 
 const MANAGERS = ['admin', 'fleet_manager']
 
@@ -48,6 +49,8 @@ export default function App() {
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         {/* Public customer tracking: the token in the link is the only credential */}
         <Route path="/track/:token" element={<Track />} />
+        {/* Living style guide, development builds only */}
+        {import.meta.env.DEV && <Route path="/design-system" element={<DesignSystem />} />}
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
