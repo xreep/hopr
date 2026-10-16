@@ -23,6 +23,9 @@ const STATUS_VARIANTS = {
   completed: 'badge-done',
   on_time: 'badge-done',
   planned: 'badge-neutral',
+  in_service: 'badge-done',
+  enabled: 'badge-done',
+  on_route: 'badge-live',
   pending: 'badge-neutral',
   standard: 'badge-neutral',
   low: 'badge-neutral',
@@ -35,7 +38,7 @@ const STATUS_VARIANTS = {
   cancelled: 'badge-error'
 }
 
-const STATUS_LABELS = { in_progress: 'In progress', on_time: 'On time', ev_van: 'EV van' }
+const STATUS_LABELS = { in_progress: 'In progress', on_time: 'On time', ev_van: 'EV van', in_service: 'In service', enabled: 'Active', on_route: 'On a route' }
 
 export function StatusBadge({ status, label, className = '' }) {
   if (!status) return null

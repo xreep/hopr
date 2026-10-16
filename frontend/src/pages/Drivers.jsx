@@ -5,6 +5,7 @@ import api, { errorMessage } from '../utils/api'
 import { StatusBadge, EmptyState, PageLoader, StatCard } from '../components/ui'
 import { formatKm, initials } from '../utils/format'
 import { relativeTime } from '../utils/time'
+import Icon from '../components/icons'
 
 export default function Drivers() {
   const [drivers, setDrivers] = useState(null)
@@ -71,20 +72,23 @@ export default function Drivers() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Drivers</h1>
-          <p className="page-subtitle">Contact details, vehicles and performance from recorded deliveries</p>
+          <p className="page-subtitle">Who&apos;s driving what, and how each driver is doing on real deliveries.</p>
         </div>
       </div>
 
       <div className="grid grid-4 mb-6">
         <StatCard label="Drivers" value={list.length} />
-        <StatCard label="Active accounts" value={list.filter(d => d.isActive).length} tone="success" />
-        <StatCard label="On a route now" value={onRoute} />
+        <StatCard label="On a route now" value={onRoute} isKey />
+        <StatCard label="Active accounts" value={list.filter(d => d.isActive).length} />
         <StatCard label="Deliveries completed" value={delivered} />
       </div>
 
       <div className="card">
         <div className="card-header">
-          <input type="search" className="form-input" placeholder="Search by name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search drivers" />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"><Icon name="search" size={16} /></span>
+            <input type="search" className="form-input pl-9" placeholder="Search by name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search drivers" />
+          </div>
         </div>
         {!drivers ? <PageLoader /> : list.length === 0 ? (
           <EmptyState title="No drivers yet">Drivers can register from the login page, or an admin can create them.</EmptyState>
@@ -92,7 +96,7 @@ export default function Drivers() {
           <div className="table-container">
             <table className="table">
               <thead>
-                <tr><th>Driver</th><th>Status</th><th>Vehicle</th><th>Deliveries</th><th>On-time</th><th>Completion</th><th>Avg time</th><th>Distance</th><th>Last GPS</th><th className="text-right">Actions</th></tr>
+                <tr><th>Driver</th><th>Status</th><th>Vehicle</th><th>Delivered</th><th>On time</th><th>Completed</th><th>Avg time</th><th>Distance</th><th>Last GPS</th><th className="text-right"><span className="sr-only">Actions</span></th></tr>
               </thead>
               <tbody>
                 {list.map(d => (
@@ -107,8 +111,9 @@ export default function Drivers() {
                       </div>
                     </td>
                     <td>
-                      <StatusBadge status={d.isActive ? 'active' : 'inactive'} />
-                      {d.activeRoute && <Link to={`/routes/${d.activeRoute._id}`} className="block text-xs mt-1">On {d.activeRoute.routeId}</Link>}
+                      {d.activeRoute
+                        ? <Link to={`/routes/${d.activeRoute._id}`} className="no-underline"><StatusBadge status="on_route" label={`On ${d.activeRoute.routeId}`} /></Link>
+                        : <StatusBadge status={d.isActive ? 'enabled' : 'inactive'} />}
                     </td>
                     <td>
                       <select className="form-input form-select form-input-sm" aria-label={`Vehicle for ${d.name}`} value={d.vehicle?._id || ''} disabled={busy === d._id || !d.isActive}
@@ -117,14 +122,14 @@ export default function Drivers() {
                         {vehicles.map(v => <option key={v._id} value={v._id}>{v.name} · {v.licensePlate}{v.driver && v.driver._id !== d._id ? ` (${v.driver.name})` : ''}</option>)}
                       </select>
                     </td>
-                    <td>{d.totalDeliveries}{d.failedDeliveries ? <span className="text-xs text-error"> / {d.failedDeliveries} failed</span> : null}</td>
-                    <td>{d.onTimeRate === null ? '-' : `${d.onTimeRate}%`}</td>
-                    <td>{d.completionRate === null ? '-' : `${d.completionRate}%`}</td>
-                    <td>{d.avgDeliveryMinutes === null ? '-' : `${Math.round(d.avgDeliveryMinutes)} min`}</td>
+                    <td className="nd-tabular">{d.totalDeliveries}{d.failedDeliveries ? <div className="text-micro text-signal-coral">{d.failedDeliveries} failed</div> : null}</td>
+                    <td className="nd-tabular">{d.onTimeRate === null ? '—' : `${d.onTimeRate}%`}</td>
+                    <td className="nd-tabular">{d.completionRate === null ? '—' : `${d.completionRate}%`}</td>
+                    <td className="nd-tabular">{d.avgDeliveryMinutes === null ? '—' : `${Math.round(d.avgDeliveryMinutes)} min`}</td>
                     <td>{formatKm(d.distanceKm)}</td>
-                    <td className="text-xs">{relativeTime(d.lastLocation?.updatedAt)}</td>
+                    <td className="text-micro text-ink-300 whitespace-nowrap">{relativeTime(d.lastLocation?.updatedAt)}</td>
                     <td className="text-right">
-                      <button type="button" className={`btn btn-ghost btn-sm ${d.isActive ? 'text-warning' : 'text-success'}`} disabled={busy === d._id} onClick={() => toggleActive(d)}>
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={busy === d._id} onClick={() => toggleActive(d)}>
                         {d.isActive ? 'Deactivate' : 'Activate'}
                       </button>
                     </td>

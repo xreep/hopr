@@ -519,3 +519,9 @@
     .planner-map-summary { position: static; margin: 0; border-radius: 0 0 18px 18px; border-width: 1px 0 0; animation: none; }
   }
 }
+
+@layer components {
+  .icon-tile { width: 2.25rem; height: 2.25rem; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--nd-raised); border: 1px solid var(--nd-hair); color: var(--nd-ink-2); }
+  .icon-tile svg { width: 1.15rem; height: 1.15rem; }
+  tr:hover .icon-tile { color: var(--nd-ink); border-color: rgb(169 180 200 / 0.22); }
+}

@@ -3,7 +3,8 @@ import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 import { Modal, StatusBadge, EmptyState, PageLoader, StatCard } from '../components/ui'
-import { VEHICLE_TYPES, FUEL_UNITS, vehicleTypeLabel } from '../config'
+import { VEHICLE_TYPES, FUEL_UNITS, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
+import Icon from '../components/icons'
 import { formatDate } from '../utils/time'
 
 const FUEL_TYPES = ['diesel', 'petrol', 'cng', 'electric', 'hybrid']
@@ -133,16 +134,16 @@ export default function VehicleManagement() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Vehicles</h1>
-          <p className="page-subtitle">Fleet, fuel efficiency, capacity and driver assignment</p>
+          <p className="page-subtitle">Your fleet, how far each vehicle goes on a litre or kWh, and who drives it.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => open()}>+ Add vehicle</button>
+        <button className="btn btn-primary" onClick={() => open()}><Icon name="plus" />Add vehicle</button>
       </div>
 
       <div className="grid grid-4 mb-6">
         <StatCard label="Vehicles" value={stats.total} />
-        <StatCard label="Active" value={stats.active} tone="success" />
-        <StatCard label="In maintenance" value={stats.maintenance} tone="warning" />
-        <StatCard label="Electric" value={stats.electric} />
+        <StatCard label="In service" value={stats.active} isKey />
+        <StatCard label="In maintenance" value={stats.maintenance} />
+        <StatCard label="Electric" value={stats.electric} hint="Charged at the Kokar hub" />
       </div>
 
       <div className="card">
@@ -155,7 +156,7 @@ export default function VehicleManagement() {
             <option value="">All fuel types</option>
             {FUEL_TYPES.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
-          <input type="search" className="form-input w-auto flex-1 min-w-[180px]" placeholder="Search name, ID or plate" value={filters.search}
+          <input type="search" className="form-input w-auto flex-1 min-w-[180px]" placeholder="Search by name, ID or plate" value={filters.search}
             onChange={e => setFilters({ ...filters, search: e.target.value })} aria-label="Search vehicles" />
         </div>
 
@@ -165,22 +166,27 @@ export default function VehicleManagement() {
           <div className="table-container">
             <table className="table">
               <thead>
-                <tr><th>Vehicle</th><th>Type</th><th>Fuel · efficiency</th><th>Capacity</th><th>Plate</th><th>Status</th><th>Driver</th><th>Next service</th><th className="text-right">Actions</th></tr>
+                <tr><th>Vehicle</th><th>Type</th><th>Fuel and efficiency</th><th>Capacity</th><th>Plate</th><th>Status</th><th>Driver</th><th>Next service</th><th className="text-right"><span className="sr-only">Actions</span></th></tr>
               </thead>
               <tbody>
                 {list.map(v => (
                   <tr key={v._id}>
-                    <td><span className="font-medium">{v.name}</span><div className="text-xs text-muted font-mono">{v.vehicleId}</div></td>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <span className="icon-tile"><Icon name={VEHICLE_ICONS[v.type]} /></span>
+                        <div><span className="font-medium">{v.name}</span><div className="text-micro text-ink-400">{v.vehicleId}</div></div>
+                      </div>
+                    </td>
                     <td>{vehicleTypeLabel(v.type)}</td>
-                    <td><span className="capitalize">{v.fuelType}</span> · {v.mileage} {FUEL_UNITS[v.fuelType]}</td>
+                    <td><span className="capitalize">{v.fuelType}</span><div className="text-micro text-ink-400">{v.mileage} {FUEL_UNITS[v.fuelType]}</div></td>
                     <td>{v.capacity} kg</td>
-                    <td className="font-mono">{v.licensePlate}</td>
-                    <td><StatusBadge status={v.status} /></td>
-                    <td>{v.driver?.name || <span className="text-muted">Unassigned</span>}</td>
+                    <td className="nd-tabular tracking-wide">{v.licensePlate}</td>
+                    <td><StatusBadge status={v.status === 'active' ? 'in_service' : v.status} /></td>
+                    <td>{v.driver?.name || <span className="text-ink-400">No driver</span>}</td>
                     <td className="text-sm">{v.nextMaintenance ? formatDate(v.nextMaintenance) : '-'}</td>
                     <td className="text-right whitespace-nowrap">
-                      <button className="btn btn-ghost btn-sm" onClick={() => open(v)} aria-label={`Edit ${v.name}`}>Edit</button>
-                      {isAdmin && <button className="btn btn-ghost btn-sm text-error" onClick={() => remove(v)} aria-label={`Delete ${v.name}`}>Delete</button>}
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => open(v)} aria-label={`Edit ${v.name}`} title="Edit"><Icon name="edit" /></button>
+                      {isAdmin && <button className="btn btn-ghost btn-sm btn-icon hover:text-signal-coral" onClick={() => remove(v)} aria-label={`Delete ${v.name}`} title="Delete"><Icon name="trash" /></button>}
                     </td>
                   </tr>
                 ))}

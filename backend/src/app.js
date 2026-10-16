@@ -126,7 +126,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many authentication attempts, please try again later' }
 })
-app.use('/api/auth', authLimiter)
+// Brute-force protection applies to credential endpoints only, not the session check (GET /me)
+app.use('/api/auth', (req, res, next) => (req.method === 'GET' ? next() : authLimiter(req, res, next)))
 
 app.use('/api/auth', authRoutes)
 app.use('/api/routes', routeRoutes)

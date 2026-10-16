@@ -6,6 +6,7 @@ import { Modal, StatusBadge, EmptyState, PageLoader, StatCard } from '../compone
 import { formatDate } from '../utils/time'
 import { MAPBOX_TOKEN } from '../config'
 import DemoSeedButton from '../components/DemoSeedButton'
+import Icon from '../components/icons'
 
 const ROLES = ['admin', 'fleet_manager', 'driver']
 const roleLabel = r => r.replace('_', ' ')
@@ -99,10 +100,10 @@ export default function AdminPanel() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Admin Panel</h1>
-          <p className="page-subtitle">Users, roles and system configuration</p>
+          <h1 className="page-title">Admin</h1>
+          <p className="page-subtitle">People who can sign in, what they can do, and how Hopr is configured.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => open()}>+ Add user</button>
+        <button className="btn btn-primary" onClick={() => open()}><Icon name="plus" />Add user</button>
       </div>
 
       <div className="grid grid-4 mb-6">
@@ -115,10 +116,10 @@ export default function AdminPanel() {
       <div className="card mb-6">
         <div className="card-body flex-between flex-wrap gap-3">
           <div>
-            <p className="font-semibold">Demo data</p>
-            <p className="text-sm text-muted">Creates the demo accounts and fleet if missing, and a fresh 5-stop Ranchi route with delivery windows assigned to driver@hopr.com.</p>
+            <p className="font-display text-h3 font-medium">Demo data</p>
+            <p className="text-small text-ink-400 mt-1 max-w-[60ch]">Adds the demo accounts and fleet if they&apos;re missing, plus a fresh five-stop Ranchi route with delivery windows, assigned to driver@hopr.com.</p>
           </div>
-          <DemoSeedButton className="btn btn-primary" />
+          <DemoSeedButton className="btn btn-secondary" />
         </div>
       </div>
 
@@ -139,16 +140,16 @@ export default function AdminPanel() {
                   <tr key={u._id}>
                     <td className="font-medium">{u.name}{isSelf(u) && <span className="text-xs text-muted"> (you)</span>}</td>
                     <td>{u.email}</td>
-                    <td><span className={`badge ${u.role === 'admin' ? 'badge-error' : u.role === 'fleet_manager' ? 'badge-primary' : 'badge-success'} capitalize`}>{roleLabel(u.role)}</span></td>
+                    <td><span className="badge badge-neutral badge-plain capitalize">{roleLabel(u.role)}</span></td>
                     <td>{u.phone || '-'}</td>
-                    <td><StatusBadge status={u.isActive ? 'active' : 'inactive'} /></td>
-                    <td className="text-sm text-muted">{u.lastLogin ? formatDate(u.lastLogin) : 'Never'}</td>
+                    <td><StatusBadge status={u.isActive ? 'enabled' : 'inactive'} /></td>
+                    <td className="text-small text-ink-300 whitespace-nowrap">{u.lastLogin ? formatDate(u.lastLogin) : 'Never'}</td>
                     <td className="text-right whitespace-nowrap">
-                      <button className="btn btn-ghost btn-sm" onClick={() => open(u)} aria-label={`Edit ${u.name}`}>Edit</button>
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => open(u)} aria-label={`Edit ${u.name}`} title="Edit"><Icon name="edit" /></button>
                       {!isSelf(u) && (
                         <>
-                          <button className={`btn btn-ghost btn-sm ${u.isActive ? 'text-warning' : 'text-success'}`} onClick={() => toggleStatus(u)}>{u.isActive ? 'Deactivate' : 'Activate'}</button>
-                          <button className="btn btn-ghost btn-sm text-error" onClick={() => remove(u)} aria-label={`Delete ${u.name}`}>Delete</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => toggleStatus(u)}>{u.isActive ? 'Deactivate' : 'Activate'}</button>
+                          <button className="btn btn-ghost btn-sm btn-icon hover:text-signal-coral" onClick={() => remove(u)} aria-label={`Delete ${u.name}`} title="Delete"><Icon name="trash" /></button>
                         </>
                       )}
                     </td>
@@ -161,7 +162,7 @@ export default function AdminPanel() {
       </div>
 
       <div className="card mt-6">
-        <div className="card-header"><h3 className="font-semibold">System configuration</h3></div>
+        <div className="card-header"><h3>System configuration</h3></div>
         <div className="card-body">
           <dl className="detail-list">
             <dt>Map tiles (browser)</dt><dd>{MAPBOX_TOKEN ? 'Mapbox GL (token configured)' : 'Schematic fallback. Set VITE_MAPBOX_TOKEN on Vercel.'}</dd>

@@ -16,9 +16,12 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.get('/auth/me')
       setUser(response.data.user)
-    } catch {
-      localStorage.removeItem('token')
-      setUser(null)
+    } catch (error) {
+      // Only an authentication failure ends the session; rate limits or network blips keep it
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token')
+        setUser(null)
+      }
     } finally {
       setLoading(false)
     }
