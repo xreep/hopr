@@ -7,9 +7,26 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:5001',
         changeOrigin: true
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          mapbox: ['mapbox-gl'],
+          charts: ['chart.js', 'react-chartjs-2'],
+          react: ['react', 'react-dom', 'react-router-dom']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 2100
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{js,jsx}'],
+    setupFiles: ['src/test/setup.js']
   }
 })
