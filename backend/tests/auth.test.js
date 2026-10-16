@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { api, createUser } from './helpers.js'
 import User from '../src/models/User.js'
+import { useTestDb } from './db.js'
+
+useTestDb()
 
 const newUser = { name: 'Asha Toppo', email: 'asha@hopr.test', password: 'secret123' }
 

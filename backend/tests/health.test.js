@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import request from 'supertest'
 import app from '../src/app.js'
+import { useTestDb } from './db.js'
+
+useTestDb()
 
 describe('app bootstrap', () => {
   it('serves the health check without starting a server', async () => {

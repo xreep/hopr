@@ -1,24 +1,4 @@
-import { beforeAll, afterAll, afterEach } from 'vitest'
-import mongoose from 'mongoose'
-import { MongoMemoryServer } from 'mongodb-memory-server'
-
+// Runs before every test file. Database-backed suites opt in via useTestDb().
 process.env.NODE_ENV = 'test'
 process.env.JWT_SECRET = 'test-only-secret-not-used-anywhere-else'
 delete process.env.MAPBOX_TOKEN
-
-let mongo
-
-beforeAll(async () => {
-  mongo = await MongoMemoryServer.create()
-  await mongoose.connect(mongo.getUri())
-})
-
-afterEach(async () => {
-  const collections = await mongoose.connection.db.collections()
-  await Promise.all(collections.map(c => c.deleteMany({})))
-})
-
-afterAll(async () => {
-  await mongoose.disconnect()
-  if (mongo) await mongo.stop()
-})

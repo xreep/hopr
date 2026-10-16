@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { api, createUser } from './helpers.js'
 import Route from '../src/models/Route.js'
 import User from '../src/models/User.js'
+import { useTestDb } from './db.js'
+
+useTestDb()
 
 async function makeRoute(createdBy, driver) {
   return Route.create({
@@ -10,8 +13,8 @@ async function makeRoute(createdBy, driver) {
     createdBy,
     driver,
     stops: [
-      { address: 'Firayalal Chowk, Main Road, Ranchi', coordinates: [85.3247, 23.3629] },
-      { address: 'Morabadi Ground, Ranchi', coordinates: [85.3239, 23.3966] }
+      { deliveryId: 'DLV-1', address: 'Albert Ekka Chowk, Main Road, Ranchi', coordinates: [85.3249, 23.3702] },
+      { deliveryId: 'DLV-2', address: 'Morabadi Maidan, Ranchi', coordinates: [85.3278, 23.3909] }
     ]
   })
 }

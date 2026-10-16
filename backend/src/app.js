@@ -11,6 +11,7 @@ import driverRoutes from './routes/drivers.js'
 import analyticsRoutes from './routes/analytics.js'
 import adminRoutes from './routes/admin.js'
 import mapRoutes from './routes/map.js'
+import incidentRoutes from './routes/incidents.js'
 
 const app = express()
 
@@ -74,6 +75,7 @@ app.use('/api/drivers', driverRoutes)
 app.use('/api/analytics', analyticsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/map', mapRoutes)
+app.use('/api/incidents', incidentRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
