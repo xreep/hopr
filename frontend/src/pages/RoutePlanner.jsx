@@ -6,7 +6,9 @@ import MapView from '../components/MapView'
 import AddressAutocomplete from '../components/AddressAutocomplete'
 import { fetchSuggestions } from '../utils/geocoding'
 import { StatusBadge } from '../components/ui'
-import { DEFAULT_DEPOT, VEHICLE_TYPES, PRIORITY_OPTIONS, MAX_STOPS_PER_ROUTE, ROUTE_COLORS, vehicleTypeLabel } from '../config'
+import { DEFAULT_DEPOT, VEHICLE_TYPES, PRIORITY_OPTIONS, MAX_STOPS_PER_ROUTE, ROUTE_COLORS, VOLT, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
+import Icon from '../components/icons'
+import useMediaQuery from '../hooks/useMediaQuery'
 import { csvToStops, SAMPLE_CSV } from '../utils/csv'
 import { formatDuration, formatINR, formatKm } from '../utils/format'
 import { formatClock, toISTInputValue, fromISTInputValue } from '../utils/time'
@@ -162,7 +164,7 @@ export default function RoutePlanner() {
       setAssignments({})
       const v = res.data.totals.violations
       toast.success(`Optimized ${res.data.totals.stops} stops into ${res.data.routes.length} route(s) in ${res.data.computeMs} ms`)
-      if (v) toast(`${v} delivery window(s) cannot be met. See the warnings.`, { icon: '⚠️' })
+      if (v) toast(`${v} delivery window${v > 1 ? 's' : ''} can't be met. Check the warnings below.`)
     } catch (err) {
       toast.error(errorMessage(err, 'Failed to optimize route'))
     } finally {
@@ -192,41 +194,58 @@ export default function RoutePlanner() {
     if (!plan) {
       return {
         lines: [],
-        points: [depotPoint, ...stops.filter(s => s.coordinates).map((s, i) => ({ id: s.key, coordinates: s.coordinates, label: i + 1, variant: 'stop', title: s.address }))]
+        points: [depotPoint, ...stops.filter(s => s.coordinates).map((s, i) => ({ id: s.key, coordinates: s.coordinates, label: i + 1, variant: 'muted', title: s.address }))]
       }
     }
     return {
       lines: plan.routes.map((r, i) => ({
         id: `r${i}`,
         coordinates: [r.depot.coordinates, ...r.stops.map(s => s.coordinates), ...(r.returnToDepot ? [r.depot.coordinates] : [])],
-        color: ROUTE_COLORS[i % ROUTE_COLORS.length],
-        width: i === activeRoute ? 5 : 3,
-        opacity: i === activeRoute ? 0.95 : 0.45
+        color: i === activeRoute ? VOLT : ROUTE_COLORS[i % ROUTE_COLORS.length],
+        width: i === activeRoute ? 4.5 : 3,
+        opacity: i === activeRoute ? 1 : 0.45
       })),
       points: [depotPoint, ...plan.routes.flatMap((r, i) => r.stops.map(s => ({
         id: `r${i}-${s.sequence}`,
         coordinates: s.coordinates,
         label: s.sequence,
-        variant: s.windowStatus === 'late' ? 'late' : i === activeRoute ? 'current' : 'stop',
-        title: `${s.sequence}. ${s.address} · ETA ${s.etaLabel}`
+        variant: s.windowStatus === 'late' ? 'late' : i === activeRoute ? 'stop' : 'muted',
+        title: `${s.sequence}. ${s.address}, ETA ${s.etaLabel}`
       })))]
     }
   }, [plan, stops, depot, activeRoute])
 
-  const fitKey = plan ? `plan-${plan.computeMs}-${plan.routes.length}` : stops.filter(s => s.coordinates).map(s => s.coordinates.join()).join('|')
+  const fitKey = plan ? `plan-${plan.computeMs}-${plan.routes.length}-${activeRoute}` : stops.filter(s => s.coordinates).map(s => s.coordinates.join()).join('|')
+  const shownRoute = plan?.routes[activeRoute]
+  const wideLayout = useMediaQuery('(min-width: 1101px)')
 
   return (
     <div className="planner">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Route Planner</h1>
-          <p className="page-subtitle">Multi-stop, multi-vehicle optimization with traffic, delivery windows, priority and fuel</p>
+          <h1 className="page-title">Route planner</h1>
+          <p className="page-subtitle">Add deliveries, pick vehicles, and let Hopr sequence every stop around traffic, windows, priority and fuel.</p>
         </div>
       </div>
 
       <div className="planner-grid">
         <section className="planner-map card" aria-label="Map">
-          <MapView lines={mapData.lines} points={mapData.points} fitKey={fitKey} traffic={trafficEnabled} height="100%" />
+          <MapView lines={mapData.lines} points={mapData.points} fitKey={fitKey} traffic={trafficEnabled} height="100%" insetBottom={shownRoute && wideLayout ? 96 : 0} />
+          {shownRoute ? (
+            <div className="planner-map-summary" aria-live="polite">
+              <p className="text-micro text-ink-400">{plan.routes.length > 1 ? `Route ${activeRoute + 1} of ${plan.routes.length}, ${shownRoute.vehicle.name}` : shownRoute.vehicle.name}</p>
+              <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-1">
+                <span className="planner-map-stat">{shownRoute.totals.distanceKm}<small>km</small></span>
+                <span className="planner-map-stat">{formatDuration(shownRoute.totals.totalMinutes)}</span>
+                <span className="planner-map-stat">{formatINR(shownRoute.totals.fuel.cost)}<small>fuel</small></span>
+                <span className="text-small text-ink-300">{shownRoute.stops.length} stops, back by {formatClock(shownRoute.finishTime)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="planner-map-summary is-idle">
+              <p className="text-small text-ink-300">{filledStops.length ? `${filledStops.length - unlocated.length} of ${filledStops.length} addresses pinned. Optimize to draw the route.` : 'Add delivery addresses to see them on the map.'}</p>
+            </div>
+          )}
         </section>
 
         <section className="planner-panel" aria-label="Plan">
@@ -240,7 +259,7 @@ export default function RoutePlanner() {
                 <label className="form-label" htmlFor="departure">Departure (IST)</label>
                 <input id="departure" type="datetime-local" className="form-input" value={departure} onChange={e => { setDeparture(e.target.value); touch() }} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="form-label" htmlFor="depot">Start depot</label>
                 <AddressAutocomplete id="depot" value={depotText} coordinates={depot.coordinates}
                   onChange={text => { setDepotText(text); setDepot(d => ({ ...d, coordinates: null })) }}
@@ -256,9 +275,9 @@ export default function RoutePlanner() {
 
           <div className="card mb-4">
             <div className="card-header flex-between">
-              <h3 className="font-semibold">Deliveries <span className="text-muted text-sm">({filledStops.length}/{maxStops})</span></h3>
+              <h3>Deliveries <span className="text-ink-400 text-small font-sans font-normal">{filledStops.length} of {maxStops}</span></h3>
               <div className="flex gap-2">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => fileInput.current?.click()}>Upload CSV</button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInput.current?.click()}><Icon name="upload" />Upload CSV</button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
                   const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' })
                   const a = document.createElement('a')
@@ -266,7 +285,7 @@ export default function RoutePlanner() {
                   a.download = 'hopr-deliveries-template.csv'
                   a.click()
                   URL.revokeObjectURL(a.href)
-                }}>Template</button>
+                }}><Icon name="download" />Template</button>
                 <input ref={fileInput} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} aria-label="Upload CSV of deliveries" />
               </div>
             </div>
@@ -276,12 +295,12 @@ export default function RoutePlanner() {
                 <StopEditor key={stop.key} index={index} stop={stop} onChange={patch => updateStop(stop.key, patch)}
                   onRemove={stops.length > 1 ? () => removeStop(stop.key) : null} />
               ))}
-              <button type="button" className="btn btn-outline w-full" onClick={addStop} disabled={stops.length >= maxStops}>+ Add stop</button>
+              <button type="button" className="btn btn-secondary w-full" onClick={addStop} disabled={stops.length >= maxStops}><Icon name="plus" />Add stop</button>
             </div>
           </div>
 
           <div className="card mb-4">
-            <div className="card-header"><h3 className="font-semibold">Vehicles & constraints</h3></div>
+            <div className="card-header"><h3>Vehicles and constraints</h3></div>
             <div className="card-body space-y-4">
               <div className="tabs" role="tablist" aria-label="Vehicle selection">
                 <button type="button" role="tab" aria-selected={vehicleMode === 'fleet'} className={`tab ${vehicleMode === 'fleet' ? 'active' : ''}`}
@@ -301,7 +320,7 @@ export default function RoutePlanner() {
                           touch()
                         }} />
                         <span className="font-medium">{v.name}</span>
-                        <span className="text-xs text-muted">{vehicleTypeLabel(v.type)} · {v.capacity} kg · {v.mileage} {v.fuelType === 'electric' ? 'km/kWh' : 'km/L'}{v.driver ? ` · ${v.driver.name}` : ''}</span>
+                        <span className="text-xs text-muted">{vehicleTypeLabel(v.type)}, {v.capacity} kg, {v.mileage} {v.fuelType === 'electric' ? 'km/kWh' : 'km/L'}{v.driver ? `, driven by ${v.driver.name}` : ''}</span>
                       </label>
                     )
                   })}
@@ -314,9 +333,9 @@ export default function RoutePlanner() {
                       <button key={v.id} type="button" aria-pressed={vehicleType === v.id}
                         className={`vehicle-type ${vehicleType === v.id ? 'selected' : ''}`}
                         onClick={() => { setVehicleType(v.id); touch() }}>
-                        <span className="text-xl" aria-hidden="true">{v.icon}</span>
+                        <Icon name={VEHICLE_ICONS[v.id]} />
                         <span className="font-medium">{v.name}</span>
-                        <span className="text-xs text-muted">{v.mileage} {v.unit} {v.fuelType} · {v.capacity} kg</span>
+                        <span className="text-xs text-muted">{v.mileage} {v.unit} {v.fuelType}, {v.capacity} kg</span>
                       </button>
                     ))}
                   </div>
@@ -332,7 +351,7 @@ export default function RoutePlanner() {
                 <input type="checkbox" checked={trafficEnabled} onChange={e => { setTrafficEnabled(e.target.checked); touch() }} />
                 <span>
                   <span className="font-medium">Traffic-aware routing</span>
-                  <span className="block text-xs text-muted">Ranchi rush-hour profile + reported congestion zones</span>
+                  <span className="block text-xs text-muted">Uses Ranchi&apos;s rush-hour pattern and any congestion or closures you&apos;ve reported</span>
                 </span>
               </label>
               <label className="toggle-row">
@@ -342,9 +361,11 @@ export default function RoutePlanner() {
             </div>
           </div>
 
-          <button type="button" className="btn btn-primary btn-lg w-full mb-4" onClick={optimize} disabled={optimizing || locating > 0}>
-            {optimizing ? <><span className="spinner" /> Optimizing…</> : '⚡ Optimize routes'}
-          </button>
+          <div className="planner-action">
+            <button type="button" className={`btn btn-lg w-full ${plan ? 'btn-secondary' : 'btn-primary'}`} onClick={optimize} disabled={optimizing || locating > 0}>
+              {optimizing ? <><span className="spinner" /> Optimizing</> : plan ? <><Icon name="refresh" />Re-optimize</> : <><Icon name="bolt" />Optimize routes</>}
+            </button>
+          </div>
 
           {plan && (
             <PlanResults plan={plan} activeRoute={activeRoute} setActiveRoute={setActiveRoute}
@@ -360,7 +381,7 @@ export default function RoutePlanner() {
 function StopEditor({ index, stop, onChange, onRemove }) {
   const invalidWindow = stop.windowStart && stop.windowEnd && stop.windowEnd <= stop.windowStart
   return (
-    <div className="stop-editor">
+    <div className={`stop-editor ${stop.coordinates ? 'is-located' : ''}`}>
       <div className="stop-editor-head">
         <span className="stop-index" aria-hidden="true">{index + 1}</span>
         <AddressAutocomplete
@@ -372,33 +393,33 @@ function StopEditor({ index, stop, onChange, onRemove }) {
           onSelect={({ address, coordinates }) => onChange({ address, coordinates })}
         />
         {onRemove && (
-          <button type="button" className="btn btn-ghost btn-sm text-error" onClick={onRemove} aria-label={`Remove stop ${index + 1}`}>✕</button>
+          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={onRemove} aria-label={`Remove stop ${index + 1}`}><Icon name="x" /></button>
         )}
       </div>
       <div className="stop-editor-row">
         <input className="form-input" placeholder="Customer name" aria-label={`Stop ${index + 1} customer name`} value={stop.customerName}
           onChange={e => onChange({ customerName: e.target.value })} maxLength={100} />
         <select className="form-input form-select" aria-label={`Stop ${index + 1} priority`} value={stop.priority} onChange={e => onChange({ priority: e.target.value })}>
-          {PRIORITY_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          {PRIORITY_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label} priority</option>)}
         </select>
       </div>
       <div className="stop-editor-row">
         <label className="window-input">
-          <span className="text-xs text-muted">Window from</span>
+          <span>Window from</span>
           <input type="time" className="form-input" aria-label={`Stop ${index + 1} window start`} value={stop.windowStart} onChange={e => onChange({ windowStart: e.target.value })} />
         </label>
         <label className="window-input">
-          <span className="text-xs text-muted">to</span>
+          <span>Window to</span>
           <input type="time" className={`form-input ${invalidWindow ? 'error' : ''}`} aria-label={`Stop ${index + 1} window end`} value={stop.windowEnd} onChange={e => onChange({ windowEnd: e.target.value })} />
         </label>
         <label className="window-input">
-          <span className="text-xs text-muted">Weight (kg)</span>
+          <span>Weight (kg)</span>
           <input type="number" min="0" step="0.1" className="form-input" aria-label={`Stop ${index + 1} package weight in kg`} value={stop.packageWeightKg} onChange={e => onChange({ packageWeightKg: e.target.value })} />
         </label>
       </div>
-      {invalidWindow && <p className="form-error">Window must end after it starts</p>}
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange({ expanded: !stop.expanded })} aria-expanded={stop.expanded}>
-        {stop.expanded ? 'Fewer details' : 'More details'}
+      {invalidWindow && <p className="form-error">The window has to end after it starts</p>}
+      <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => onChange({ expanded: !stop.expanded })} aria-expanded={stop.expanded}>
+        {stop.expanded ? 'Hide phone, size and notes' : 'Add phone, size and notes'}
       </button>
       {stop.expanded && (
         <div className="stop-editor-row">
@@ -408,25 +429,27 @@ function StopEditor({ index, stop, onChange, onRemove }) {
             <option value="medium">Medium parcel</option>
             <option value="large">Large parcel</option>
           </select>
-          <input className="form-input col-span-2" placeholder="Notes for the driver" aria-label={`Stop ${index + 1} notes`} value={stop.notes} onChange={e => onChange({ notes: e.target.value })} maxLength={500} />
+          <input className="form-input sm:col-span-2" placeholder="Notes for the driver" aria-label={`Stop ${index + 1} notes`} value={stop.notes} onChange={e => onChange({ notes: e.target.value })} maxLength={500} />
         </div>
       )}
     </div>
   )
 }
 
+const WINDOW_LABEL = s => (s.windowStatus === 'late' ? `${s.lateByMin} min late` : s.windowStatus === 'early' ? `Waits ${s.waitMinutes} min` : 'On time')
+
 function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, setAssignments, onSave, saving }) {
   const route = plan.routes[activeRoute]
   const takenDrivers = new Set(Object.entries(assignments).filter(([i]) => Number(i) !== activeRoute).map(([, d]) => d))
   return (
-    <div className="card plan-results" aria-live="polite">
+    <div className="card plan-results mt-4" aria-live="polite">
       <div className="card-header">
-        <div className="flex-between">
-          <h3 className="font-semibold">Optimized plan</h3>
-          <span className="text-xs text-muted">{plan.computeMs} ms · {plan.incidentsConsidered} incident(s) considered</span>
+        <div className="flex-between gap-3">
+          <h3>Optimized plan</h3>
+          <span className="text-micro text-ink-400">Solved in {plan.computeMs} ms{plan.incidentsConsidered ? `, ${plan.incidentsConsidered} traffic incident${plan.incidentsConsidered > 1 ? 's' : ''} avoided` : ''}</span>
         </div>
         <div className="plan-totals mt-2">
-          <span>{plan.totals.routes} route(s)</span>
+          <span>{plan.totals.routes} route{plan.totals.routes > 1 ? 's' : ''}</span>
           <span>{plan.totals.stops} stops</span>
           <span>{formatKm(plan.totals.distanceKm)}</span>
           <span>{formatINR(plan.totals.fuelCost)} fuel</span>
@@ -437,9 +460,9 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
       {plan.routes.length > 1 && (
         <div className="route-tabs" role="tablist" aria-label="Routes in this batch">
           {plan.routes.map((r, i) => (
-            <button key={i} type="button" role="tab" aria-selected={i === activeRoute} className={`route-tab ${i === activeRoute ? 'active' : ''}`}
-              style={{ '--route-color': ROUTE_COLORS[i % ROUTE_COLORS.length] }} onClick={() => setActiveRoute(i)}>
-              Route {i + 1}<span className="text-xs block">{r.vehicle.name}</span>
+            <button key={i} type="button" role="tab" aria-selected={i === activeRoute} className={`route-tab ${i === activeRoute ? 'active' : ''}`} onClick={() => setActiveRoute(i)}>
+              <span className="route-swatch" style={{ background: i === activeRoute ? VOLT : ROUTE_COLORS[i % ROUTE_COLORS.length] }} aria-hidden="true" />
+              Route {i + 1}<span className="text-micro block text-ink-400">{r.vehicle.name}</span>
             </button>
           ))}
         </div>
@@ -448,9 +471,9 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
       <div className="card-body space-y-4">
         <div className="grid grid-3 gap-2 metric-grid">
           <Metric label="Distance" value={formatKm(route.totals.distanceKm)} />
-          <Metric label="Total time" value={formatDuration(route.totals.totalMinutes)} hint={`finish ${formatClock(route.finishTime)}`} />
+          <Metric label="Total time" value={formatDuration(route.totals.totalMinutes)} hint={`Back by ${formatClock(route.finishTime)}`} />
           <Metric label="Fuel" value={`${route.totals.fuel.quantity} ${route.totals.fuel.unit}`} hint={formatINR(route.totals.fuel.cost)} />
-          <Metric label="Traffic" value={`×${route.totals.trafficImpactFactor}`} hint={route.totals.trafficLevel} />
+          <Metric label="Traffic" value={`×${route.totals.trafficImpactFactor}`} hint={`${route.totals.trafficLevel.charAt(0).toUpperCase()}${route.totals.trafficLevel.slice(1)} traffic`} />
           <Metric label="Load" value={`${route.totals.loadKg} kg`} hint={`${route.totals.utilizationPct}% of ${route.totals.capacityKg} kg`} />
           <Metric label="CO₂" value={`${route.totals.fuel.co2Kg} kg`} />
         </div>
@@ -458,34 +481,37 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
         {route.violations.length > 0 && (
           <div className="alert alert-warning" role="alert">
             <p className="font-medium mb-1">Delivery windows at risk</p>
-            <ul className="list-disc pl-5 text-sm">
+            <ul className="list-disc pl-5 text-small">
               {route.violations.map(v => <li key={v.sequence}>{v.message} ({v.lateByMin} min late)</li>)}
             </ul>
           </div>
         )}
-        {route.capacityExceeded && <div className="alert alert-error">Load exceeds this vehicle&apos;s capacity.</div>}
+        {route.capacityExceeded && <div className="alert alert-error">This load is heavier than the vehicle can carry.</div>}
 
-        <ol className="timeline">
-          <li className="timeline-item depot">
+        <ol className="timeline hop-seq" key={`${plan.computeMs}-${activeRoute}`}>
+          <li className="timeline-item depot" style={{ '--i': 0 }}>
             <span className="timeline-dot">H</span>
-            <div><p className="font-medium">{route.depot.name}</p><p className="text-xs text-muted">Depart {formatClock(route.departureTime)}</p></div>
+            <div className="flex-1 flex-between gap-2">
+              <div><p className="font-medium">{route.depot.name}</p><p className="text-micro text-ink-400">Start of route</p></div>
+              <span className="eta-chip">{formatClock(route.departureTime)}</span>
+            </div>
           </li>
-          {route.stops.map(s => (
-            <li key={s.sequence} className={`timeline-item ${s.windowStatus}`}>
+          {route.stops.map((s, i) => (
+            <li key={s.sequence} className={`timeline-item ${s.windowStatus}`} style={{ '--i': i + 1 }}>
               <span className="timeline-dot">{s.sequence}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex-between gap-2">
                   <p className="font-medium truncate">{s.customerName || s.address.split(',')[0]}</p>
-                  <span className="font-mono text-sm">ETA {s.etaLabel}</span>
+                  <span className="eta-chip">{s.etaLabel}</span>
                 </div>
-                <p className="text-xs text-muted truncate">{s.address}</p>
-                <div className="flex flex-wrap gap-1 mt-1 items-center">
-                  {s.priority !== 'standard' && <StatusBadge status={s.priority} />}
+                <p className="text-micro text-ink-400 truncate">{s.address}</p>
+                <div className="flex flex-wrap gap-1.5 mt-1.5 items-center">
+                  {s.priority === 'urgent' && <StatusBadge status="urgent" />}
                   {(s.windowStart || s.windowEnd) && (
-                    <span className="text-xs">Window {s.windowStart || '…'}–{s.windowEnd || '…'}</span>
+                    <span className="text-micro text-ink-300">Window {s.windowStart || '…'} to {s.windowEnd || '…'}</span>
                   )}
-                  {s.windowStatus !== 'none' && <StatusBadge status={s.windowStatus} label={s.windowStatus === 'late' ? `${s.lateByMin} min late` : s.windowStatus === 'early' ? `waits ${s.waitMinutes} min` : 'On time'} />}
-                  <span className="text-xs text-muted">+{s.legDistanceKm} km · {Math.round(s.legMinutes)} min {s.trafficLevel !== 'light' ? `(${s.trafficLevel} traffic)` : ''}</span>
+                  {s.windowStatus !== 'none' && <StatusBadge status={s.windowStatus} label={WINDOW_LABEL(s)} />}
+                  <span className="text-micro text-ink-400">+{s.legDistanceKm} km, {Math.round(s.legMinutes)} min{s.trafficLevel !== 'light' ? `, ${s.trafficLevel} traffic` : ''}</span>
                 </div>
               </div>
             </li>
@@ -493,43 +519,47 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
         </ol>
 
         <details className="compare">
-          <summary className="font-medium">Compare route options</summary>
-          <table className="table mt-2">
-            <thead><tr><th>Option</th><th>Distance</th><th>Time</th><th>Fuel cost</th><th>Late stops</th></tr></thead>
-            <tbody>
-              {route.alternatives.map(a => (
-                <tr key={a.key} className={a.key === 'optimized' ? 'font-medium' : ''}>
-                  <td>{a.label}</td><td>{formatKm(a.distanceKm)}</td><td>{formatDuration(a.totalMinutes)}</td><td>{formatINR(a.fuelCost)}</td><td>{a.lateStops}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-sm font-medium mt-3">Same route by vehicle type</p>
-          <table className="table mt-1">
-            <thead><tr><th>Vehicle</th><th>Energy</th><th>Cost</th><th>CO₂</th><th>Fits load</th></tr></thead>
-            <tbody>
-              {route.vehicleComparison.map(v => (
-                <tr key={v.type} className={v.type === route.vehicle.type ? 'font-medium' : ''}>
-                  <td>{v.label}</td><td>{v.quantity} {v.unit}</td><td>{formatINR(v.cost)}</td><td>{v.co2Kg} kg</td><td>{v.fitsLoad ? '✓' : '✗'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <summary>Compare route options</summary>
+          <div className="table-container mt-2">
+            <table className="table compact">
+              <thead><tr><th>Option</th><th>Distance</th><th>Time</th><th>Fuel cost</th><th>Late stops</th></tr></thead>
+              <tbody>
+                {route.alternatives.map(a => (
+                  <tr key={a.key} className={a.key === 'optimized' ? 'text-ink-50 font-medium' : 'text-ink-300'}>
+                    <td>{a.label}</td><td>{formatKm(a.distanceKm)}</td><td>{formatDuration(a.totalMinutes)}</td><td>{formatINR(a.fuelCost)}</td><td>{a.lateStops}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-small font-medium mt-4 mb-1">The same route in each vehicle type</p>
+          <div className="table-container">
+            <table className="table compact">
+              <thead><tr><th>Vehicle</th><th>Energy</th><th>Cost</th><th>CO₂</th><th>Fits the load</th></tr></thead>
+              <tbody>
+                {route.vehicleComparison.map(v => (
+                  <tr key={v.type} className={v.type === route.vehicle.type ? 'text-ink-50 font-medium' : 'text-ink-300'}>
+                    <td>{v.label}</td><td>{v.quantity} {v.unit}</td><td>{formatINR(v.cost)}</td><td>{v.co2Kg} kg</td><td>{v.fitsLoad ? 'Yes' : 'No'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </details>
 
         <div>
-          <label className="form-label" htmlFor={`assign-${activeRoute}`}>Assign driver (optional)</label>
+          <label className="form-label" htmlFor={`assign-${activeRoute}`}>Driver for this route</label>
           <select id={`assign-${activeRoute}`} className="form-input form-select" value={assignments[activeRoute] || ''}
             onChange={e => setAssignments(prev => ({ ...prev, [activeRoute]: e.target.value || undefined }))}>
-            <option value="">Leave unassigned (auto-dispatch later)</option>
+            <option value="">Leave unassigned and auto-dispatch later</option>
             {drivers.filter(d => !takenDrivers.has(d._id)).map(d => (
-              <option key={d._id} value={d._id}>{d.name}{d.vehicle ? ` · ${d.vehicle.name}` : ''}{d.onRoute ? ' (on a route)' : ''}</option>
+              <option key={d._id} value={d._id}>{d.name}{d.vehicle ? `, ${d.vehicle.name}` : ''}{d.onRoute ? ' (on a route now)' : ''}</option>
             ))}
           </select>
         </div>
 
-        <button type="button" className="btn btn-success w-full" onClick={onSave} disabled={saving}>
-          {saving ? <><span className="spinner" /> Saving…</> : `Save ${plan.routes.length > 1 ? `${plan.routes.length} routes` : 'route'}`}
+        <button type="button" className="btn btn-primary btn-lg w-full" onClick={onSave} disabled={saving}>
+          {saving ? <><span className="spinner" /> Saving</> : <><Icon name="check" />Save {plan.routes.length > 1 ? `${plan.routes.length} routes` : 'route'}</>}
         </button>
       </div>
     </div>
@@ -539,9 +569,9 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
 function Metric({ label, value, hint }) {
   return (
     <div className="metric">
-      <p className="text-xs text-muted">{label}</p>
-      <p className="font-bold">{value}</p>
-      {hint && <p className="text-xs text-secondary capitalize">{hint}</p>}
+      <p className="text-micro text-ink-400">{label}</p>
+      <p className="metric-value">{value}</p>
+      {hint && <p className="text-micro text-ink-300">{hint}</p>}
     </div>
   )
 }

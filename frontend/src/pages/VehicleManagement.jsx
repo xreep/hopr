@@ -217,7 +217,7 @@ export default function VehicleManagement() {
                   {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label htmlFor="vdriver" className="form-label">Assigned driver</label>
                 <select id="vdriver" className="form-input form-select" value={form.driver} onChange={e => set('driver', e.target.value)}>
                   <option value="">Unassigned</option>

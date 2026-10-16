@@ -52,7 +52,7 @@ function driverElement(driver) {
   return el
 }
 
-function MapboxMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, traffic = false, height = 420, className = '' }) {
+function MapboxMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, traffic = false, height = 420, className = '', insetBottom = 0 }) {
   const driverList = useMemo(() => drivers || (driver ? [{ id: 'driver', ...driver }] : []), [drivers, driver])
   const container = useRef(null)
   const mapRef = useRef(null)
@@ -237,11 +237,11 @@ function MapboxMap({ lines = [], points = [], driver, drivers, incidents = [], f
     const map = mapRef.current
     if (!ready || !map) return
     const b = boundsOf(collectCoords({ lines, points, incidents }))
-    if (b) map.fitBounds(b, { padding: 56, maxZoom: 15, duration: 700 })
+    if (b) map.fitBounds(b, { padding: { top: 56, left: 56, right: 56, bottom: 56 + insetBottom }, maxZoom: 15, duration: 700 })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, ready])
 
-  if (failed) return <SchematicMap {...{ lines, points, drivers: driverList, incidents, fitKey, onMapClick, height, className }} />
+  if (failed) return <SchematicMap {...{ lines, points, drivers: driverList, incidents, fitKey, onMapClick, height, className, insetBottom }} />
   return <div ref={container} className={`map-container ${className}`} style={{ height }} />
 }
 
@@ -279,7 +279,7 @@ function SchematicLine({ points, color, width, opacity, dashed, glow, drawKey })
   )
 }
 
-function SchematicMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, height = 420, className = '' }) {
+function SchematicMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, height = 420, className = '', insetBottom = 0 }) {
   const driverList = drivers || (driver ? [{ id: 'driver', ...driver }] : [])
   const svgRef = useRef(null)
   // SVG units per screen pixel, so markers and lines keep a constant on-screen size
@@ -297,16 +297,19 @@ function SchematicMap({ lines = [], points = [], driver, drivers, incidents = []
 
   // Bounds only change with fitKey or the stop markers, never while a driver moves
   // or a remaining path shrinks, so the view stays put during live tracking
-  const contentKey = JSON.stringify([fitKey, points.map(p => p.coordinates)])
+  const contentKey = JSON.stringify([fitKey, points.map(p => p.coordinates), insetBottom > 0])
   const projection = useMemo(() => {
+    // insetBottom (screen px) keeps content clear of an overlay at the bottom of the map
+    const padBottom = PAD + insetBottom * k
     const b = boundsOf(collectCoords({ lines, points, incidents })) || [[RANCHI_CENTRE[0] - 0.05, RANCHI_CENTRE[1] - 0.04], [RANCHI_CENTRE[0] + 0.05, RANCHI_CENTRE[1] + 0.04]]
     const midLat = (b[0][1] + b[1][1]) / 2
     const kx = Math.cos((midLat * Math.PI) / 180)
     let spanX = Math.max((b[1][0] - b[0][0]) * kx, 0.004)
     let spanY = Math.max(b[1][1] - b[0][1], 0.004)
-    const scale = Math.min((W - 2 * PAD) / spanX, (H - 2 * PAD) / spanY)
+    const innerH = Math.max(120, H - PAD - padBottom)
+    const scale = Math.min((W - 2 * PAD) / spanX, innerH / spanY)
     spanX = (W - 2 * PAD) / scale
-    spanY = (H - 2 * PAD) / scale
+    spanY = innerH / scale
     const cx = ((b[0][0] + b[1][0]) / 2) * kx
     const cy = (b[0][1] + b[1][1]) / 2
     const x0 = cx - spanX / 2
@@ -317,7 +320,7 @@ function SchematicMap({ lines = [], points = [], driver, drivers, incidents = []
       toLngLat: ([x, y]) => [((x - PAD) / scale + x0) / kx, y1 - (y - PAD) / scale]
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentKey])
+  }, [contentKey, k > 0 && insetBottom ? Math.round(k * 10) : 0])
 
   const handleClick = e => {
     if (!onMapClick || !svgRef.current) return
@@ -385,7 +388,7 @@ function SchematicMap({ lines = [], points = [], driver, drivers, incidents = []
           )
         })}
       </svg>
-      <p className="schematic-note">Schematic view. Set VITE_MAPBOX_TOKEN for street maps.</p>
+      <p className="schematic-note">Schematic map. Add a Mapbox token for streets.</p>
     </div>
   )
 }
