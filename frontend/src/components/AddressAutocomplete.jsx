@@ -115,7 +115,7 @@ export default function AddressAutocomplete({
           onKeyDown={onKeyDown}
         />
         <span className="autocomplete-status" aria-hidden="true">
-          {loading ? <span className="spinner spinner-sm" /> : located ? '📍' : ''}
+          {loading ? <span className="spinner spinner-sm" /> : located ? <span className="located-dot" title="Located on the map" /> : ''}
         </span>
       </div>
       {open && (
@@ -141,7 +141,7 @@ export default function AddressAutocomplete({
       )}
       {error && <p className="form-error">{error}</p>}
       {!located && value && value.trim().length >= MIN_CHARS && !open && !loading && !error && (
-        <p className="text-xs text-warning mt-1">Pick a suggestion to pin this address on the map</p>
+        <p className="text-micro text-signal-amber mt-1">Pick a suggestion to pin this address on the map</p>
       )}
     </div>
   )

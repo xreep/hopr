@@ -25,4 +25,9 @@ export const PRIORITY_OPTIONS = [
 
 export const MAX_STOPS_PER_ROUTE = 30
 
-export const ROUTE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#64748b']
+// The selected route is always volt; other routes in a batch use these muted hues
+export const VOLT = '#D4FF3F'
+export const ROUTE_COLORS = ['#7AA2FF', '#B39DFF', '#F5B544', '#5EEAD4', '#FF9AA2', '#9FB4D9', '#E2A8FF', '#86EFAC', '#FDBA74', '#94A3B8']
+
+// Icon names (components/icons.jsx) per vehicle type
+export const VEHICLE_ICONS = { bike: 'bike', van: 'van', truck: 'bigTruck', ev_van: 'plug' }
