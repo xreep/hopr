@@ -524,7 +524,7 @@ router.delete('/:id', authenticate, authorize('admin', 'fleet_manager'), async (
     if (route.status === 'active') {
       return res.status(409).json({ message: 'Cancel or complete an active route before deleting it' })
     }
-    await route.deleteOne()
+    await Promise.all([route.deleteOne(), Upload.deleteMany({ route: route._id })])
     res.json({ message: 'Route deleted' })
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete route' })

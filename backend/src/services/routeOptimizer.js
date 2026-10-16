@@ -508,6 +508,9 @@ export function partitionStops(depot, stops, vehicles) {
   return clusters.map(c => c.items)
 }
 
+// Total search budget for a whole batch, so batch planning stays well under 10 s
+export const BATCH_TIME_BUDGET_MS = 7000
+
 export function planBatch({ depot, stops, vehicles, ...options } = {}) {
   const computeStarted = Date.now()
   if (!Array.isArray(vehicles) || vehicles.length < 1) {
@@ -531,9 +534,13 @@ export function planBatch({ depot, stops, vehicles, ...options } = {}) {
     : partitionStops(resolvedDepot, normalized, resolvedVehicles)
 
   const routes = []
+  const nonEmpty = clusters.filter(c => c.length).length || 1
+  // Each route gets an equal share of the batch budget (search + alternatives)
+  const perRouteBudget = Math.min(OPTIMIZER_TIME_BUDGET_MS, Math.floor(BATCH_TIME_BUDGET_MS / nonEmpty / 2))
   clusters.forEach((indices, k) => {
     if (!indices.length) return
     routes.push(optimizeRoute({
+      timeBudgetMs: perRouteBudget,
       ...options,
       depot: resolvedDepot,
       vehicle: vehicles[k],

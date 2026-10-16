@@ -85,6 +85,17 @@ describe('F1 proof of delivery', () => {
     expect((await api().get(`/api/uploads/${photoId}`)).status).toBe(401)
   })
 
+  it('deletes proof images together with their route', async () => {
+    const { manager, driver, route, stop } = await setup()
+    await completeStop(driver.auth, route._id, stop._id)
+    expect(await Upload.countDocuments({ route: route._id })).toBe(2)
+    await api().patch(`/api/routes/${route._id}`).set(manager.auth).send({ status: 'cancelled' })
+    const { default: Route } = await import('../src/models/Route.js')
+    await Route.updateOne({ _id: route._id }, { status: 'cancelled' })
+    expect((await api().delete(`/api/routes/${route._id}`).set(manager.auth)).status).toBe(200)
+    expect(await Upload.countDocuments({ route: route._id })).toBe(0)
+  })
+
   it('does not let another driver complete the stop', async () => {
     const { route, stop } = await setup()
     const other = await createUser('driver')

@@ -1,6 +1,7 @@
 import User from '../models/User.js'
 import Vehicle from '../models/Vehicle.js'
 import Route from '../models/Route.js'
+import Upload from '../models/Upload.js'
 import { planBatch } from './routeOptimizer.js'
 import { routeDocsFromPlan } from './routePlanning.js'
 import { RANCHI_HUB, RANCHI_LOCATIONS as L } from '../data/ranchiLocations.js'
@@ -75,7 +76,9 @@ export async function seedDemo({ createdBy, now = new Date() } = {}) {
   const van = vehicles['VEH-ACE01']
 
   // Replace previous demo routes that have not started, so the demo can be replayed
-  const removed = await Route.deleteMany({ isDemo: true, status: { $in: ['planned', 'cancelled', 'completed'] } })
+  const stale = await Route.find({ isDemo: true, status: { $in: ['planned', 'cancelled', 'completed'] } }).select('_id')
+  await Upload.deleteMany({ route: { $in: stale.map(r => r._id) } })
+  const removed = await Route.deleteMany({ _id: { $in: stale.map(r => r._id) } })
   await Route.updateMany({ isDemo: true, status: 'active' }, { status: 'cancelled' })
 
   const departure = new Date(Math.ceil((now.getTime() + 5 * 60000) / 60000) * 60000)

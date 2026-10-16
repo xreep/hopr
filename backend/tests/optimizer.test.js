@@ -189,6 +189,23 @@ describe('multi-vehicle batch planning', () => {
       .toThrow(/exceeds fleet capacity/)
   })
 
+  it('plans the largest batch (300 stops, 10 vehicles) in under 10 s', () => {
+    let seed = 7
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    const stops = Array.from({ length: 300 }, (_, i) => ({
+      address: `Stop ${i + 1}`,
+      coordinates: [85.25 + rand() * 0.17, 23.29 + rand() * 0.14],
+      packageWeightKg: 1 + Math.round(rand() * 8),
+      priority: i % 9 === 0 ? 'urgent' : 'standard',
+      ...(i % 6 === 0 ? { windowStart: '10:30', windowEnd: '12:30' } : {})
+    }))
+    const started = Date.now()
+    const plan = planBatch({ depot: RANCHI_HUB, stops, vehicles: Array.from({ length: 10 }, () => van), departureTime: DEPART })
+    expect(Date.now() - started).toBeLessThan(10000)
+    expect(plan.routes).toHaveLength(10)
+    expect(plan.totals.stops).toBe(300)
+  })
+
   it('allows more than 30 stops when enough vehicles are selected', () => {
     const stops = Array.from({ length: 40 }, (_, i) => ({ address: `S${i}`, coordinates: [85.28 + (i % 10) * 0.01, 23.32 + Math.floor(i / 10) * 0.02] }))
     const plan = planBatch({ depot: RANCHI_HUB, stops, vehicles: [van, van], departureTime: DEPART, includeAlternatives: false })
