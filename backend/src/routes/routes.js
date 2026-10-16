@@ -1,19 +1,14 @@
 import express from 'express'
-import { body, query, validationResult } from 'express-validator'
+import { body, query } from 'express-validator'
 import Route from '../models/Route.js'
 import Vehicle from '../models/Vehicle.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { validateRequest, pick, objectIdParam } from '../middleware/validate.js'
 import RouteOptimizer from '../services/routeOptimizer.js'
 
 const router = express.Router()
+router.param('id', objectIdParam)
 
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
-}
 
 // H4: Whitelist allowed fields for route creation/update
 const routeCreateFields = [
@@ -29,15 +24,8 @@ const routeUpdateFields = [
   'fuelPrice', 'trafficEnabled'
 ]
 
-function pick(obj, allowed) {
-  const picked = {}
-  for (const key of allowed) {
-    if (obj[key] !== undefined) picked[key] = obj[key]
-  }
-  return picked
-}
 
-router.post('/optimize', authenticate, [
+router.post('/optimize', authenticate, authorize('admin', 'fleet_manager'), [
   body('stops').isArray({ min: 2 }).withMessage('At least 2 stops required'),
   body('stops.*.address').notEmpty().withMessage('Address is required'),
   body('stops.*.coordinates').isArray({ min: 2, max: 2 }).withMessage('Valid coordinates required'),
@@ -60,7 +48,7 @@ router.post('/optimize', authenticate, [
   }
 })
 
-router.post('/', authenticate, [
+router.post('/', authenticate, authorize('admin', 'fleet_manager'), [
   body('name').optional().trim(),
   body('stops').isArray({ min: 2 }).withMessage('At least 2 stops required'),
   body('vehicle').optional().isMongoId(),

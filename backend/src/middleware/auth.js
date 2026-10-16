@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import { jwtSecret } from '../services/token.js'
 
 export const authenticate = async (req, res, next) => {
   try {
@@ -9,7 +10,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'hopr-secret-key')
+    const decoded = jwt.verify(token, jwtSecret())
 
     const user = await User.findById(decoded.id)
     if (!user || !user.isActive) {
@@ -21,7 +22,8 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Token invalidated. Please log in again.' })
     }
 
-    req.user = { id: user._id, role: user.role }
+    // id is a string so ownership checks can compare with `other.toString() === req.user.id`
+    req.user = { id: user._id.toString(), role: user.role, name: user.name }
     next()
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -36,9 +38,11 @@ export const authenticate = async (req, res, next) => {
 
 export const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ message: 'Insufficient permissions' })
     }
     next()
   }
 }
+
+export const isManager = (user) => user?.role === 'admin' || user?.role === 'fleet_manager'

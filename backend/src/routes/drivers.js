@@ -1,18 +1,13 @@
 import express from 'express'
-import { body, query, validationResult } from 'express-validator'
+import { body, query } from 'express-validator'
 import User from '../models/User.js'
 import Route from '../models/Route.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { validateRequest, escapeRegex, objectIdParam } from '../middleware/validate.js'
 
 const router = express.Router()
+router.param('id', objectIdParam)
 
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
-}
 
 router.get('/', authenticate, authorize('admin', 'fleet_manager'), [
   query('page').optional().isInt({ min: 1 }),
@@ -27,7 +22,7 @@ router.get('/', authenticate, authorize('admin', 'fleet_manager'), [
 
     const filter = { role: 'driver' }
     if (req.query.search) {
-      const search = req.query.search
+      const search = escapeRegex(req.query.search)
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
@@ -125,8 +120,9 @@ router.patch('/:id/status', authenticate, authorize('admin', 'fleet_manager'), [
 ], async (req, res) => {
   try {
     const { isActive } = req.body
-    const driver = await User.findByIdAndUpdate(
-      req.params.id,
+    // Scoped to drivers: managers must not be able to deactivate admins or other managers
+    const driver = await User.findOneAndUpdate(
+      { _id: req.params.id, role: 'driver' },
       { isActive },
       { new: true }
     ).select('-password')

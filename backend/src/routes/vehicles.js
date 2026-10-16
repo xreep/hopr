@@ -1,17 +1,12 @@
 import express from 'express'
-import { body, query, validationResult } from 'express-validator'
+import { body, query } from 'express-validator'
 import Vehicle from '../models/Vehicle.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { validateRequest, pick, escapeRegex, objectIdParam } from '../middleware/validate.js'
 
 const router = express.Router()
+router.param('id', objectIdParam)
 
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
-}
 
 // H4: Whitelist allowed fields for vehicle creation/update
 const vehicleCreateFields = [
@@ -24,13 +19,6 @@ const vehicleUpdateFields = [
   'licensePlate', 'driver', 'status', 'purchaseDate', 'lastMaintenance', 'nextMaintenance'
 ]
 
-function pick(obj, allowed) {
-  const picked = {}
-  for (const key of allowed) {
-    if (obj[key] !== undefined) picked[key] = obj[key]
-  }
-  return picked
-}
 
 router.post('/', authenticate, authorize('admin', 'fleet_manager'), [
   body('vehicleId').trim().notEmpty().withMessage('Vehicle ID is required'),
@@ -92,7 +80,7 @@ router.get('/', authenticate, [
     if (req.query.status) filter.status = req.query.status
     if (req.query.fuelType) filter.fuelType = req.query.fuelType
     if (req.query.search) {
-      const search = req.query.search
+      const search = escapeRegex(req.query.search)
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { vehicleId: { $regex: search, $options: 'i' } },
