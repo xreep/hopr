@@ -17,6 +17,7 @@ const Analytics = lazy(() => import('./pages/Analytics'))
 const AdminPanel = lazy(() => import('./pages/AdminPanel'))
 const Profile = lazy(() => import('./pages/Profile'))
 const NotFound = lazy(() => import('./pages/NotFound'))
+const Track = lazy(() => import('./pages/Track'))
 
 const MANAGERS = ['admin', 'fleet_manager']
 
@@ -45,6 +46,8 @@ export default function App() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        {/* Public customer tracking: the token in the link is the only credential */}
+        <Route path="/track/:token" element={<Track />} />
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />

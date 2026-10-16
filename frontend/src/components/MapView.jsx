@@ -241,7 +241,7 @@ function MapboxMap({ lines = [], points = [], driver, drivers, incidents = [], f
 // ---------- SVG fallback ----------
 const W = 1000
 const H = 620
-const PAD = 48
+const PAD = 72
 
 function SchematicMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, height = 420, className = '' }) {
   const driverList = drivers || (driver ? [{ id: 'driver', ...driver }] : [])
@@ -258,8 +258,9 @@ function SchematicMap({ lines = [], points = [], driver, drivers, incidents = []
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  // Bounds only change with fitKey/content, never with the moving driver (keeps the view stable)
-  const contentKey = JSON.stringify([fitKey, points.map(p => p.coordinates), lines.map(l => l.coordinates?.length)])
+  // Bounds only change with fitKey or the stop markers — never while a driver moves or a
+  // remaining path shrinks — so the view stays put during live tracking
+  const contentKey = JSON.stringify([fitKey, points.map(p => p.coordinates)])
   const projection = useMemo(() => {
     const b = boundsOf(collectCoords({ lines, points, incidents })) || [[RANCHI_CENTRE[0] - 0.05, RANCHI_CENTRE[1] - 0.04], [RANCHI_CENTRE[0] + 0.05, RANCHI_CENTRE[1] + 0.04]]
     const midLat = (b[0][1] + b[1][1]) / 2

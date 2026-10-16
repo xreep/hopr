@@ -202,6 +202,17 @@ function StopRow({ stop }) {
           {stop.customerPhone && <a href={`tel:${stop.customerPhone}`}>{stop.customerPhone}</a>}
         </div>
         {stop.notes && <p className="text-xs text-muted mt-1">Note: {stop.notes}</p>}
+        {stop.trackingToken && stop.status !== 'completed' && stop.status !== 'failed' && (
+          <div className="flex gap-2 mt-1">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`${window.location.origin}/track/${stop.trackingToken}`)
+                toast.success('Customer tracking link copied')
+              } catch { toast.error('Copy failed') }
+            }}>Copy tracking link</button>
+            <a className="btn btn-ghost btn-sm" href={`/track/${stop.trackingToken}`} target="_blank" rel="noopener noreferrer">Open tracking page</a>
+          </div>
+        )}
         {stop.proof && (stop.proof.photo || stop.proof.signature) && (
           <div className="pod-view mt-2">
             {stop.proof.photo && <figure><AuthImage id={stop.proof.photo} alt={`Delivery photo for ${stop.customerName || stop.address}`} className="pod-thumb" /><figcaption>Photo</figcaption></figure>}

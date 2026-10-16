@@ -3,6 +3,8 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import mongoSanitize from 'express-mongo-sanitize'
+import jwt from 'jsonwebtoken'
+import { jwtSecret } from './services/token.js'
 
 import authRoutes from './routes/auth.js'
 import routeRoutes from './routes/routes.js'
@@ -15,6 +17,7 @@ import incidentRoutes from './routes/incidents.js'
 import dashboardRoutes from './routes/dashboard.js'
 import demoRoutes from './routes/demo.js'
 import uploadRoutes from './routes/uploads.js'
+import trackRoutes from './routes/track.js'
 
 const app = express()
 
@@ -52,14 +55,67 @@ app.use((req, res, next) => {
   next()
 })
 
+// Rate limiting. Clients are keyed by verified user id when a valid token is sent
+// (drivers behind one depot Wi-Fi must not share a bucket), otherwise by IP.
+function clientKey(req) {
+  const header = req.headers.authorization
+  if (header?.startsWith('Bearer ')) {
+    try {
+      return `user:${jwt.verify(header.slice(7), jwtSecret()).id}`
+    } catch { /* fall through to IP */ }
+  }
+  return `ip:${req.ip}`
+}
+
+const pathOf = req => req.originalUrl.split('?')[0]
+// High-frequency endpoints get their own dedicated limits instead of the global budget
+const isLocationPing = req => req.method === 'PATCH' && /^\/api\/routes\/[a-f\d]{24}\/location$/i.test(pathOf(req))
+const isTracking = req => req.method === 'GET' && /^\/api\/track\//.test(pathOf(req))
+const isLiveRead = req => req.method === 'GET' && /^\/api\/(dashboard|incidents|routes)(\/|$)/.test(pathOf(req))
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  keyGenerator: clientKey,
+  skip: req => isLocationPing(req) || isTracking(req) || isLiveRead(req),
   message: { message: 'Too many requests, please try again later' }
 })
 app.use('/api/', limiter)
+
+// Live GPS pings from the driver app: every 5 s while a route is active
+const locationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: clientKey,
+  message: { message: 'Location updates are too frequent' }
+})
+// Public customer tracking page polls every 5 s
+const trackingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many tracking requests, please slow down' }
+})
+// Read-only polling of live dashboards / route status
+const liveLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: clientKey,
+  message: { message: 'Too many requests, please try again later' }
+})
+app.use('/api/', (req, res, next) => {
+  if (isLocationPing(req)) return locationLimiter(req, res, next)
+  if (isTracking(req)) return trackingLimiter(req, res, next)
+  if (isLiveRead(req)) return liveLimiter(req, res, next)
+  next()
+})
 
 // H2: Strict rate limit on auth endpoints
 const authLimiter = rateLimit({
@@ -82,6 +138,7 @@ app.use('/api/incidents', incidentRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/demo', demoRoutes)
 app.use('/api/uploads', uploadRoutes)
+app.use('/api/track', trackRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

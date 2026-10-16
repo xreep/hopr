@@ -10,6 +10,8 @@ import { formatKm, formatDuration, initials } from '../utils/format'
 import { formatClock, minutesUntil } from '../utils/time'
 import { stopVariant, isStale } from '../utils/routeView'
 import { useAuth } from '../context/AuthContext'
+import useDriverLocation from '../hooks/useDriverLocation'
+import { relativeTime } from '../utils/time'
 
 const FAILURE_REASONS = ['Customer not available', 'Address not found', 'Customer refused delivery', 'Access restricted / gate locked', 'Package damaged']
 
@@ -36,6 +38,8 @@ export default function DriverPanel() {
   usePolling(load, 15000)
 
   const route = routes?.find(r => r._id === selectedId) || null
+  const gps = useDriverLocation(route)
+  const [picking, setPicking] = useState(false)
   const currentIndex = route ? route.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress') : -1
   const currentStop = currentIndex >= 0 ? route.stops[currentIndex] : null
 
@@ -76,11 +80,13 @@ export default function DriverPanel() {
         ...(route.depot?.coordinates ? [{ id: 'depot', coordinates: route.depot.coordinates, label: 'H', variant: 'depot', title: route.depot.name }] : []),
         ...route.stops.map((s, i) => ({ id: s._id, coordinates: s.coordinates, label: s.sequence, variant: stopVariant(s, i === currentIndex), title: s.address }))
       ],
-      driver: route.driverLocation?.coordinates?.length === 2
-        ? { coordinates: route.driverLocation.coordinates, initials: initials(user?.name), stale: isStale(route.driverLocation.updatedAt) }
-        : null
+      driver: gps.position
+        ? { coordinates: gps.position, initials: initials(user?.name), stale: false }
+        : route.driverLocation?.coordinates?.length === 2
+          ? { coordinates: route.driverLocation.coordinates, initials: initials(user?.name), stale: isStale(route.driverLocation.updatedAt) }
+          : null
     }
-  }, [route, currentIndex, user])
+  }, [route, currentIndex, user, gps.position])
 
   if (!routes) return <PageLoader />
 
@@ -117,7 +123,11 @@ export default function DriverPanel() {
           {route && (
             <section className="space-y-4">
               <div className="card overflow-hidden">
-                <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver} fitKey={route._id} height={300} />
+                <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver} fitKey={route._id} height={300}
+                  onMapClick={picking ? async coords => { await gps.sendManual(coords); setPicking(false); toast.success('Location updated') } : undefined} />
+                {route.status === 'active' && (
+                  <LocationBar gps={gps} picking={picking} setPicking={setPicking} canSimulate={route.geometry?.coordinates?.length > 1} isDemo={route.isDemo} />
+                )}
                 <div className="card-body flex-between flex-wrap gap-3">
                   <div>
                     <p className="font-semibold">{route.name}</p>
@@ -154,6 +164,7 @@ export default function DriverPanel() {
                         Navigate
                       </a>
                       {currentStop.customerPhone && <a className="btn btn-outline" href={`tel:${currentStop.customerPhone}`}>Call</a>}
+                      {currentStop.trackingToken && <ShareTrackingButton token={currentStop.trackingToken} name={currentStop.customerName} />}
                       <button type="button" className="btn btn-success" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}>Mark delivered</button>
                       <button type="button" className="btn btn-danger" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}>Failed</button>
                       <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDialog({ kind: 'issue', stop: currentStop })}>Report issue / delay</button>
@@ -265,4 +276,64 @@ function IssueDialog({ stop, onClose, onSubmit }) {
       </div>
     </Modal>
   )
+}
+
+const GPS_LABELS = {
+  idle: 'Location sharing is off',
+  waiting: 'Waiting for GPS…',
+  live: 'Sharing live location',
+  denied: 'Location permission blocked',
+  unavailable: 'GPS unavailable on this device',
+  error: 'GPS error'
+}
+
+function LocationBar({ gps, picking, setPicking, canSimulate, isDemo }) {
+  const problem = ['denied', 'unavailable', 'error'].includes(gps.status) && gps.mode === 'gps'
+  return (
+    <div className={`location-bar ${gps.status === 'live' ? 'live' : problem ? 'problem' : ''}`} role="status" aria-live="polite">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">
+          <span className="gps-dot" aria-hidden="true" />
+          {gps.mode === 'simulate' ? 'Demo drive: simulated GPS along the route' : gps.mode === 'manual' ? 'Location set manually' : GPS_LABELS[gps.status]}
+        </p>
+        <p className="text-xs text-muted">
+          {gps.lastSentAt ? `Last update ${relativeTime(gps.lastSentAt)} · every 5 s` : 'Customers see your position on their tracking page'}
+          {gps.error && <span className="text-error"> · {gps.error}</span>}
+          {problem && ' · use "Update location" or pick your position on the map'}
+        </p>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <button type="button" className="btn btn-outline btn-sm" onClick={async () => {
+          gps.setMode('gps')
+          const ok = await gps.updateNow()
+          if (ok) toast.success('Location updated')
+          else toast.error('Could not read GPS. Pick your position on the map instead.')
+        }}>Update location</button>
+        <button type="button" className={`btn btn-sm ${picking ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={picking} onClick={() => setPicking(p => !p)}>
+          {picking ? 'Tap the map…' : 'Pick on map'}
+        </button>
+        {canSimulate && (isDemo || problem || gps.mode === 'simulate') && (
+          <button type="button" className={`btn btn-sm ${gps.mode === 'simulate' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={gps.mode === 'simulate'}
+            onClick={() => gps.setMode(gps.mode === 'simulate' ? 'gps' : 'simulate')}>
+            {gps.mode === 'simulate' ? 'Stop demo drive' : 'Simulate drive (demo)'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ShareTrackingButton({ token, name }) {
+  const url = `${window.location.origin}/track/${token}`
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Track your Hopr delivery', text: `Hi ${name || ''}, track your delivery live:`.trim(), url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        toast.success('Tracking link copied')
+      }
+    } catch { /* share sheet dismissed */ }
+  }
+  return <button type="button" className="btn btn-outline" onClick={share}>Share tracking</button>
 }

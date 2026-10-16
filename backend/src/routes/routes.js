@@ -12,6 +12,8 @@ import {
 import { OptimizationError } from '../services/routeOptimizer.js'
 import { VEHICLE_TYPES, PRIORITIES, MAX_STOPS_PER_BATCH, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
 import { addMinutes } from '../utils/time.js'
+import { haversineKm } from '../utils/geo.js'
+import User from '../models/User.js'
 
 const router = express.Router()
 router.param('id', objectIdParam)
@@ -443,6 +445,49 @@ router.post('/:id/stops/:stopId/issues', authenticate, [
     res.json({ message: type === 'delay' ? 'Delay reported, ETAs updated' : 'Issue reported successfully', route })
   } catch (error) {
     sendError(res, error, 'Failed to report issue')
+  }
+})
+
+// Live GPS from the driver app (every ~5 s while the route is active)
+router.patch('/:id/location', authenticate, authorize('driver'), [
+  body('coordinates').isArray({ min: 2, max: 2 }).withMessage('coordinates must be [lng, lat]'),
+  body('coordinates.0').isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude').toFloat(),
+  body('coordinates.1').isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude').toFloat(),
+  body('accuracy').optional({ nullable: true }).isFloat({ min: 0, max: 100000 }).toFloat(),
+  body('heading').optional({ nullable: true }).isFloat({ min: 0, max: 360 }).toFloat(),
+  body('speed').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).toFloat(),
+  validateRequest
+], async (req, res) => {
+  try {
+    const route = await Route.findById(req.params.id).select('driver status driverLocation')
+    if (!route) return res.status(404).json({ message: 'Route not found' })
+    if (route.driver?.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' })
+    if (route.status !== 'active') return res.status(409).json({ message: 'Start the route to share your location' })
+
+    const coordinates = req.body.coordinates.map(Number)
+    const now = new Date()
+    const accuracy = req.body.accuracy ?? null
+    // Odometer: add movement between fixes, ignoring GPS jitter (<15 m), poor fixes and jumps
+    let movedKm = 0
+    const prev = route.driverLocation?.coordinates
+    if (prev?.length === 2 && (accuracy === null || accuracy <= 100)) {
+      const d = haversineKm(prev, coordinates)
+      if (d >= 0.015 && d < 3) movedKm = d
+    }
+    const driverLocation = {
+      coordinates,
+      accuracy: accuracy ?? undefined,
+      heading: req.body.heading ?? undefined,
+      speed: req.body.speed ?? undefined,
+      updatedAt: now
+    }
+    await Promise.all([
+      Route.updateOne({ _id: route._id }, { $set: { driverLocation }, $inc: { actualDistance: movedKm } }),
+      User.updateOne({ _id: req.user.id }, { $set: { lastLocation: { coordinates, updatedAt: now } } })
+    ])
+    res.json({ ok: true, updatedAt: now, movedKm: Math.round(movedKm * 1000) / 1000 })
+  } catch (error) {
+    sendError(res, error, 'Failed to update location')
   }
 })
 

@@ -307,3 +307,31 @@
   .pod-signature { object-fit: contain; }
   .auth-image-placeholder { display: inline-block; width: 96px; height: 72px; border-radius: var(--radius-sm); background: var(--color-border); }
 }
+
+@layer components {
+  /* ---------- Live location (driver) ---------- */
+  .location-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.75rem 1.25rem; border-top: 1px solid var(--color-border); background: var(--color-background); }
+  .gps-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-muted); margin-right: 0.45rem; vertical-align: middle; }
+  .location-bar.live .gps-dot { background: var(--color-success); box-shadow: 0 0 0 0 rgb(16 185 129 / 0.6); animation: gps-pulse 1.6s infinite; }
+  .location-bar.problem .gps-dot { background: var(--color-error); }
+
+  /* ---------- Public tracking page ---------- */
+  .track-page { min-height: 100vh; display: flex; flex-direction: column; background: var(--color-background); }
+  .track-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); position: sticky; top: 0; z-index: 10; }
+  .track-map { position: relative; height: 55vh; min-height: 300px; }
+  .track-map .map-container { border-radius: 0; }
+  .track-stale { position: absolute; top: 0.75rem; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; font-size: 0.8rem; padding: 0.35rem 0.8rem; border-radius: 999px; box-shadow: var(--shadow-lg); }
+  .track-sheet { flex: 1; background: var(--color-surface); border-radius: 18px 18px 0 0; margin-top: -18px; position: relative; z-index: 5; padding: 1.25rem 1.25rem 2rem; box-shadow: 0 -6px 20px rgb(0 0 0 / 0.08); max-width: 640px; width: 100%; align-self: center; }
+  .track-headline { font-size: 1.5rem; font-weight: 700; line-height: 1.2; margin-top: 0.15rem; }
+  .track-eta { margin-top: 0.4rem; color: var(--color-text-secondary); }
+  .track-eta strong { color: var(--color-text-primary); }
+  .track-timeline { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25rem; margin-top: 1.25rem; }
+  .track-timeline li { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: var(--color-text-muted); position: relative; }
+  .track-step-dot { height: 6px; border-radius: 999px; background: var(--color-border); }
+  .track-timeline li.done { color: var(--color-text-primary); font-weight: 500; }
+  .track-timeline li.done .track-step-dot { background: var(--color-success); }
+  .track-timeline li.current .track-step-dot { background: var(--color-primary-light); animation: step-glow 1.6s ease-in-out infinite; }
+}
+
+@keyframes gps-pulse { 0% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0.6); } 70% { box-shadow: 0 0 0 8px rgb(16 185 129 / 0); } 100% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0); } }
+@keyframes step-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
