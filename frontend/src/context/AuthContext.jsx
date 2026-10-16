@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../utils/api'
 
 const AuthContext = createContext(null)
@@ -13,11 +13,10 @@ export function AuthProvider({ children }) {
       setLoading(false)
       return
     }
-
     try {
       const response = await api.get('/auth/me')
       setUser(response.data.user)
-    } catch (error) {
+    } catch {
       localStorage.removeItem('token')
       setUser(null)
     } finally {
@@ -29,43 +28,45 @@ export function AuthProvider({ children }) {
     fetchUser()
   }, [fetchUser])
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
-    const { token, user } = response.data
+    const { token, user: loggedIn } = response.data
     localStorage.setItem('token', token)
-    setUser(user)
-    return user
-  }
+    setUser(loggedIn)
+    return loggedIn
+  }, [])
 
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     const response = await api.post('/auth/register', userData)
-    const { token, user } = response.data
+    const { token, user: created } = response.data
     localStorage.setItem('token', token)
-    setUser(user)
-    return user
-  }
+    setUser(created)
+    return created
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token')
     setUser(null)
-  }
+  }, [])
 
-  const updateUser = (updates) => {
+  const updateUser = useCallback((updates) => {
     setUser(prev => ({ ...prev, ...updates }))
-  }
+  }, [])
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     loading,
     login,
     register,
     logout,
     updateUser,
+    refreshUser: fetchUser,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
     isFleetManager: user?.role === 'fleet_manager',
+    isManager: user?.role === 'admin' || user?.role === 'fleet_manager',
     isDriver: user?.role === 'driver'
-  }
+  }), [user, loading, login, register, logout, updateUser, fetchUser])
 
   return (
     <AuthContext.Provider value={value}>
@@ -74,6 +75,7 @@ export function AuthProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext)
   if (!context) {

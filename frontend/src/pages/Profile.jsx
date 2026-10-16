@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import api from '../utils/api'
+import api, { errorMessage } from '../utils/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 
 export default function Profile() {
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, logout } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const [loading, setLoading] = useState(false)
   
@@ -21,13 +21,15 @@ export default function Profile() {
     confirmPassword: ''
   })
 
+  // Start from the preferences saved on the account (previously always reset to defaults)
   const [notifications, setNotifications] = useState({
     email: true,
     sms: false,
     push: true,
     routeUpdates: true,
     maintenanceAlerts: true,
-    weeklyReports: false
+    weeklyReports: false,
+    ...(user?.notifications || {})
   })
 
   const handleProfileSubmit = async (e) => {
@@ -38,7 +40,7 @@ export default function Profile() {
       updateUser(response.data.user)
       toast.success('Profile updated')
     } catch (error) {
-      toast.error('Failed to update profile')
+      toast.error(errorMessage(error, 'Failed to update profile'))
     } finally {
       setLoading(false)
     }
@@ -60,10 +62,12 @@ export default function Profile() {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword
       })
-      toast.success('Password changed')
+      toast.success('Password changed. Please sign in again.')
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      // Existing tokens are revoked server-side (tokenVersion), so sign out locally too
+      setTimeout(() => { logout() }, 1200)
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to change password')
+      toast.error(errorMessage(error, 'Failed to change password'))
     } finally {
       setLoading(false)
     }
@@ -77,7 +81,8 @@ export default function Profile() {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.put('/auth/notifications', notifications)
+      const res = await api.put('/auth/notifications', notifications)
+      updateUser({ notifications: res.data.notifications })
       toast.success('Notifications updated')
     } catch (error) {
       toast.error('Failed to update notifications')
@@ -155,7 +160,7 @@ export default function Profile() {
                     className="form-input"
                     value={profileData.phone}
                     onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+91 98xxx xxxxx"
                   />
                 </div>
                 <div className="form-group">

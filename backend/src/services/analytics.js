@@ -1,12 +1,13 @@
 // Fleet analytics computed from recorded routes and deliveries.
 import { isOnTime, deliveryMinutes, driverPerformance, avg, round1, pct } from './metrics.js'
-import { IST_OFFSET_MIN } from '../utils/time.js'
+import { IST_OFFSET_MIN, istMinutesOfDay } from '../utils/time.js'
 
 export const RANGES = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 }
 
+// The window ends at the end of today (IST) so routes planned for later today count
 export function rangeWindow(range, now = new Date()) {
   const days = RANGES[range] || 30
-  const end = now
+  const end = new Date(now.getTime() + (24 * 60 - istMinutesOfDay(now)) * 60000 - 1)
   const start = new Date(end.getTime() - days * 86400000)
   const prevStart = new Date(start.getTime() - days * 86400000)
   return { days, start, end, prevStart }

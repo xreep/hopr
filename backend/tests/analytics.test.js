@@ -117,3 +117,13 @@ describe('analytics + dashboard API', () => {
     expect((await api().get('/api/analytics').set(driver.auth)).status).toBe(403)
   })
 })
+
+describe('analytics window', () => {
+  it('runs to the end of the current IST day so routes planned later today are included', async () => {
+    const { rangeWindow } = await import('../src/services/analytics.js')
+    // 16 Oct 2026 17:00 IST
+    const { end, start } = rangeWindow('7d', new Date('2026-10-16T11:30:00Z'))
+    expect(end.toISOString()).toBe('2026-10-16T18:29:59.999Z') // 23:59:59.999 IST
+    expect((end - start) / 86400000).toBe(7)
+  })
+})

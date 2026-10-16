@@ -134,6 +134,7 @@ router.get('/', authenticate, [
   query('vehicle').optional().isMongoId(),
   query('batchId').optional().isString().isLength({ max: 40 }),
   query('unassigned').optional().isBoolean(),
+  query('withGeometry').optional().isBoolean(),
   query('sort').optional().isIn(['createdAt', '-createdAt', 'totalDistance', '-totalDistance', 'plannedStart', '-plannedStart']),
   validateRequest
 ], async (req, res) => {
@@ -154,7 +155,7 @@ router.get('/', authenticate, [
 
     const [routes, total] = await Promise.all([
       Route.find(filter)
-        .select('-alternatives -geometry -stops.trackingToken')
+        .select(req.query.withGeometry === 'true' ? '-alternatives -stops.trackingToken' : '-alternatives -geometry -stops.trackingToken')
         .populate('vehicle', 'vehicleId name licensePlate type')
         .populate('driver', 'name email phone')
         .populate('createdBy', 'name')

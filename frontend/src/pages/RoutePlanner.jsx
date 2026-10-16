@@ -1,537 +1,547 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
-import api from '../utils/api'
 import toast from 'react-hot-toast'
+import api, { errorMessage } from '../utils/api'
+import MapView from '../components/MapView'
+import AddressAutocomplete from '../components/AddressAutocomplete'
+import { fetchSuggestions } from '../utils/geocoding'
+import { StatusBadge } from '../components/ui'
+import { DEFAULT_DEPOT, VEHICLE_TYPES, PRIORITY_OPTIONS, MAX_STOPS_PER_ROUTE, ROUTE_COLORS, vehicleTypeLabel } from '../config'
+import { csvToStops, SAMPLE_CSV } from '../utils/csv'
+import { formatDuration, formatINR, formatKm } from '../utils/format'
+import { formatClock, toISTInputValue, fromISTInputValue } from '../utils/time'
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
+let keySeq = 0
+const newStop = (data = {}) => ({
+  key: ++keySeq,
+  address: '',
+  coordinates: null,
+  customerName: '',
+  customerPhone: '',
+  priority: 'standard',
+  windowStart: '',
+  windowEnd: '',
+  packageWeightKg: '',
+  packageSize: 'small',
+  notes: '',
+  expanded: false,
+  ...data
+})
 
-if (MAPBOX_TOKEN) {
-  mapboxgl.accessToken = MAPBOX_TOKEN
+function nextQuarterHour() {
+  const d = new Date(Date.now() + 15 * 60000)
+  d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0)
+  return d
 }
 
-const VEHICLE_TYPES = [
-  { id: 'bike', name: 'Bicycle', mileage: 0, fuelType: 'electric', capacity: 10, icon: '🚲' },
-  { id: 'van', name: 'Delivery Van', mileage: 12, fuelType: 'diesel', capacity: 500, icon: '🚐' },
-  { id: 'truck', name: 'Truck', mileage: 6, fuelType: 'diesel', capacity: 2000, icon: '🚛' },
-  { id: 'ev_van', name: 'Electric Van', mileage: 0, fuelType: 'electric', capacity: 400, icon: '🔋' }
-]
-
-const PRIORITY_OPTIONS = [
-  { value: 'urgent', label: 'Urgent', color: 'error' },
-  { value: 'standard', label: 'Standard', color: 'primary' },
-  { value: 'low', label: 'Low Priority', color: 'success' }
-]
+function stopPayload(s) {
+  const out = { address: s.address.trim(), coordinates: s.coordinates, priority: s.priority, packageSize: s.packageSize }
+  if (s.customerName.trim()) out.customerName = s.customerName.trim()
+  if (s.customerPhone.trim()) out.customerPhone = s.customerPhone.trim()
+  if (s.windowStart) out.windowStart = s.windowStart
+  if (s.windowEnd) out.windowEnd = s.windowEnd
+  if (s.packageWeightKg !== '' && Number(s.packageWeightKg) >= 0) out.packageWeightKg = Number(s.packageWeightKg)
+  if (s.notes.trim()) out.notes = s.notes.trim()
+  return out
+}
 
 export default function RoutePlanner() {
   const navigate = useNavigate()
-  const mapContainer = useRef(null)
-  const map = useRef(null)
-  const markers = useRef([])
-  const routeLine = useRef(null)
-
-  const [stops, setStops] = useState([{ address: '', priority: 'standard', timeWindow: '', notes: '' }])
+  const fileInput = useRef(null)
+  const [name, setName] = useState('')
+  const [departure, setDeparture] = useState(() => toISTInputValue(nextQuarterHour()))
+  const [depot, setDepot] = useState(DEFAULT_DEPOT)
+  const [depotText, setDepotText] = useState(DEFAULT_DEPOT.address)
+  const [stops, setStops] = useState([newStop(), newStop()])
+  const [vehicleMode, setVehicleMode] = useState('fleet')
+  const [fleet, setFleet] = useState([])
+  const [selectedVehicles, setSelectedVehicles] = useState([])
   const [vehicleType, setVehicleType] = useState('van')
   const [vehicleCount, setVehicleCount] = useState(1)
-  const [optimizing, setOptimizing] = useState(false)
-  const [optimizedRoute, setOptimizedRoute] = useState(null)
-  const [showResults, setShowResults] = useState(false)
   const [trafficEnabled, setTrafficEnabled] = useState(true)
-  const [fuelPrice, setFuelPrice] = useState(1.50)
+  const [returnToDepot, setReturnToDepot] = useState(false)
+  const [plan, setPlan] = useState(null)
+  const [activeRoute, setActiveRoute] = useState(0)
+  const [drivers, setDrivers] = useState([])
+  const [assignments, setAssignments] = useState({})
+  const [optimizing, setOptimizing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [locating, setLocating] = useState(0)
 
   useEffect(() => {
-    if (mapContainer.current && !map.current && MAPBOX_TOKEN) {
-      initializeMap()
-    }
-    return () => {
-      if (map.current) {
-        map.current.remove()
-        map.current = null
-      }
-    }
+    api.get('/vehicles', { params: { status: 'active', limit: 100 } })
+      .then(res => {
+        setFleet(res.data.vehicles)
+        if (!res.data.vehicles.length) setVehicleMode('type')
+      })
+      .catch(() => setVehicleMode('type'))
+    api.get('/drivers/available').then(res => setDrivers(res.data.drivers)).catch(() => {})
   }, [])
 
-  const initializeMap = () => {
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-74.006, 40.7128],
-      zoom: 11
-    })
+  // Any edit invalidates the previous optimization
+  const touch = () => setPlan(null)
 
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
-
-    if (trafficEnabled) {
-      map.current.on('load', () => {
-        map.current.addSource('traffic', {
-          type: 'vector',
-          url: 'mapbox://mapbox.mapbox-traffic-v1'
-        })
-        map.current.addLayer({
-          id: 'traffic-layer',
-          type: 'line',
-          source: 'traffic',
-          'source-layer': 'traffic',
-          paint: {
-            'line-color': '#ff0000',
-            'line-width': 2
-          }
-        })
-      })
-    }
+  const updateStop = (key, patch) => {
+    setStops(prev => prev.map(s => (s.key === key ? { ...s, ...patch } : s)))
+    touch()
   }
-
-  useEffect(() => {
-    if (map.current) {
-      if (trafficEnabled && map.current.getLayer('traffic-layer')) {
-        map.current.setLayoutProperty('traffic-layer', 'visibility', 'visible')
-      } else if (map.current.getLayer('traffic-layer')) {
-        map.current.setLayoutProperty('traffic-layer', 'visibility', 'none')
-      }
-    }
-  }, [trafficEnabled])
-
+  const removeStop = key => {
+    setStops(prev => (prev.length > 1 ? prev.filter(s => s.key !== key) : prev))
+    touch()
+  }
   const addStop = () => {
-    setStops([...stops, { address: '', priority: 'standard', timeWindow: '', notes: '' }])
+    setStops(prev => [...prev, newStop()])
+    touch()
   }
 
-  const removeStop = (index) => {
-    if (stops.length <= 2) {
-      toast.error('At least 2 stops required')
+  const vehiclesInPlan = vehicleMode === 'fleet' ? Math.max(1, selectedVehicles.length) : vehicleCount
+  const filledStops = stops.filter(s => s.address.trim())
+  const unlocated = filledStops.filter(s => !s.coordinates)
+  const maxStops = MAX_STOPS_PER_ROUTE * vehiclesInPlan
+  const windowErrors = stops.filter(s => s.windowStart && s.windowEnd && s.windowEnd <= s.windowStart)
+
+  const importStops = async (incoming) => {
+    const blankOnly = stops.every(s => !s.address.trim())
+    const created = incoming.map(s => newStop(s))
+    setStops(prev => (blankOnly ? created : [...prev, ...created]))
+    touch()
+    const missing = created.filter(s => !s.coordinates)
+    if (!missing.length) return
+    setLocating(missing.length)
+    for (const s of missing) {
+      try {
+        const [hit] = await fetchSuggestions(s.address, { limit: 1 })
+        if (hit) setStops(prev => prev.map(p => (p.key === s.key ? { ...p, coordinates: hit.coordinates } : p)))
+      } catch { /* left unlocated; the user can pick a suggestion */ }
+      setLocating(n => n - 1)
+    }
+  }
+
+  const handleFile = e => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 512 * 1024) {
+      toast.error('CSV is too large (max 512 KB)')
       return
     }
-    setStops(stops.filter((_, i) => i !== index))
-  }
-
-  const updateStop = (index, field, value) => {
-    setStops(stops.map((stop, i) => i === index ? { ...stop, [field]: value } : stop))
-  }
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
     const reader = new FileReader()
-    reader.onload = (event) => {
-      const text = event.target.result
-      parseCSV(text)
+    reader.onload = () => {
+      const { stops: rows, errors } = csvToStops(String(reader.result))
+      if (errors.length) errors.slice(0, 3).forEach(m => toast.error(m))
+      if (rows.length) {
+        importStops(rows)
+        toast.success(`Imported ${rows.length} stop${rows.length > 1 ? 's' : ''}`)
+      }
     }
     reader.readAsText(file)
-    e.target.value = ''
   }
 
-  const parseCSV = (text) => {
-    const lines = text.trim().split('\n')
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
-    
-    const addressIdx = headers.findIndex(h => h.includes('address'))
-    const priorityIdx = headers.findIndex(h => h.includes('priority'))
-    const timeWindowIdx = headers.findIndex(h => h.includes('time') || h.includes('window'))
-    const notesIdx = headers.findIndex(h => h.includes('note'))
+  const buildPayload = () => ({
+    stops: filledStops.map(stopPayload),
+    depot: { name: depot.name, address: depot.address, coordinates: depot.coordinates },
+    departureTime: fromISTInputValue(departure),
+    trafficEnabled,
+    returnToDepot,
+    ...(vehicleMode === 'fleet' && selectedVehicles.length
+      ? { vehicleIds: selectedVehicles }
+      : { vehicleType, vehicleCount })
+  })
 
-    if (addressIdx === -1) {
-      toast.error('CSV must contain an address column')
-      return
-    }
-
-    const newStops = lines.slice(1).map(line => {
-      const values = line.split(',').map(v => v.trim())
-      return {
-        address: values[addressIdx] || '',
-        priority: priorityIdx !== -1 ? values[priorityIdx] : 'standard',
-        timeWindow: timeWindowIdx !== -1 ? values[timeWindowIdx] : '',
-        notes: notesIdx !== -1 ? values[notesIdx] : ''
-      }
-    }).filter(stop => stop.address)
-
-    if (newStops.length > 0) {
-      setStops([...stops, ...newStops])
-      toast.success(`Added ${newStops.length} stops from CSV`)
-    }
-  }
-
-  const geocodeAddress = async (address) => {
-    try {
-      const response = await api.get('/map/geocode', { params: { address } })
-      return response.data.coordinates
-    } catch {
-      return null
-    }
-  }
-
-  const optimizeRoute = async () => {
-    const validStops = stops.filter(s => s.address.trim())
-    if (validStops.length < 2) {
-      toast.error('Please add at least 2 stops with addresses')
-      return
-    }
-
+  const optimize = async () => {
+    if (filledStops.length < 1) return toast.error('Add at least one delivery address')
+    if (unlocated.length) return toast.error(`Pick a suggestion for ${unlocated.length} address(es) so they can be located`)
+    if (windowErrors.length) return toast.error('A delivery window ends before it starts')
+    if (filledStops.length > maxStops) return toast.error(`At most ${MAX_STOPS_PER_ROUTE} stops per vehicle. Add vehicles or remove stops.`)
+    if (vehicleMode === 'fleet' && !selectedVehicles.length && fleet.length) return toast.error('Select at least one vehicle')
     setOptimizing(true)
     try {
-      const coordinates = await Promise.all(
-        validStops.map(stop => geocodeAddress(stop.address))
-      )
-
-      const validCoordinates = coordinates.filter(c => c !== null)
-      if (validCoordinates.length < 2) {
-        toast.error('Could not geocode enough addresses')
-        return
-      }
-
-      const response = await api.post('/routes/optimize', {
-        stops: validStops,
-        coordinates: validCoordinates,
-        vehicleType,
-        vehicleCount,
-        trafficEnabled,
-        fuelPrice
-      })
-
-      setOptimizedRoute(response.data)
-      setShowResults(true)
-      displayRouteOnMap(response.data)
-      toast.success('Route optimized successfully!')
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to optimize route')
+      const res = await api.post('/routes/optimize', buildPayload())
+      setPlan(res.data)
+      setActiveRoute(0)
+      setAssignments({})
+      const v = res.data.totals.violations
+      toast.success(`Optimized ${res.data.totals.stops} stops into ${res.data.routes.length} route(s) in ${res.data.computeMs} ms`)
+      if (v) toast(`${v} delivery window(s) cannot be met. See the warnings.`, { icon: '⚠️' })
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to optimize route'))
     } finally {
       setOptimizing(false)
     }
   }
 
-  const displayRouteOnMap = (route) => {
-    if (!map.current || !route.geometry) return
-
-    clearMap()
-
-    const geojson = {
-      type: 'Feature',
-      properties: {},
-      geometry: route.geometry
-    }
-
-    if (map.current.getSource('route')) {
-      map.current.getSource('route').setData(geojson)
-    } else {
-      map.current.addSource('route', { type: 'geojson', data: geojson })
-      map.current.addLayer({
-        id: 'route-line',
-        type: 'line',
-        source: 'route',
-        paint: {
-          'line-color': '#1e3a8a',
-          'line-width': 4,
-          'line-opacity': 0.8
-        }
-      })
-    }
-
-    route.stops.forEach((stop, index) => {
-      const el = document.createElement('div')
-      el.className = 'marker'
-      el.innerHTML = `<div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm shadow-lg border-2 border-white">${index + 1}</div>`
-      
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat(stop.coordinates)
-        .addTo(map.current)
-      markers.current.push(marker)
-    })
-
-    const bounds = new mapboxgl.LngLatBounds()
-    route.stops.forEach(stop => bounds.extend(stop.coordinates))
-    map.current.fitBounds(bounds, { padding: 50, maxZoom: 14 })
-  }
-
-  const clearMap = () => {
-    markers.current.forEach(m => m.remove())
-    markers.current = []
-    if (map.current?.getSource('route')) {
-      map.current.getSource('route').setData({ type: 'FeatureCollection', features: [] })
-    }
-  }
-
-  const saveRoute = async () => {
-    if (!optimizedRoute) return
+  const save = async () => {
+    setSaving(true)
     try {
-      await api.post('/routes', optimizedRoute)
-      toast.success('Route saved successfully')
-      navigate('/dashboard')
-    } catch (error) {
-      toast.error('Failed to save route')
+      const res = await api.post('/routes', {
+        ...buildPayload(),
+        name: name.trim() || undefined,
+        assignments: plan.routes.map((_, i) => ({ driver: assignments[i] || undefined }))
+      })
+      toast.success(`Saved ${res.data.routes.length} route(s) · ${res.data.batchId}`)
+      navigate(res.data.routes.length === 1 ? `/routes/${res.data.routes[0]._id}` : `/routes?batch=${res.data.batchId}`)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to save routes'))
+    } finally {
+      setSaving(false)
     }
   }
 
-  const vehicle = VEHICLE_TYPES.find(v => v.id === vehicleType)
+  const mapData = useMemo(() => {
+    const depotPoint = { id: 'depot', coordinates: depot.coordinates, label: 'H', variant: 'depot', title: depot.name || 'Depot' }
+    if (!plan) {
+      return {
+        lines: [],
+        points: [depotPoint, ...stops.filter(s => s.coordinates).map((s, i) => ({ id: s.key, coordinates: s.coordinates, label: i + 1, variant: 'stop', title: s.address }))]
+      }
+    }
+    return {
+      lines: plan.routes.map((r, i) => ({
+        id: `r${i}`,
+        coordinates: [r.depot.coordinates, ...r.stops.map(s => s.coordinates), ...(r.returnToDepot ? [r.depot.coordinates] : [])],
+        color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+        width: i === activeRoute ? 5 : 3,
+        opacity: i === activeRoute ? 0.95 : 0.45
+      })),
+      points: [depotPoint, ...plan.routes.flatMap((r, i) => r.stops.map(s => ({
+        id: `r${i}-${s.sequence}`,
+        coordinates: s.coordinates,
+        label: s.sequence,
+        variant: s.windowStatus === 'late' ? 'late' : i === activeRoute ? 'current' : 'stop',
+        title: `${s.sequence}. ${s.address} · ETA ${s.etaLabel}`
+      })))]
+    }
+  }, [plan, stops, depot, activeRoute])
+
+  const fitKey = plan ? `plan-${plan.computeMs}-${plan.routes.length}` : stops.filter(s => s.coordinates).map(s => s.coordinates.join()).join('|')
 
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col">
+    <div className="planner">
       <div className="page-header">
         <div>
           <h1 className="page-title">Route Planner</h1>
-          <p className="page-subtitle">Plan and optimize multi-stop delivery routes</p>
+          <p className="page-subtitle">Multi-stop, multi-vehicle optimization with traffic, delivery windows, priority and fuel</p>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-full lg:w-2/3 h-full">
-          {MAPBOX_TOKEN ? (
-            <div className="h-full" ref={mapContainer} id="map" />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center bg-background border border-border rounded-lg p-8 text-center">
-              <svg className="w-16 h-16 text-muted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-              </svg>
-              <h3 className="text-lg font-semibold text-primary mb-2">Mapbox Token Required</h3>
-              <p className="text-secondary mb-4">Add your Mapbox access token to enable interactive maps.</p>
-              <p className="text-sm text-muted">Set VITE_MAPBOX_TOKEN in your .env file</p>
-            </div>
-          )}
-        </div>
+      <div className="planner-grid">
+        <section className="planner-map card" aria-label="Map">
+          <MapView lines={mapData.lines} points={mapData.points} fitKey={fitKey} traffic={trafficEnabled} height="100%" />
+        </section>
 
-        <div className="w-full lg:w-1/3 bg-surface border-l border-border h-full overflow-y-auto p-4">
-          <div className="space-y-4">
-            <div className="card">
-              <div className="card-header">
-                <h3 className="font-semibold">Delivery Stops</h3>
+        <section className="planner-panel" aria-label="Plan">
+          <div className="card mb-4">
+            <div className="card-body grid grid-2 gap-3">
+              <div>
+                <label className="form-label" htmlFor="batch-name">Batch name</label>
+                <input id="batch-name" className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning run, Lalpur area" maxLength={100} />
               </div>
-              <div className="card-body p-0 space-y-3 p-4">
-                {stops.map((stop, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-background rounded-lg">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          className="form-input flex-1"
-                          placeholder={`Stop ${index + 1} address`}
-                          value={stop.address}
-                          onChange={(e) => updateStop(index, 'address', e.target.value)}
-                          aria-label={`Stop ${index + 1} address`}
-                        />
-                        {stops.length > 2 && (
-                          <button
-                            className="btn btn-ghost text-error p-1"
-                            onClick={() => removeStop(index)}
-                            aria-label={`Remove stop ${index + 1}`}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-2 gap-2">
-                        <select
-                          className="form-input form-select text-sm"
-                          value={stop.priority}
-                          onChange={(e) => updateStop(index, 'priority', e.target.value)}
-                          aria-label={`Stop ${index + 1} priority`}
-                        >
-                          {PRIORITY_OPTIONS.map(p => (
-                            <option key={p.value} value={p.value}>{p.label}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          className="form-input text-sm"
-                          placeholder="Time window (e.g., 9:00-11:00)"
-                          value={stop.timeWindow}
-                          onChange={(e) => updateStop(index, 'timeWindow', e.target.value)}
-                          aria-label={`Stop ${index + 1} time window`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <button className="btn btn-outline w-full" onClick={addStop}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Stop
-                </button>
+              <div>
+                <label className="form-label" htmlFor="departure">Departure (IST)</label>
+                <input id="departure" type="datetime-local" className="form-input" value={departure} onChange={e => { setDeparture(e.target.value); touch() }} />
+              </div>
+              <div className="col-span-2">
+                <label className="form-label" htmlFor="depot">Start depot</label>
+                <AddressAutocomplete id="depot" value={depotText} coordinates={depot.coordinates}
+                  onChange={text => { setDepotText(text); setDepot(d => ({ ...d, coordinates: null })) }}
+                  onSelect={({ address, coordinates }) => { setDepotText(address); setDepot({ name: address.split(',')[0], address, coordinates }); touch() }} />
+                {!depot.coordinates && (
+                  <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={() => { setDepot(DEFAULT_DEPOT); setDepotText(DEFAULT_DEPOT.address) }}>
+                    Use Hopr Hub, Kokar
+                  </button>
+                )}
               </div>
             </div>
+          </div>
 
-            <div className="card">
-              <div className="card-header">
-                <h3 className="font-semibold">Vehicle Settings</h3>
+          <div className="card mb-4">
+            <div className="card-header flex-between">
+              <h3 className="font-semibold">Deliveries <span className="text-muted text-sm">({filledStops.length}/{maxStops})</span></h3>
+              <div className="flex gap-2">
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => fileInput.current?.click()}>Upload CSV</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
+                  const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' })
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = 'hopr-deliveries-template.csv'
+                  a.click()
+                  URL.revokeObjectURL(a.href)
+                }}>Template</button>
+                <input ref={fileInput} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} aria-label="Upload CSV of deliveries" />
               </div>
-              <div className="card-body space-y-4">
-                <div>
-                  <label className="form-label">Vehicle Type</label>
+            </div>
+            <div className="card-body stop-list">
+              {locating > 0 && <p className="alert alert-info mb-3">Locating {locating} address(es)…</p>}
+              {stops.map((stop, index) => (
+                <StopEditor key={stop.key} index={index} stop={stop} onChange={patch => updateStop(stop.key, patch)}
+                  onRemove={stops.length > 1 ? () => removeStop(stop.key) : null} />
+              ))}
+              <button type="button" className="btn btn-outline w-full" onClick={addStop} disabled={stops.length >= maxStops}>+ Add stop</button>
+            </div>
+          </div>
+
+          <div className="card mb-4">
+            <div className="card-header"><h3 className="font-semibold">Vehicles & constraints</h3></div>
+            <div className="card-body space-y-4">
+              <div className="tabs" role="tablist" aria-label="Vehicle selection">
+                <button type="button" role="tab" aria-selected={vehicleMode === 'fleet'} className={`tab ${vehicleMode === 'fleet' ? 'active' : ''}`}
+                  onClick={() => { setVehicleMode('fleet'); touch() }} disabled={!fleet.length}>Fleet vehicles</button>
+                <button type="button" role="tab" aria-selected={vehicleMode === 'type'} className={`tab ${vehicleMode === 'type' ? 'active' : ''}`}
+                  onClick={() => { setVehicleMode('type'); touch() }}>By vehicle type</button>
+              </div>
+
+              {vehicleMode === 'fleet' ? (
+                <div className="vehicle-pick-list">
+                  {fleet.map(v => {
+                    const checked = selectedVehicles.includes(v._id)
+                    return (
+                      <label key={v._id} className={`vehicle-pick ${checked ? 'selected' : ''}`}>
+                        <input type="checkbox" checked={checked} onChange={() => {
+                          setSelectedVehicles(prev => (checked ? prev.filter(id => id !== v._id) : [...prev, v._id].slice(0, 10)))
+                          touch()
+                        }} />
+                        <span className="font-medium">{v.name}</span>
+                        <span className="text-xs text-muted">{vehicleTypeLabel(v.type)} · {v.capacity} kg · {v.mileage} {v.fuelType === 'electric' ? 'km/kWh' : 'km/L'}{v.driver ? ` · ${v.driver.name}` : ''}</span>
+                      </label>
+                    )
+                  })}
+                  {!fleet.length && <p className="text-sm text-muted">No active vehicles. Add some on the Vehicles page or plan by type.</p>}
+                </div>
+              ) : (
+                <>
                   <div className="grid grid-2 gap-2">
                     {VEHICLE_TYPES.map(v => (
-                      <button
-                        key={v.id}
-                        type="button"
-                        className={`p-3 rounded-lg border-2 text-left transition-all ${
-                          vehicleType === v.id
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-primary/50'
-                        }`}
-                        onClick={() => setVehicleType(v.id)}
-                      >
-                        <div className="text-2xl">{v.icon}</div>
-                        <div className="font-medium">{v.name}</div>
-                        <div className="text-xs text-muted">
-                          {v.fuelType === 'electric' ? 'Electric' : `${v.mileage} km/L ${v.fuelType}`}
-                        </div>
+                      <button key={v.id} type="button" aria-pressed={vehicleType === v.id}
+                        className={`vehicle-type ${vehicleType === v.id ? 'selected' : ''}`}
+                        onClick={() => { setVehicleType(v.id); touch() }}>
+                        <span className="text-xl" aria-hidden="true">{v.icon}</span>
+                        <span className="font-medium">{v.name}</span>
+                        <span className="text-xs text-muted">{v.mileage} {v.unit} {v.fuelType} · {v.capacity} kg</span>
                       </button>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Number of Vehicles</label>
                   <div className="flex items-center gap-3">
-                    <button
-                      className="btn btn-outline w-10 h-10"
-                      onClick={() => setVehicleCount(Math.max(1, vehicleCount - 1))}
-                      disabled={vehicleCount <= 1}
-                      aria-label="Decrease vehicles"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                      </svg>
-                    </button>
-                    <span className="text-2xl font-bold w-12 text-center">{vehicleCount}</span>
-                    <button
-                      className="btn btn-outline w-10 h-10"
-                      onClick={() => setVehicleCount(vehicleCount + 1)}
-                      disabled={vehicleCount >= 10}
-                      aria-label="Increase vehicles"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                    </button>
+                    <label className="form-label mb-0" htmlFor="vehicle-count">Number of vehicles</label>
+                    <input id="vehicle-count" type="number" min="1" max="10" className="form-input w-24" value={vehicleCount}
+                      onChange={e => { setVehicleCount(Math.max(1, Math.min(10, Number(e.target.value) || 1))); touch() }} />
                   </div>
-                </div>
+                </>
+              )}
 
-                <div>
-                  <label className="form-label">Fuel Price ($/L)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="form-input"
-                    value={fuelPrice}
-                    onChange={(e) => setFuelPrice(parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 text-primary rounded border-border focus:ring-primary"
-                    checked={trafficEnabled}
-                    onChange={(e) => setTrafficEnabled(e.target.checked)}
-                  />
-                  <span className="text-sm">Enable traffic-aware routing</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                className="btn btn-primary flex-1"
-                onClick={optimizeRoute}
-                disabled={optimizing || stops.filter(s => s.address).length < 2}
-              >
-                {optimizing ? (
-                  <span className="flex items-center gap-2"><span className="spinner" />Optimizing...</span>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Optimize Route
-                  </>
-                )}
-              </button>
-              <label className="btn btn-outline" aria-label="Upload CSV">
-                <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
+              <label className="toggle-row">
+                <input type="checkbox" checked={trafficEnabled} onChange={e => { setTrafficEnabled(e.target.checked); touch() }} />
+                <span>
+                  <span className="font-medium">Traffic-aware routing</span>
+                  <span className="block text-xs text-muted">Ranchi rush-hour profile + reported congestion zones</span>
+                </span>
+              </label>
+              <label className="toggle-row">
+                <input type="checkbox" checked={returnToDepot} onChange={e => { setReturnToDepot(e.target.checked); touch() }} />
+                <span className="font-medium">Return to depot after the last stop</span>
               </label>
             </div>
           </div>
 
-          {showResults && optimizedRoute && (
-            <div className="card mt-4 animate-slideUp">
-              <div className="card-header flex-between">
-                <h3 className="font-semibold">Optimized Route</h3>
-                <span className="badge badge-success">Ready</span>
-              </div>
-              <div className="card-body space-y-4">
-                <div className="grid grid-2 gap-3">
-                  <div className="p-3 bg-background rounded-lg">
-                    <p className="text-xs text-muted">Total Distance</p>
-                    <p className="text-xl font-bold text-primary">{optimizedRoute.totalDistance?.toFixed(1)} km</p>
-                  </div>
-                  <div className="p-3 bg-background rounded-lg">
-                    <p className="text-xs text-muted">Estimated Time</p>
-                    <p className="text-xl font-bold text-primary">{formatTime(optimizedRoute.estimatedTime)}</p>
-                  </div>
-                  <div className="p-3 bg-background rounded-lg">
-                    <p className="text-xs text-muted">Fuel Estimate</p>
-                    <p className="text-xl font-bold text-success">{optimizedRoute.fuelEstimate?.toFixed(1)} L</p>
-                  </div>
-                  <div className="p-3 bg-background rounded-lg">
-                    <p className="text-xs text-muted">Fuel Cost</p>
-                    <p className="text-xl font-bold text-warning">${optimizedRoute.fuelCost?.toFixed(2)}</p>
-                  </div>
-                </div>
+          <button type="button" className="btn btn-primary btn-lg w-full mb-4" onClick={optimize} disabled={optimizing || locating > 0}>
+            {optimizing ? <><span className="spinner" /> Optimizing…</> : '⚡ Optimize routes'}
+          </button>
 
-                <div className="max-h-48 overflow-y-auto space-y-2">
-                  <h4 className="font-medium text-sm">Stop Sequence</h4>
-                  {optimizedRoute.optimizedStops?.map((stop, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm p-2 bg-background rounded">
-                      <span className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold">{index + 1}</span>
-                      <span className="flex-1 truncate font-medium">{stop.address}</span>
-                      <span className={`badge ${getPriorityBadge(stop.priority)} text-xs`}>{stop.priority}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button className="btn btn-primary flex-1" onClick={saveRoute}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                    </svg>
-                    Save Route
-                  </button>
-                  <button className="btn btn-outline" onClick={() => setShowResults(false)}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    New Route
-                  </button>
-                </div>
-              </div>
-            </div>
+          {plan && (
+            <PlanResults plan={plan} activeRoute={activeRoute} setActiveRoute={setActiveRoute}
+              drivers={drivers} assignments={assignments} setAssignments={setAssignments}
+              onSave={save} saving={saving} />
           )}
-        </div>
+        </section>
       </div>
     </div>
   )
 }
 
-function getPriorityBadge(priority) {
-  switch (priority) {
-    case 'urgent': return 'badge-error'
-    case 'standard': return 'badge-primary'
-    case 'low': return 'badge-success'
-    default: return 'badge-info'
-  }
+function StopEditor({ index, stop, onChange, onRemove }) {
+  const invalidWindow = stop.windowStart && stop.windowEnd && stop.windowEnd <= stop.windowStart
+  return (
+    <div className="stop-editor">
+      <div className="stop-editor-head">
+        <span className="stop-index" aria-hidden="true">{index + 1}</span>
+        <AddressAutocomplete
+          className="flex-1"
+          ariaLabel={`Stop ${index + 1} address`}
+          value={stop.address}
+          coordinates={stop.coordinates}
+          onChange={address => onChange({ address, coordinates: null })}
+          onSelect={({ address, coordinates }) => onChange({ address, coordinates })}
+        />
+        {onRemove && (
+          <button type="button" className="btn btn-ghost btn-sm text-error" onClick={onRemove} aria-label={`Remove stop ${index + 1}`}>✕</button>
+        )}
+      </div>
+      <div className="stop-editor-row">
+        <input className="form-input" placeholder="Customer name" aria-label={`Stop ${index + 1} customer name`} value={stop.customerName}
+          onChange={e => onChange({ customerName: e.target.value })} maxLength={100} />
+        <select className="form-input form-select" aria-label={`Stop ${index + 1} priority`} value={stop.priority} onChange={e => onChange({ priority: e.target.value })}>
+          {PRIORITY_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+      </div>
+      <div className="stop-editor-row">
+        <label className="window-input">
+          <span className="text-xs text-muted">Window from</span>
+          <input type="time" className="form-input" aria-label={`Stop ${index + 1} window start`} value={stop.windowStart} onChange={e => onChange({ windowStart: e.target.value })} />
+        </label>
+        <label className="window-input">
+          <span className="text-xs text-muted">to</span>
+          <input type="time" className={`form-input ${invalidWindow ? 'error' : ''}`} aria-label={`Stop ${index + 1} window end`} value={stop.windowEnd} onChange={e => onChange({ windowEnd: e.target.value })} />
+        </label>
+        <label className="window-input">
+          <span className="text-xs text-muted">Weight (kg)</span>
+          <input type="number" min="0" step="0.1" className="form-input" aria-label={`Stop ${index + 1} package weight in kg`} value={stop.packageWeightKg} onChange={e => onChange({ packageWeightKg: e.target.value })} />
+        </label>
+      </div>
+      {invalidWindow && <p className="form-error">Window must end after it starts</p>}
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange({ expanded: !stop.expanded })} aria-expanded={stop.expanded}>
+        {stop.expanded ? 'Fewer details' : 'More details'}
+      </button>
+      {stop.expanded && (
+        <div className="stop-editor-row">
+          <input className="form-input" type="tel" placeholder="Customer phone" aria-label={`Stop ${index + 1} customer phone`} value={stop.customerPhone} onChange={e => onChange({ customerPhone: e.target.value })} maxLength={20} />
+          <select className="form-input form-select" aria-label={`Stop ${index + 1} package size`} value={stop.packageSize} onChange={e => onChange({ packageSize: e.target.value })}>
+            <option value="small">Small parcel</option>
+            <option value="medium">Medium parcel</option>
+            <option value="large">Large parcel</option>
+          </select>
+          <input className="form-input col-span-2" placeholder="Notes for the driver" aria-label={`Stop ${index + 1} notes`} value={stop.notes} onChange={e => onChange({ notes: e.target.value })} maxLength={500} />
+        </div>
+      )}
+    </div>
+  )
 }
 
-function formatTime(minutes) {
-  if (!minutes) return '-'
-  const hrs = Math.floor(minutes / 60)
-  const mins = Math.round(minutes % 60)
-  return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, setAssignments, onSave, saving }) {
+  const route = plan.routes[activeRoute]
+  const takenDrivers = new Set(Object.entries(assignments).filter(([i]) => Number(i) !== activeRoute).map(([, d]) => d))
+  return (
+    <div className="card plan-results" aria-live="polite">
+      <div className="card-header">
+        <div className="flex-between">
+          <h3 className="font-semibold">Optimized plan</h3>
+          <span className="text-xs text-muted">{plan.computeMs} ms · {plan.incidentsConsidered} incident(s) considered</span>
+        </div>
+        <div className="plan-totals mt-2">
+          <span>{plan.totals.routes} route(s)</span>
+          <span>{plan.totals.stops} stops</span>
+          <span>{formatKm(plan.totals.distanceKm)}</span>
+          <span>{formatINR(plan.totals.fuelCost)} fuel</span>
+          <span>{plan.totals.co2Kg} kg CO₂</span>
+        </div>
+      </div>
+
+      {plan.routes.length > 1 && (
+        <div className="route-tabs" role="tablist" aria-label="Routes in this batch">
+          {plan.routes.map((r, i) => (
+            <button key={i} type="button" role="tab" aria-selected={i === activeRoute} className={`route-tab ${i === activeRoute ? 'active' : ''}`}
+              style={{ '--route-color': ROUTE_COLORS[i % ROUTE_COLORS.length] }} onClick={() => setActiveRoute(i)}>
+              Route {i + 1}<span className="text-xs block">{r.vehicle.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="card-body space-y-4">
+        <div className="grid grid-3 gap-2 metric-grid">
+          <Metric label="Distance" value={formatKm(route.totals.distanceKm)} />
+          <Metric label="Total time" value={formatDuration(route.totals.totalMinutes)} hint={`finish ${formatClock(route.finishTime)}`} />
+          <Metric label="Fuel" value={`${route.totals.fuel.quantity} ${route.totals.fuel.unit}`} hint={formatINR(route.totals.fuel.cost)} />
+          <Metric label="Traffic" value={`×${route.totals.trafficImpactFactor}`} hint={route.totals.trafficLevel} />
+          <Metric label="Load" value={`${route.totals.loadKg} kg`} hint={`${route.totals.utilizationPct}% of ${route.totals.capacityKg} kg`} />
+          <Metric label="CO₂" value={`${route.totals.fuel.co2Kg} kg`} />
+        </div>
+
+        {route.violations.length > 0 && (
+          <div className="alert alert-warning" role="alert">
+            <p className="font-medium mb-1">Delivery windows at risk</p>
+            <ul className="list-disc pl-5 text-sm">
+              {route.violations.map(v => <li key={v.sequence}>{v.message} ({v.lateByMin} min late)</li>)}
+            </ul>
+          </div>
+        )}
+        {route.capacityExceeded && <div className="alert alert-error">Load exceeds this vehicle&apos;s capacity.</div>}
+
+        <ol className="timeline">
+          <li className="timeline-item depot">
+            <span className="timeline-dot">H</span>
+            <div><p className="font-medium">{route.depot.name}</p><p className="text-xs text-muted">Depart {formatClock(route.departureTime)}</p></div>
+          </li>
+          {route.stops.map(s => (
+            <li key={s.sequence} className={`timeline-item ${s.windowStatus}`}>
+              <span className="timeline-dot">{s.sequence}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex-between gap-2">
+                  <p className="font-medium truncate">{s.customerName || s.address.split(',')[0]}</p>
+                  <span className="font-mono text-sm">ETA {s.etaLabel}</span>
+                </div>
+                <p className="text-xs text-muted truncate">{s.address}</p>
+                <div className="flex flex-wrap gap-1 mt-1 items-center">
+                  {s.priority !== 'standard' && <StatusBadge status={s.priority} />}
+                  {(s.windowStart || s.windowEnd) && (
+                    <span className="text-xs">Window {s.windowStart || '…'}–{s.windowEnd || '…'}</span>
+                  )}
+                  {s.windowStatus !== 'none' && <StatusBadge status={s.windowStatus} label={s.windowStatus === 'late' ? `${s.lateByMin} min late` : s.windowStatus === 'early' ? `waits ${s.waitMinutes} min` : 'On time'} />}
+                  <span className="text-xs text-muted">+{s.legDistanceKm} km · {Math.round(s.legMinutes)} min {s.trafficLevel !== 'light' ? `(${s.trafficLevel} traffic)` : ''}</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <details className="compare">
+          <summary className="font-medium">Compare route options</summary>
+          <table className="table mt-2">
+            <thead><tr><th>Option</th><th>Distance</th><th>Time</th><th>Fuel cost</th><th>Late stops</th></tr></thead>
+            <tbody>
+              {route.alternatives.map(a => (
+                <tr key={a.key} className={a.key === 'optimized' ? 'font-medium' : ''}>
+                  <td>{a.label}</td><td>{formatKm(a.distanceKm)}</td><td>{formatDuration(a.totalMinutes)}</td><td>{formatINR(a.fuelCost)}</td><td>{a.lateStops}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-sm font-medium mt-3">Same route by vehicle type</p>
+          <table className="table mt-1">
+            <thead><tr><th>Vehicle</th><th>Energy</th><th>Cost</th><th>CO₂</th><th>Fits load</th></tr></thead>
+            <tbody>
+              {route.vehicleComparison.map(v => (
+                <tr key={v.type} className={v.type === route.vehicle.type ? 'font-medium' : ''}>
+                  <td>{v.label}</td><td>{v.quantity} {v.unit}</td><td>{formatINR(v.cost)}</td><td>{v.co2Kg} kg</td><td>{v.fitsLoad ? '✓' : '✗'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+
+        <div>
+          <label className="form-label" htmlFor={`assign-${activeRoute}`}>Assign driver (optional)</label>
+          <select id={`assign-${activeRoute}`} className="form-input form-select" value={assignments[activeRoute] || ''}
+            onChange={e => setAssignments(prev => ({ ...prev, [activeRoute]: e.target.value || undefined }))}>
+            <option value="">Leave unassigned (auto-dispatch later)</option>
+            {drivers.filter(d => !takenDrivers.has(d._id)).map(d => (
+              <option key={d._id} value={d._id}>{d.name}{d.vehicle ? ` · ${d.vehicle.name}` : ''}{d.onRoute ? ' (on a route)' : ''}</option>
+            ))}
+          </select>
+        </div>
+
+        <button type="button" className="btn btn-success w-full" onClick={onSave} disabled={saving}>
+          {saving ? <><span className="spinner" /> Saving…</> : `Save ${plan.routes.length > 1 ? `${plan.routes.length} routes` : 'route'}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Metric({ label, value, hint }) {
+  return (
+    <div className="metric">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="font-bold">{value}</p>
+      {hint && <p className="text-xs text-secondary capitalize">{hint}</p>}
+    </div>
+  )
 }

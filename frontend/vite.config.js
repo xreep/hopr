@@ -16,7 +16,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          mapbox: ['mapbox-gl'],
           charts: ['chart.js', 'react-chartjs-2'],
           react: ['react', 'react-dom', 'react-router-dom']
         }
