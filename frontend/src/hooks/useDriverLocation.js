@@ -33,6 +33,11 @@ export default function useDriverLocation(route) {
       setError('')
     } catch (err) {
       setError(errorMessage(err, 'Could not send location'))
+      // Not allowed any more (signed in as someone else, route finished/reassigned): stop pinging
+      if ([403, 404, 409].includes(err.response?.status)) {
+        setMode('manual')
+        setStatus('error')
+      }
     }
   }, [routeId])
 

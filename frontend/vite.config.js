@@ -15,9 +15,12 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          charts: ['chart.js', 'react-chartjs-2'],
-          react: ['react', 'react-dom', 'react-router-dom']
+        // Vendor chunks (Mapbox GL is loaded on demand by the map component)
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (/[\\/](chart\.js|react-chartjs-2)[\\/]/.test(id)) return 'charts'
+          if (/[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'react'
+          return undefined
         }
       }
     },
