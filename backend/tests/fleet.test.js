@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { api, createUser, createRoute } from './helpers.js'
+import { api, createUser, createRoute, completeStop } from './helpers.js'
 import { useTestDb } from './db.js'
 import Vehicle from '../src/models/Vehicle.js'
 import Route from '../src/models/Route.js'
@@ -92,7 +92,7 @@ describe('drivers', () => {
     const driver = await createUser('driver')
     const route = await createRoute(manager.auth, { assignments: [{ driver: driver.user._id }] })
     await api().patch(`/api/routes/${route._id}/start`).set(driver.auth)
-    await api().patch(`/api/routes/${route._id}/stops/${route.stops[0]._id}/status`).set(driver.auth).send({ status: 'completed' })
+    await completeStop(driver.auth, route._id, route.stops[0]._id)
     await api().patch(`/api/routes/${route._id}/stops/${route.stops[1]._id}/status`).set(driver.auth).send({ status: 'failed', reason: 'Address locked' })
 
     const res = await api().get('/api/drivers').set(manager.auth)

@@ -290,3 +290,20 @@
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse-ring { 0% { transform: scale(0.6); opacity: 0.6; } 100% { transform: scale(1.6); opacity: 0; } }
+
+@layer components {
+  /* ---------- Proof of delivery ---------- */
+  .pod-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  @media (max-width: 640px) { .pod-grid { grid-template-columns: minmax(0, 1fr); } }
+  .pod-photo-empty { width: 100%; height: 180px; border: 2px dashed var(--color-border); border-radius: var(--radius-md); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; color: var(--color-text-secondary); font-size: 0.875rem; }
+  .pod-photo-empty span:first-child { font-size: 2rem; }
+  .pod-photo { position: relative; }
+  .pod-photo img { width: 100%; height: 180px; object-fit: cover; border-radius: var(--radius-md); }
+  .pod-photo .btn { position: absolute; right: 0.5rem; bottom: 0.5rem; }
+  .signature-canvas { display: block; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #fff; cursor: crosshair; }
+  .pod-view { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-start; }
+  .pod-view figure { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.7rem; color: var(--color-text-muted); }
+  .pod-thumb { width: 96px; height: 72px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: #fff; }
+  .pod-signature { object-fit: contain; }
+  .auth-image-placeholder { display: inline-block; width: 96px; height: 72px; border-radius: var(--radius-sm); background: var(--color-border); }
+}

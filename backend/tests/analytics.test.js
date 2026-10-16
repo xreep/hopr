@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeKpis, buildAnalytics, routesToCsv } from '../src/services/analytics.js'
 import { isOnTime } from '../src/services/metrics.js'
-import { api, createUser, createRoute } from './helpers.js'
+import { api, createUser, createRoute, completeStop } from './helpers.js'
 import { useTestDb } from './db.js'
 import Route from '../src/models/Route.js'
 
@@ -89,7 +89,7 @@ describe('analytics + dashboard API', () => {
     const driver = await createUser('driver')
     const route = await createRoute(manager.auth, { assignments: [{ driver: driver.user._id }] })
     await api().patch(`/api/routes/${route._id}/start`).set(driver.auth)
-    await api().patch(`/api/routes/${route._id}/stops/${route.stops[0]._id}/status`).set(driver.auth).send({ status: 'completed' })
+    await completeStop(driver.auth, route._id, route.stops[0]._id)
     // Planned for "now" so it falls inside the default 30-day window
     await Route.updateOne({ _id: route._id }, { plannedStart: new Date() })
 

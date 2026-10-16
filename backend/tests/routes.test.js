@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { api, createUser, planBody, createRoute } from './helpers.js'
+import { api, createUser, planBody, createRoute, completeStop } from './helpers.js'
 import { useTestDb } from './db.js'
 import Route from '../src/models/Route.js'
 import Vehicle from '../src/models/Vehicle.js'
@@ -132,12 +132,12 @@ describe('route assignment and driver workflow', () => {
     expect(failed.status).toBe(200)
     expect(failed.body.route.stops[1].status).toBe('in_progress')
 
-    const again = await api().patch(`/api/routes/${route._id}/stops/${stops[0]._id}/status`).set(driver.auth).send({ status: 'completed' })
+    const again = await completeStop(driver.auth, route._id, stops[0]._id)
     expect(again.status).toBe(409)
 
     let last
     for (const stop of stops.slice(1)) {
-      last = await api().patch(`/api/routes/${route._id}/stops/${stop._id}/status`).set(driver.auth).send({ status: 'completed' })
+      last = await completeStop(driver.auth, route._id, stop._id)
       expect(last.status).toBe(200)
     }
     // The last stop stays completed and the route completes even with one failed stop

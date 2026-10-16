@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import usePolling from '../hooks/usePolling'
 import MapView from '../components/MapView'
 import { StatusBadge, PageLoader, EmptyState } from '../components/ui'
+import AuthImage from '../components/AuthImage'
 import { formatDuration, formatINR, formatKm, initials } from '../utils/format'
 import { formatClock, formatDateTime, relativeTime } from '../utils/time'
 import { vehicleTypeLabel } from '../config'
@@ -201,6 +202,16 @@ function StopRow({ stop }) {
           {stop.customerPhone && <a href={`tel:${stop.customerPhone}`}>{stop.customerPhone}</a>}
         </div>
         {stop.notes && <p className="text-xs text-muted mt-1">Note: {stop.notes}</p>}
+        {stop.proof && (stop.proof.photo || stop.proof.signature) && (
+          <div className="pod-view mt-2">
+            {stop.proof.photo && <figure><AuthImage id={stop.proof.photo} alt={`Delivery photo for ${stop.customerName || stop.address}`} className="pod-thumb" /><figcaption>Photo</figcaption></figure>}
+            {stop.proof.signature && <figure><AuthImage id={stop.proof.signature} alt={`Signature for ${stop.customerName || stop.address}`} className="pod-thumb pod-signature" /><figcaption>Signature</figcaption></figure>}
+            <div className="text-xs text-secondary">
+              <p>Completed {formatDateTime(stop.proof.completedAt)}{stop.proof.completedBy?.name ? ` by ${stop.proof.completedBy.name}` : ''}</p>
+              {stop.proof.note && <p className="mt-1">“{stop.proof.note}”</p>}
+            </div>
+          </div>
+        )}
         {stop.issues?.length > 0 && (
           <ul className="issue-list mt-2">
             {stop.issues.map((i, k) => (

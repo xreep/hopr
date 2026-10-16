@@ -5,6 +5,7 @@ import api, { errorMessage } from '../utils/api'
 import usePolling from '../hooks/usePolling'
 import MapView from '../components/MapView'
 import { Modal, StatusBadge, EmptyState, PageLoader } from '../components/ui'
+import ProofOfDeliveryDialog from '../components/ProofOfDeliveryDialog'
 import { formatKm, formatDuration, initials } from '../utils/format'
 import { formatClock, minutesUntil } from '../utils/time'
 import { stopVariant, isStale } from '../utils/routeView'
@@ -17,7 +18,7 @@ export default function DriverPanel() {
   const [routes, setRoutes] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [dialog, setDialog] = useState(null) // { kind: 'fail' | 'issue', stop }
+  const [dialog, setDialog] = useState(null) // { kind: 'pod' | 'fail' | 'issue', stop }
   const knownIds = useRef(null)
 
   const load = useCallback(async () => {
@@ -64,7 +65,7 @@ export default function DriverPanel() {
   const startRoute = () => call(() => api.patch(`/routes/${route._id}/start`), () => 'Route started. Drive safe!')
   const setStatus = (stop, status, reason) => call(
     () => api.patch(`/routes/${route._id}/stops/${stop._id}/status`, { status, ...(reason && { reason }) }),
-    updated => (updated.status === 'completed' ? 'All stops done. Route complete!' : status === 'failed' ? 'Marked as failed' : 'Delivery completed')
+    updated => (updated.status === 'completed' ? 'All stops done. Route complete!' : 'Marked as failed')
   )
 
   const mapData = useMemo(() => {
@@ -153,7 +154,7 @@ export default function DriverPanel() {
                         Navigate
                       </a>
                       {currentStop.customerPhone && <a className="btn btn-outline" href={`tel:${currentStop.customerPhone}`}>Call</a>}
-                      <button type="button" className="btn btn-success" disabled={busy} onClick={() => setStatus(currentStop, 'completed')}>Mark delivered</button>
+                      <button type="button" className="btn btn-success" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}>Mark delivered</button>
                       <button type="button" className="btn btn-danger" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}>Failed</button>
                       <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDialog({ kind: 'issue', stop: currentStop })}>Report issue / delay</button>
                     </div>
@@ -186,6 +187,13 @@ export default function DriverPanel() {
         </div>
       )}
 
+      {dialog?.kind === 'pod' && (
+        <ProofOfDeliveryDialog route={route} stop={dialog.stop} onClose={() => setDialog(null)} onCompleted={updated => {
+          applyRoute(updated)
+          setDialog(null)
+          toast.success(updated.status === 'completed' ? 'All stops done. Route complete!' : 'Delivery completed with proof')
+        }} />
+      )}
       {dialog?.kind === 'fail' && (
         <FailDialog stop={dialog.stop} onClose={() => setDialog(null)} onSubmit={async reason => {
           const res = await setStatus(dialog.stop, 'failed', reason)

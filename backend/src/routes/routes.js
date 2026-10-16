@@ -2,6 +2,8 @@ import express from 'express'
 import { body, query } from 'express-validator'
 import Route from '../models/Route.js'
 import Vehicle from '../models/Vehicle.js'
+import Upload from '../models/Upload.js'
+import { proofUpload, sniffImageType } from '../middleware/upload.js'
 import { authenticate, authorize, isManager } from '../middleware/auth.js'
 import { validateRequest, pick, objectIdParam } from '../middleware/validate.js'
 import {
@@ -59,6 +61,7 @@ const populateRoute = q => q
   .populate('vehicle', 'vehicleId name licensePlate type fuelType mileage capacity')
   .populate('driver', 'name email phone')
   .populate('createdBy', 'name')
+  .populate('stops.proof.completedBy', 'name')
 
 function canAccess(user, route) {
   if (isManager(user)) return true
@@ -296,6 +299,10 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
     if (stop.status === 'completed' || stop.status === 'failed') {
       return res.status(409).json({ message: `Stop is already ${stop.status}` })
     }
+    // Drivers complete deliveries with proof (POST .../complete); managers may override
+    if (req.body.status === 'completed' && !isManager(req.user)) {
+      return res.status(403).json({ message: 'Complete deliveries with proof of delivery' })
+    }
 
     if (route.status === 'planned') {
       route.status = 'active'
@@ -323,6 +330,75 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
     res.json({ route })
   } catch (error) {
     sendError(res, error, 'Failed to update stop status')
+  }
+})
+
+// Proof of delivery (Onfleet-style): photo and/or customer signature + optional note
+router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
+  body('note').optional().isString().trim().isLength({ max: 500 }).withMessage('Note must be 500 characters or fewer'),
+  validateRequest
+], async (req, res) => {
+  try {
+    const route = await loadAccessibleRoute(req, res)
+    if (!route) return
+    if (route.status === 'completed' || route.status === 'cancelled') {
+      return res.status(409).json({ message: `Route is ${route.status}` })
+    }
+    const stop = route.stops.id(req.params.stopId)
+    if (!stop) return res.status(404).json({ message: 'Stop not found' })
+    if (stop.status === 'completed' || stop.status === 'failed') {
+      return res.status(409).json({ message: `Stop is already ${stop.status}` })
+    }
+
+    const files = { photo: req.files?.photo?.[0], signature: req.files?.signature?.[0] }
+    if (!files.photo && !files.signature) {
+      return res.status(400).json({ message: 'Add a delivery photo or the customer signature' })
+    }
+    for (const [kind, file] of Object.entries(files)) {
+      if (file && !sniffImageType(file.buffer)) {
+        return res.status(400).json({ message: `The ${kind} is not a valid image` })
+      }
+    }
+
+    const saved = {}
+    for (const [kind, file] of Object.entries(files)) {
+      if (!file) continue
+      const doc = await Upload.create({
+        kind,
+        contentType: sniffImageType(file.buffer),
+        size: file.size,
+        data: file.buffer,
+        route: route._id,
+        stopId: stop._id,
+        uploadedBy: req.user.id
+      })
+      saved[kind] = doc._id
+    }
+
+    const now = new Date()
+    if (route.status === 'planned') {
+      route.status = 'active'
+      route.startedAt = now
+    }
+    const wasCompleted = route.status === 'completed'
+    stop.status = 'completed'
+    stop.completedAt = now
+    stop.proof = {
+      photo: saved.photo,
+      signature: saved.signature,
+      note: req.body.note?.trim() || undefined,
+      completedAt: now,
+      completedBy: req.user.id
+    }
+    const next = route.stops.find(s => s.status === 'pending')
+    if (next && !route.stops.some(s => s.status === 'in_progress')) next.status = 'in_progress'
+    route.refreshProgress()
+    await route.save()
+    await recordCompletion(route, wasCompleted)
+
+    res.json({ route: await populateRoute(Route.findById(route._id)) })
+  } catch (error) {
+    sendError(res, error, 'Failed to complete delivery')
   }
 })
 

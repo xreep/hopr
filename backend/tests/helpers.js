@@ -37,3 +37,15 @@ export async function createRoute(managerAuth, extra = {}) {
   if (res.status !== 201) throw new Error(`createRoute failed: ${res.status} ${JSON.stringify(res.body)}`)
   return res.body.routes[0]
 }
+
+// A valid 1x1 PNG (used as photo/signature in proof-of-delivery tests)
+export const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
+
+export function completeStop(auth, routeId, stopId, { note = 'Left with security guard' } = {}) {
+  return request(app)
+    .post(`/api/routes/${routeId}/stops/${stopId}/complete`)
+    .set(auth)
+    .attach('photo', TINY_PNG, { filename: 'door.png', contentType: 'image/png' })
+    .attach('signature', TINY_PNG, { filename: 'signature.png', contentType: 'image/png' })
+    .field('note', note)
+}
