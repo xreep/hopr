@@ -1,181 +1,173 @@
 import express from 'express'
-import { query, validationResult } from 'express-validator'
+import { query } from 'express-validator'
 import axios from 'axios'
 import { authenticate } from '../middleware/auth.js'
+import { validateRequest } from '../middleware/validate.js'
+import { buildRouteGeometry } from '../services/geometry.js'
+import { DEFAULT_DEPOT } from '../config/fleet.js'
+import { RANCHI_CENTRE } from '../data/ranchiLocations.js'
 
 const router = express.Router()
 
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
+// Geocoding providers: Mapbox when MAPBOX_TOKEN is set, otherwise the free
+// OpenStreetMap Photon API. Results are biased towards Ranchi and cached.
+const providersDisabled = () => process.env.NODE_ENV === 'test'
+const mapboxToken = () => process.env.MAPBOX_TOKEN || null
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const CACHE_MAX = 500
+const cache = new Map()
+function cached(key, loader) {
+  const hit = cache.get(key)
+  if (hit && hit.expires > Date.now()) return hit.value
+  const value = loader().then(result => {
+    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value)
+    cache.set(key, { value: Promise.resolve(result), expires: Date.now() + CACHE_TTL_MS })
+    return result
+  })
+  return value
 }
 
-const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN
-const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY
+async function mapboxSearch(q, limit) {
+  const { data } = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`, {
+    params: {
+      access_token: mapboxToken(),
+      limit,
+      country: 'in',
+      proximity: RANCHI_CENTRE.join(','),
+      autocomplete: true,
+      types: 'address,poi,neighborhood,locality,place,postcode'
+    },
+    timeout: 5000
+  })
+  return (data.features || []).map(f => ({ label: f.place_name, address: f.place_name, coordinates: f.center, source: 'mapbox' }))
+}
 
-router.get('/geocode', authenticate, [
-  query('address').notEmpty().withMessage('Address is required'),
+function photonLabel(p) {
+  const street = [p.housenumber, p.street].filter(Boolean).join(' ')
+  return [p.name, street && street !== p.name ? street : null, p.district || p.locality, p.city || p.county, p.state, p.postcode]
+    .filter(Boolean)
+    .filter((part, i, arr) => arr.indexOf(part) === i)
+    .join(', ')
+}
+
+async function photonSearch(q, limit) {
+  const { data } = await axios.get('https://photon.komoot.io/api/', {
+    params: { q, limit: limit + 3, lang: 'en', lat: RANCHI_CENTRE[1], lon: RANCHI_CENTRE[0] },
+    headers: { 'User-Agent': 'Hopr route optimization (student project)' },
+    timeout: 5000
+  })
+  return (data.features || [])
+    .filter(f => !f.properties?.countrycode || f.properties.countrycode === 'IN')
+    .slice(0, limit)
+    .map(f => ({ label: photonLabel(f.properties), address: photonLabel(f.properties), coordinates: f.geometry.coordinates, source: 'osm' }))
+}
+
+async function search(q, limit) {
+  if (providersDisabled()) {
+    const err = new Error('Geocoding provider not available')
+    err.status = 503
+    throw err
+  }
+  const key = `${mapboxToken() ? 'mb' : 'osm'}:${limit}:${q.toLowerCase()}`
+  return cached(key, async () => {
+    if (mapboxToken()) {
+      try {
+        return await mapboxSearch(q, limit)
+      } catch (error) {
+        console.warn('Mapbox geocoding failed, falling back to OpenStreetMap:', error.message)
+      }
+    }
+    return photonSearch(q, limit)
+  })
+}
+
+function sendProviderError(res, error) {
+  if (error.status) return res.status(error.status).json({ message: error.message })
+  console.warn('Geocoding failed:', error.message)
+  return res.status(502).json({ message: 'Geocoding service is unavailable, please try again' })
+}
+
+router.get('/config', authenticate, (req, res) => {
+  res.json({ depot: DEFAULT_DEPOT, centre: RANCHI_CENTRE, geocoder: mapboxToken() ? 'mapbox' : 'osm' })
+})
+
+router.get('/suggest', authenticate, [
+  query('q').isString().trim().isLength({ min: 3, max: 200 }).withMessage('Type at least 3 characters'),
+  query('limit').optional().isInt({ min: 1, max: 8 }).toInt(),
   validateRequest
 ], async (req, res) => {
   try {
-    const { address } = req.query
-
-    if (MAPBOX_TOKEN) {
-      try {
-        const response = await axios.get('https://api.mapbox.com/geocoding/v5/mapbox.places/' + 
-          encodeURIComponent(address) + '.json', {
-          params: {
-            access_token: MAPBOX_TOKEN,
-            limit: 1
-          }
-        })
-
-        if (response.data.features && response.data.features.length > 0) {
-          const feature = response.data.features[0]
-          return res.json({
-            coordinates: feature.center,
-            placeName: feature.place_name
-          })
-        }
-      } catch (mapboxError) {
-        console.warn('Mapbox geocoding failed, trying Google Maps:', mapboxError.message)
-      }
-    }
-
-    if (GOOGLE_MAPS_KEY) {
-      try {
-        const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
-          params: {
-            address,
-            key: GOOGLE_MAPS_KEY
-          }
-        })
-
-        if (response.data.results && response.data.results.length > 0) {
-          const result = response.data.results[0]
-          return res.json({
-            coordinates: [result.geometry.location.lng, result.geometry.location.lat],
-            placeName: result.formatted_address
-          })
-        }
-      } catch (googleError) {
-        console.warn('Google Maps geocoding failed:', googleError.message)
-      }
-    }
-
-    const mockCoordinates = generateMockCoordinates(address)
-    res.json({
-      coordinates: mockCoordinates,
-      placeName: address,
-      mock: true
-    })
+    res.json({ suggestions: await search(req.query.q, req.query.limit || 5) })
   } catch (error) {
-    res.status(500).json({ message: 'Geocoding failed' })
+    sendProviderError(res, error)
+  }
+})
+
+router.get('/geocode', authenticate, [
+  query('address').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Address is required'),
+  validateRequest
+], async (req, res) => {
+  try {
+    const [first] = await search(req.query.address, 1)
+    if (!first) return res.status(404).json({ message: `Could not find "${req.query.address}"` })
+    res.json({ coordinates: first.coordinates, placeName: first.label, source: first.source })
+  } catch (error) {
+    sendProviderError(res, error)
   }
 })
 
 router.get('/reverse-geocode', authenticate, [
-  query('lng').isFloat({ min: -180, max: 180 }).withMessage('Valid longitude required'),
-  query('lat').isFloat({ min: -90, max: 90 }).withMessage('Valid latitude required'),
+  query('lng').isFloat({ min: -180, max: 180 }).withMessage('Valid longitude required').toFloat(),
+  query('lat').isFloat({ min: -90, max: 90 }).withMessage('Valid latitude required').toFloat(),
   validateRequest
 ], async (req, res) => {
   try {
+    if (providersDisabled()) return res.status(503).json({ message: 'Geocoding provider not available' })
     const { lng, lat } = req.query
-
-    if (MAPBOX_TOKEN) {
-      try {
-        const response = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json`, {
-          params: {
-            access_token: MAPBOX_TOKEN,
-            limit: 1
-          }
-        })
-
-        if (response.data.features && response.data.features.length > 0) {
-          return res.json({
-            address: response.data.features[0].place_name
+    const address = await cached(`rev:${lng.toFixed(5)},${lat.toFixed(5)}`, async () => {
+      if (mapboxToken()) {
+        try {
+          const { data } = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json`, {
+            params: { access_token: mapboxToken(), limit: 1 },
+            timeout: 5000
           })
+          if (data.features?.length) return data.features[0].place_name
+        } catch (error) {
+          console.warn('Mapbox reverse geocoding failed:', error.message)
         }
-      } catch (error) {
-        console.warn('Mapbox reverse geocoding failed:', error.message)
       }
-    }
-
-    res.json({
-      address: `Location at ${lat}, ${lng}`,
-      mock: true
+      const { data } = await axios.get('https://photon.komoot.io/reverse', {
+        params: { lon: lng, lat, lang: 'en' },
+        headers: { 'User-Agent': 'Hopr route optimization (student project)' },
+        timeout: 5000
+      })
+      return data.features?.length ? photonLabel(data.features[0].properties) : null
     })
+    if (!address) return res.status(404).json({ message: 'No address found at this location' })
+    res.json({ address })
   } catch (error) {
-    res.status(500).json({ message: 'Reverse geocoding failed' })
+    sendProviderError(res, error)
   }
 })
 
+// Road geometry through ordered points: ?coordinates=lng,lat;lng,lat;...
 router.get('/directions', authenticate, [
-  query('origin').notEmpty().withMessage('Origin is required'),
-  query('destination').notEmpty().withMessage('Destination is required'),
-  query('waypoints').optional(),
+  query('coordinates').isString().matches(/^-?\d+(\.\d+)?,-?\d+(\.\d+)?(;-?\d+(\.\d+)?,-?\d+(\.\d+)?){1,30}$/)
+    .withMessage('coordinates must be "lng,lat;lng,lat" (2-31 points)'),
   validateRequest
 ], async (req, res) => {
   try {
-    const { origin, destination, waypoints } = req.query
-
-    if (MAPBOX_TOKEN) {
-      try {
-        let coords = `${origin};${destination}`
-        if (waypoints) {
-          coords += `;${waypoints}`
-        }
-
-        const response = await axios.get(`https://api.mapbox.com/directions/v5/mapbox/driving/${coords}`, {
-          params: {
-            access_token: MAPBOX_TOKEN,
-            geometries: 'geojson',
-            steps: true,
-            overview: 'full'
-          }
-        })
-
-        if (response.data.routes && response.data.routes.length > 0) {
-          const route = response.data.routes[0]
-          return res.json({
-            distance: route.distance / 1000,
-            duration: route.duration / 60,
-            geometry: route.geometry,
-            steps: route.legs.flatMap(l => l.steps)
-          })
-        }
-      } catch (error) {
-        console.warn('Mapbox directions failed:', error.message)
-      }
-    }
-
-    const mockDistance = 10 + Math.random() * 50
-    const mockDuration = mockDistance * 1.5
+    const points = req.query.coordinates.split(';').map(p => p.split(',').map(Number))
+    const geometry = await buildRouteGeometry(points)
     res.json({
-      distance: Math.round(mockDistance * 10) / 10,
-      duration: Math.round(mockDuration),
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          origin.split(',').map(Number).reverse(),
-          destination.split(',').map(Number).reverse()
-        ]
-      },
-      mock: true
+      geometry: { type: 'LineString', coordinates: geometry.coordinates },
+      source: geometry.source,
+      distanceKm: geometry.distanceKm
     })
   } catch (error) {
     res.status(500).json({ message: 'Directions failed' })
   }
 })
-
-function generateMockCoordinates(address) {
-  const hash = address.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  const lng = -74.006 + (hash % 1000) / 10000 - 0.05
-  const lat = 40.7128 + (hash % 1000) / 10000 - 0.05
-  return [Math.round(lng * 10000) / 10000, Math.round(lat * 10000) / 10000]
-}
 
 export default router
