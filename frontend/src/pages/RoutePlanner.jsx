@@ -238,7 +238,7 @@ export default function RoutePlanner() {
                 <span className="planner-map-stat">{shownRoute.totals.distanceKm}<small>km</small></span>
                 <span className="planner-map-stat">{formatDuration(shownRoute.totals.totalMinutes)}</span>
                 <span className="planner-map-stat">{formatINR(shownRoute.totals.fuel.cost)}<small>fuel</small></span>
-                <span className="text-small text-ink-300">{shownRoute.stops.length} stops, back by {formatClock(shownRoute.finishTime)}</span>
+                <span className="text-small text-ink-300">{shownRoute.stops.length} stops, {shownRoute.returnToDepot ? 'back by' : 'done by'} {formatClock(shownRoute.finishTime)}</span>
               </div>
             </div>
           ) : (
