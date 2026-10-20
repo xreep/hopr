@@ -7,7 +7,7 @@ import { proofUpload, sniffImageType } from '../middleware/upload.js'
 import { authenticate, authorize, isManager } from '../middleware/auth.js'
 import { validateRequest, pick, objectIdParam } from '../middleware/validate.js'
 import {
-  planFromRequest, routeDocsFromPlan, assertAssignableDriver, recalculateRoute
+  planFromRequest, routeDocsFromPlan, assertAssignableDriver, recalculateRoute, applyVehicle
 } from '../services/routePlanning.js'
 import { OptimizationError } from '../services/routeOptimizer.js'
 import { VEHICLE_TYPES, PRIORITIES, MAX_STOPS_PER_BATCH, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
@@ -244,8 +244,7 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
       } else {
         const vehicle = await Vehicle.findById(req.body.vehicle)
         if (!vehicle || vehicle.status !== 'active') return res.status(400).json({ message: 'Vehicle not found or not active' })
-        route.vehicle = vehicle._id
-        route.vehicleType = vehicle.type
+        await applyVehicle(route, vehicle)
       }
     }
     await route.save()

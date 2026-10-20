@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import Vehicle from '../models/Vehicle.js'
 import User from '../models/User.js'
 import TrafficIncident from '../models/TrafficIncident.js'
-import { planBatch, optimizeRoute, OptimizationError } from './routeOptimizer.js'
+import { planBatch, optimizeRoute, retimeSequence, OptimizationError } from './routeOptimizer.js'
 import { buildRouteGeometry } from './geometry.js'
 import { DEFAULT_DEPOT, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
 
@@ -142,6 +142,55 @@ export async function routeDocsFromPlan(plan, { name, createdBy, assignments = [
     })
   }
   return { batchId, docs }
+}
+
+// Puts a route on a vehicle. A route that is still planned keeps its stop order and
+// distance but is re-timed for that vehicle: its speed and time at the door move the
+// ETAs and window checks, its fuel type and mileage move fuel cost and CO2. Routes
+// already on the road keep their planned figures for planned-vs-actual reporting.
+export async function applyVehicle(route, vehicle) {
+  route.vehicle = vehicle._id
+  route.vehicleType = vehicle.type
+  if (route.status !== 'planned' || !route.stops?.length) return route
+
+  const ordered = [...route.stops].sort((a, b) => a.sequence - b.sequence)
+  const result = retimeSequence({
+    depot: route.depot,
+    stops: ordered.map(s => ({ ...pickStop(s.toObject ? s.toObject() : s), _stopId: s._id.toString() })),
+    vehicle: vehicle.toObject ? vehicle.toObject() : vehicle,
+    departureTime: route.plannedStart || new Date(),
+    trafficEnabled: route.trafficEnabled !== false,
+    returnToDepot: Boolean(route.returnToDepot),
+    incidents: incidentsForOptimizer(await TrafficIncident.findActive())
+  })
+  const byId = new Map(ordered.map(s => [s._id.toString(), s]))
+  for (const r of result.stops) {
+    const stop = byId.get(r._stopId)
+    stop.estimatedArrival = r.estimatedArrival
+    stop.plannedArrival = r.estimatedArrival
+    stop.windowStatus = r.windowStatus
+    stop.lateByMin = r.lateByMin
+    stop.legMinutes = r.legMinutes
+  }
+  const { fuel } = result.totals
+  Object.assign(route, {
+    estimatedTime: result.totals.totalMinutes,
+    trafficImpactFactor: result.totals.trafficImpactFactor,
+    trafficLevel: result.totals.trafficLevel,
+    fuelType: fuel.fuelType,
+    fuelUnit: fuel.unit,
+    fuelEstimate: fuel.quantity,
+    fuelPrice: fuel.unitPrice,
+    fuelCost: fuel.cost,
+    co2Kg: fuel.co2Kg,
+    capacityKg: result.totals.capacityKg,
+    violations: result.violations
+  })
+  // Fuel is linear in distance, so the kilometres saved are re-priced for this vehicle
+  if (route.savings?.distanceKm != null) {
+    route.savings.fuelCost = Math.round(route.savings.distanceKm * fuel.costPerKm * 100) / 100
+  }
+  return route
 }
 
 export async function assertAssignableDriver(driverId) {

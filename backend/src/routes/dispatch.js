@@ -6,6 +6,7 @@ import Vehicle from '../models/Vehicle.js'
 import { authenticate, authorize } from '../middleware/auth.js'
 import { validateRequest } from '../middleware/validate.js'
 import { planDispatch, scoreCandidate } from '../services/dispatch.js'
+import { applyVehicle } from '../services/routePlanning.js'
 
 const router = express.Router()
 
@@ -15,7 +16,7 @@ async function availableCandidates() {
   const drivers = await User.find({ role: 'driver', isActive: true }).select('name lastLocation').lean()
   const busy = new Set((await Route.distinct('driver', { status: { $in: ['planned', 'active'] }, driver: { $ne: null } })).map(String))
   const free = drivers.filter(d => !busy.has(String(d._id)))
-  const vehicles = await Vehicle.find({ driver: { $in: free.map(d => d._id) }, status: 'active' }).select('name vehicleId type capacity driver').lean()
+  const vehicles = await Vehicle.find({ driver: { $in: free.map(d => d._id) }, status: 'active' }).select('name vehicleId type capacity fuelType mileage driver').lean()
   const byDriver = new Map(vehicles.map(v => [String(v.driver), v]))
   return free.map(driver => ({ driver, vehicle: byDriver.get(String(driver._id)) || null }))
 }
@@ -84,8 +85,7 @@ router.post('/confirm', authenticate, authorize('admin', 'fleet_manager'), [
 
       route.driver = candidate.driver._id
       route.assignedAt = new Date()
-      route.vehicle = candidate.vehicle._id
-      route.vehicleType = candidate.vehicle.type
+      await applyVehicle(route, candidate.vehicle)
       await route.save()
       seenDrivers.add(String(a.driver))
       seenVehicles.add(String(a.vehicle))

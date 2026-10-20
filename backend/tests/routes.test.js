@@ -105,6 +105,31 @@ describe('route assignment and driver workflow', () => {
     expect(assigned.body.routes.map(r => r._id)).toContain(route._id)
   })
 
+  it('re-times a planned route when its vehicle is changed, but not one on the road', async () => {
+    const manager = await createUser('fleet_manager')
+    const driver = await createUser('driver')
+    const route = await createRoute(manager.auth) // planned for a diesel delivery van, 16 km/L
+    const truck = await Vehicle.create({ vehicleId: 'VEH-T', name: 'Tata 407', type: 'truck', fuelType: 'diesel', mileage: 8, capacity: 2500, licensePlate: 'JH01TT0001' })
+    const before = await Route.findById(route._id)
+
+    const res = await api().patch(`/api/routes/${route._id}`).set(manager.auth).send({ vehicle: truck._id, driver: driver.user._id })
+    expect(res.status).toBe(200)
+    const after = await Route.findById(route._id)
+    expect(after.vehicleType).toBe('truck')
+    expect(after.totalDistance).toBe(before.totalDistance)
+    expect(after.fuelEstimate).toBeCloseTo(after.totalDistance / 8, 1)
+    expect(after.fuelCost).toBeGreaterThan(before.fuelCost)
+    expect(after.estimatedTime).toBeGreaterThan(before.estimatedTime) // slower, longer stops
+
+    // Once the route is on the road its planned figures are history and stay put
+    await api().patch(`/api/routes/${route._id}/start`).set(driver.auth)
+    const van = await Vehicle.create({ vehicleId: 'VEH-V', name: 'Tata Ace', type: 'van', fuelType: 'diesel', mileage: 16, capacity: 750, licensePlate: 'JH01TT0002' })
+    await api().patch(`/api/routes/${route._id}`).set(manager.auth).send({ vehicle: van._id })
+    const active = await Route.findById(route._id)
+    expect(active.vehicleType).toBe('van')
+    expect(active.fuelCost).toBe(after.fuelCost)
+  })
+
   it('forbids drivers from editing route assignments', async () => {
     const manager = await createUser('fleet_manager')
     const driver = await createUser('driver')

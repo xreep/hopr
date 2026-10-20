@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { scoreCandidate, planDispatch, WEIGHTS } from '../src/services/dispatch.js'
+import { estimateFuel } from '../src/services/fuel.js'
 import { api, createUser, createRoute } from './helpers.js'
 import { useTestDb } from './db.js'
 import Route from '../src/models/Route.js'
@@ -104,6 +105,35 @@ describe('auto-dispatch API', () => {
       .send({ assignments: [{ route: a.route._id, driver: a.driver._id, vehicle: a.vehicle._id }] })
     expect(again.body.assigned).toHaveLength(0)
     expect(again.body.skipped[0].reason).toMatch(/no longer/)
+  })
+
+  it('re-times a van-planned route for the motorbike it is dispatched to', async () => {
+    const { manager, pooja } = await fleet()
+    const planned = await createRoute(manager.auth) // planned for a diesel delivery van
+    const bike = await Vehicle.findOne({ vehicleId: 'VEH-B' })
+    const before = await Route.findById(planned._id)
+    expect(before.fuelType).toBe('diesel')
+
+    const confirm = await api().post('/api/dispatch/confirm').set(manager.auth)
+      .send({ assignments: [{ route: planned._id, driver: pooja.user._id, vehicle: bike._id }] })
+    expect(confirm.body.assigned).toHaveLength(1)
+
+    const after = await Route.findById(planned._id)
+    expect(after.vehicleType).toBe('bike')
+    // Same stops, same order, same distance: only the vehicle-dependent figures move
+    const order = r => [...r.stops].sort((x, y) => x.sequence - y.sequence).map(s => s.address)
+    expect(order(after)).toEqual(order(before))
+    expect(after.totalDistance).toBe(before.totalDistance)
+    const fuel = estimateFuel(after.totalDistance, { fuelType: 'petrol', mileage: 60 })
+    expect(after.fuelType).toBe('petrol')
+    expect(after.fuelCost).toBeCloseTo(fuel.cost, 1)
+    expect(after.co2Kg).toBeCloseTo(fuel.co2Kg, 1)
+    expect(after.fuelCost).toBeLessThan(before.fuelCost)
+    expect(after.capacityKg).toBe(25)
+    // A motorbike is quicker between stops and at the door, so the last stop is no later
+    const lastEta = r => Math.max(...r.stops.map(s => s.estimatedArrival.getTime()))
+    expect(lastEta(after)).toBeLessThanOrEqual(lastEta(before))
+    expect(after.estimatedTime).toBeLessThanOrEqual(before.estimatedTime)
   })
 
   it('does not offer drivers who are already busy', async () => {

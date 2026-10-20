@@ -450,6 +450,20 @@ export function evaluateSequence({
   return { cost: sim.cost, distanceKm: sim.distance, totalMinutes: sim.totalMinutes, lateMinutes: sim.late }
 }
 
+// Full result (ETAs, windows, fuel) for a fixed visiting order. Used when a planned
+// route is handed to a different vehicle: same stops and distance, new timings and fuel.
+export function retimeSequence({
+  depot, stops, vehicle, departureTime, trafficEnabled = true, incidents = [], returnToDepot = false,
+  fuelPrices = defaultFuelPrices()
+}, sequence = stops.map((_, i) => i)) {
+  const computeStarted = Date.now()
+  const ctx = buildContext({
+    depot: resolveDepot(depot), stops: normalizeStops(stops), vehicle: resolveVehicle(vehicle),
+    departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices
+  })
+  return buildResult(ctx, sequence, { alternatives: [], computeStarted })
+}
+
 // Assigns stops to vehicles: sort by angle around the depot starting after the
 // widest empty sector, then fill vehicles in turn up to an even share of stops
 // without exceeding each vehicle's capacity or the per-route stop limit.
@@ -564,4 +578,4 @@ export function planBatch({ depot, stops, vehicles, ...options } = {}) {
   }
 }
 
-export default { optimizeRoute, planBatch, partitionStops, resolveVehicle, normalizeStops, evaluateSequence }
+export default { optimizeRoute, planBatch, partitionStops, resolveVehicle, normalizeStops, evaluateSequence, retimeSequence }
