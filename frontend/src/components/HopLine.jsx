@@ -25,6 +25,8 @@ export default function HopLine({ values, width = 240, height = 56, padding = 6,
       <path ref={pathRef} d={d} className="nd-route-path" style={{ animationDelay: `${delayMs}ms` }} />
       {points.map(([x, y], i) => {
         const last = i === points.length - 1
+        // Long series: only the latest stop gets a marker, so the line stays legible
+        if (!last && points.length > 14) return null
         return (
           <circle key={i} cx={x} cy={y} r={last ? 4 : 2.5}
             className="nd-hop-dot"

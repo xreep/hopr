@@ -141,7 +141,7 @@ export default function AdminPanel() {
                     <td className="font-medium">{u.name}{isSelf(u) && <span className="text-xs text-muted"> (you)</span>}</td>
                     <td>{u.email}</td>
                     <td><span className="badge badge-neutral badge-plain capitalize">{roleLabel(u.role)}</span></td>
-                    <td>{u.phone || '-'}</td>
+                    <td className="whitespace-nowrap nd-tabular">{u.phone || '—'}</td>
                     <td><StatusBadge status={u.isActive ? 'enabled' : 'inactive'} /></td>
                     <td className="text-small text-ink-300 whitespace-nowrap">{u.lastLogin ? formatDate(u.lastLogin) : 'Never'}</td>
                     <td className="text-right whitespace-nowrap">

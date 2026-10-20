@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
+import Icon from './icons'
 
 // One click: demo accounts + Ranchi fleet + a fresh 5-stop route assigned to the demo driver
 export default function DemoSeedButton({ className = 'btn btn-outline' }) {
@@ -21,7 +22,7 @@ export default function DemoSeedButton({ className = 'btn btn-outline' }) {
   }
   return (
     <button type="button" className={className} onClick={run} disabled={busy}>
-      {busy ? 'Preparing demo…' : '✨ Load Ranchi demo'}
+      {busy ? <><span className="spinner spinner-sm" /> Preparing demo</> : <><Icon name="sparkle" />Load Ranchi demo</>}
     </button>
   )
 }

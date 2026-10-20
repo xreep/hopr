@@ -116,6 +116,17 @@ describe('analytics + dashboard API', () => {
 
     expect((await api().get('/api/analytics').set(driver.auth)).status).toBe(403)
   })
+
+  it('counts a route planned for tomorrow but driven today', async () => {
+    const manager = await createUser('fleet_manager')
+    const driver = await createUser('driver')
+    const route = await createRoute(manager.auth, { assignments: [{ driver: driver.user._id }] })
+    await Route.updateOne({ _id: route._id }, { plannedStart: new Date(Date.now() + 36 * 3600000) })
+    await api().patch(`/api/routes/${route._id}/start`).set(driver.auth)
+    await completeStop(driver.auth, route._id, route.stops[0]._id)
+    const res = await api().get('/api/analytics?range=7d').set(manager.auth)
+    expect(res.body.kpis.totalDeliveries).toBe(1)
+  })
 })
 
 describe('analytics window', () => {

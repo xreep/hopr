@@ -106,7 +106,7 @@ export default function Drivers() {
                         <span className="avatar avatar-sm" aria-hidden="true">{initials(d.name)}</span>
                         <div>
                           <p className="font-medium">{d.name}</p>
-                          <p className="text-xs text-muted">{d.phone ? <a href={`tel:${d.phone}`}>{d.phone}</a> : d.email}</p>
+                          <p className="text-micro text-ink-400 whitespace-nowrap">{d.phone ? <a href={`tel:${d.phone}`} className="no-underline">{d.phone}</a> : d.email}</p>
                         </div>
                       </div>
                     </td>

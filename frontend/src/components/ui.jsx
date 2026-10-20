@@ -120,7 +120,7 @@ export function StatCard({ label, value, suffix = '', hint, trend, trendGoodWhen
         {hasValue && suffix ? <span className="stats-suffix">{suffix}</span> : null}
       </p>
       {hint && <p className="stats-hint">{hint}</p>}
-      {spark?.length > 1 && (
+      {spark?.length > 1 && spark.some(v => v > 0) && (
         <div className="mt-3">
           <HopLine values={spark} height={36} label={sparkLabel || `${label} trend`} />
         </div>

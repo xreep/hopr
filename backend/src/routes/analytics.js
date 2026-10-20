@@ -10,14 +10,22 @@ const router = express.Router()
 
 const rangeQuery = [query('range').optional().isIn(Object.keys(RANGES)), validateRequest]
 
-// Routes whose service day (planned start, else creation) falls in [from, to)
-function routesBetween(from, to) {
-  return Route.find({
+// Routes that were planned, started or completed in [from, to). A route planned for
+// tomorrow but driven today counts today.
+export function routesBetweenFilter(from, to) {
+  const inRange = { $gte: from, $lt: to }
+  return {
     $or: [
-      { plannedStart: { $gte: from, $lt: to } },
-      { plannedStart: null, createdAt: { $gte: from, $lt: to } }
+      { plannedStart: inRange },
+      { startedAt: inRange },
+      { completedAt: inRange },
+      { plannedStart: null, createdAt: inRange }
     ]
-  })
+  }
+}
+
+function routesBetween(from, to) {
+  return Route.find(routesBetweenFilter(from, to))
     .select('-geometry -alternatives -stops.trackingToken -stops.issues')
     .populate('driver', 'name')
     .populate('vehicle', 'vehicleId name type')
