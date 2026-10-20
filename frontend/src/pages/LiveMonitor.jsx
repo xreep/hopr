@@ -6,10 +6,11 @@ import usePolling from '../hooks/usePolling'
 import MapView from '../components/MapView'
 import AddressAutocomplete from '../components/AddressAutocomplete'
 import { StatusBadge, EmptyState } from '../components/ui'
-import { ROUTE_COLORS } from '../config'
+import { ROUTE_COLORS, VOLT } from '../config'
 import { initials } from '../utils/format'
 import { formatClock, relativeTime } from '../utils/time'
 import { stopVariant, isStale } from '../utils/routeView'
+import Icon from '../components/icons'
 
 const blankIncident = { type: 'congestion', label: '', coordinates: null, place: '', radiusKm: 0.6, severity: 1.8, durationMinutes: 120 }
 
@@ -41,11 +42,17 @@ export default function LiveMonitor() {
   const mapData = useMemo(() => {
     const shown = focus ? routes.filter(r => r._id === focus) : routes
     return {
-      lines: shown.map(r => ({ id: r._id, coordinates: r.geometry?.coordinates || [], color: ROUTE_COLORS[routes.indexOf(r) % ROUTE_COLORS.length], width: 4 })),
-      points: shown.flatMap(r => {
-        const current = r.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress')
-        return r.stops.map((s, i) => ({ id: `${r._id}-${s._id}`, coordinates: s.coordinates, label: s.sequence, variant: stopVariant(s, i === current), title: `${r.name}: ${s.sequence}. ${s.address}` }))
-      }),
+      // The focused route (or a lone route) is volt; others use muted hues
+      lines: shown.map(r => ({ id: r._id, coordinates: r.geometry?.coordinates || [], color: focus === r._id || shown.length === 1 ? VOLT : ROUTE_COLORS[routes.indexOf(r) % ROUTE_COLORS.length], width: focus === r._id ? 4.5 : 3.5 })),
+      points: [
+        // One marker per distinct depot
+        ...[...new Map(shown.filter(r => r.depot?.coordinates?.length === 2).map(r => [r.depot.coordinates.join(), r.depot])).values()]
+          .map(d => ({ id: `depot-${d.coordinates.join()}`, coordinates: d.coordinates, label: 'H', variant: 'depot', title: d.name })),
+        ...shown.flatMap(r => {
+          const current = r.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress')
+          return r.stops.map((s, i) => ({ id: `${r._id}-${s._id}`, coordinates: s.coordinates, label: s.sequence, variant: stopVariant(s, i === current), title: `${r.name}: ${s.sequence}. ${s.address}` }))
+        })
+      ],
       drivers: shown.filter(r => r.driverLocation?.coordinates?.length === 2).map(r => ({
         id: r._id,
         coordinates: r.driverLocation.coordinates,
@@ -115,8 +122,8 @@ export default function LiveMonitor() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Live Monitor</h1>
-          <p className="page-subtitle">Active deliveries, driver positions and traffic incidents (refreshes every 10 s)</p>
+          <h1 className="page-title">Live monitor</h1>
+          <p className="page-subtitle">Every route on the road, where each driver is, and the traffic you&apos;ve reported. Updates every 10 seconds.</p>
         </div>
       </div>
 
@@ -142,13 +149,13 @@ export default function LiveMonitor() {
                     return (
                       <li key={r._id} className={`live-item ${focus === r._id ? 'selected' : ''}`}>
                         <button type="button" className="w-full text-left" onClick={() => setFocus(r._id)}>
-                          <span className="route-swatch" style={{ background: ROUTE_COLORS[idx % ROUTE_COLORS.length] }} aria-hidden="true" />
-                          <span className="font-medium">{r.driver?.name || 'Unassigned'}</span> <span className="text-sm text-muted">· {r.name}</span>
-                          <span className="block text-xs text-secondary">
-                            {done}/{r.stops.length} stops{next ? ` · next ETA ${formatClock(next.estimatedArrival)}` : ''} · GPS {relativeTime(r.driverLocation?.updatedAt)}
+                          <span className="route-swatch" style={{ background: focus === r._id || routes.length === 1 ? VOLT : ROUTE_COLORS[idx % ROUTE_COLORS.length] }} aria-hidden="true" />
+                          <span className="font-medium">{r.driver?.name || 'No driver'}</span> <span className="text-small text-ink-400">on {r.name}</span>
+                          <span className="block text-micro text-ink-300 mt-0.5">
+                            {done} of {r.stops.length} stops done{next ? `, next due ${formatClock(next.estimatedArrival)}` : ''}. GPS {relativeTime(r.driverLocation?.updatedAt)}
                           </span>
                         </button>
-                        <Link to={`/routes/${r._id}`} className="text-xs">Details →</Link>
+                        <Link to={`/routes/${r._id}`} className="btn btn-ghost btn-sm -ml-2 mt-1">Route details<Icon name="arrowRight" /></Link>
                       </li>
                     )
                   })}
@@ -174,7 +181,7 @@ export default function LiveMonitor() {
           <div className="card">
             <div className="card-header"><h3 className="font-semibold">Traffic incidents</h3></div>
             <div className="card-body">
-              {incidents.length === 0 ? <p className="text-sm text-muted mb-3">No active incidents.</p> : (
+              {incidents.length === 0 ? <p className="text-small text-ink-400 mb-4">No congestion or closures reported right now.</p> : (
                 <ul className="space-y-2 mb-4">
                   {incidents.map(i => (
                     <li key={i._id} className="flex-between gap-2 text-sm">

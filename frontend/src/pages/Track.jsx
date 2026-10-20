@@ -6,6 +6,7 @@ import { planMove, positionAt, remainingFrom } from '../utils/tracking'
 import { formatClock } from '../utils/time'
 import { speak } from '../utils/speak'
 import MuteToggle from '../components/MuteToggle'
+import { HopMark } from '../components/icons'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 const POLL_MS = 5000
@@ -111,7 +112,7 @@ export default function Track() {
   const mapData = useMemo(() => {
     if (!data) return null
     return {
-      lines: display?.path?.length > 1 ? [{ id: 'remaining', coordinates: display.path, color: '#2563eb', width: 5 }] : [],
+      lines: display?.path?.length > 1 ? [{ id: 'remaining', coordinates: display.path, width: 4.5 }] : [],
       points: [{ id: 'home', coordinates: data.delivery.coordinates, label: '★', variant: 'current', title: 'Delivery address' }],
       driver: display?.position ? { coordinates: display.position, initials: data.driver?.initials, stale } : null
     }
@@ -135,29 +136,32 @@ export default function Track() {
       <TrackHeader deliveryId={delivery.deliveryId} />
       <div className="track-map">
         <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver}
-          fitKey={`${status}-${Boolean(data.location)}`} height="100%" />
-        {stale && <div className="track-stale" role="status">Updating location…</div>}
+          fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />
+        {stale && <div className="track-stale" role="status"><span className="spinner spinner-sm" /> Updating location…</div>}
       </div>
 
       <section className="track-sheet" aria-live="polite">
         <p className="text-sm text-muted">Hi {delivery.customerFirstName}</p>
         <h1 className="track-headline">{HEADLINES[status](driverName)}</h1>
         {status === 'on_the_way' && eta && (
-          <p className="track-eta"><strong>{eta.minutes} min</strong> away{eta.stopsBefore ? ` · ${eta.stopsBefore} stop${eta.stopsBefore > 1 ? 's' : ''} before yours` : ' · you\'re next'}</p>
+          <p className="track-eta">
+            <span className="track-eta-value">{eta.minutes}<small>min</small></span>
+            <span>away. {eta.stopsBefore ? `${eta.stopsBefore} stop${eta.stopsBefore > 1 ? 's' : ''} before yours.` : 'You\'re next.'}</span>
+          </p>
         )}
         {status === 'arriving' && <p className="track-eta"><strong>Less than {data.arrivingRadiusM} m away</strong>. Please be ready.</p>}
         {status === 'packed' && <p className="track-eta">Expected around <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></p>}
         {status === 'delivered' && <p className="track-eta">Delivered at <strong>{formatClock(delivery.completedAt)}</strong>. Thank you!</p>}
         {status === 'failed' && <p className="track-eta">{delivery.failureReason}. We&apos;ll contact you to reschedule.</p>}
 
-        <ol className="track-timeline">
+        <ol className="track-timeline" aria-label="Delivery progress">
           {data.timeline.map((step, i) => {
-            const current = !step.done ? false : !data.timeline[i + 1]?.done
+            const current = step.done && !data.timeline[i + 1]?.done
             return (
-              <li key={step.key} className={`${step.done ? 'done' : ''} ${current ? 'current' : ''}`}>
+              <li key={step.key} className={`${step.done ? 'done' : ''} ${current ? 'current' : ''}`} aria-current={current ? 'step' : undefined}>
                 <span className="track-step-dot" aria-hidden="true" />
-                <span>{step.label}</span>
-                {step.at && <span className="text-xs text-muted">{formatClock(step.at)}</span>}
+                <span className="track-step-label">{step.label}</span>
+                {step.at && <span className="text-micro text-ink-400">{formatClock(step.at)}</span>}
               </li>
             )
           })}
@@ -165,7 +169,7 @@ export default function Track() {
 
         <dl className="detail-list text-sm mt-4">
           <dt>Delivering to</dt><dd>{delivery.address}</dd>
-          {(delivery.windowStart || delivery.windowEnd) && <><dt>Your slot</dt><dd>{delivery.windowStart || '…'}–{delivery.windowEnd || '…'}</dd></>}
+          {(delivery.windowStart || delivery.windowEnd) && <><dt>Your slot</dt><dd>{delivery.windowStart || '…'} to {delivery.windowEnd || '…'}</dd></>}
           {data.vehicle && <><dt>Vehicle</dt><dd>{data.vehicle}</dd></>}
         </dl>
       </section>
@@ -176,14 +180,9 @@ export default function Track() {
 function TrackHeader({ deliveryId }) {
   return (
     <header className="track-header">
-      <span className="brand">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-        </svg>
-        Hopr
-      </span>
+      <span className="brand"><HopMark size={26} />Hopr</span>
       <span className="flex items-center gap-2">
-        {deliveryId && <span className="text-xs text-muted font-mono">{deliveryId}</span>}
+        {deliveryId && <span className="text-micro text-ink-400">Order {deliveryId}</span>}
         <MuteToggle />
       </span>
     </header>

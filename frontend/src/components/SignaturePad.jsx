@@ -19,9 +19,20 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
     ctx.lineWidth = 2.4
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.strokeStyle = '#0f172a'
-    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = '#F4F7FB'
+    ctx.fillStyle = '#0B1220'
     ctx.fillRect(0, 0, width, height)
+    // Signing line
+    ctx.save()
+    ctx.strokeStyle = 'rgba(169, 180, 200, 0.35)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 4])
+    ctx.beginPath()
+    ctx.moveTo(16, height - 34)
+    ctx.lineTo(width - 16, height - 34)
+    ctx.stroke()
+    ctx.restore()
+    ctx.lineWidth = 2.4
   }, [height])
 
   useEffect(() => { setup() }, [setup])
@@ -39,7 +50,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
     const ctx = canvasRef.current.getContext('2d')
     ctx.beginPath()
     ctx.arc(last.current[0], last.current[1], 1.2, 0, Math.PI * 2)
-    ctx.fillStyle = '#0f172a'
+    ctx.fillStyle = '#F4F7FB'
     ctx.fill()
   }
   const move = e => {
@@ -89,7 +100,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
         onPointerCancel={up}
         onPointerLeave={up}
       />
-      {empty && <p className="text-xs text-muted mt-1">Ask the customer to sign with a finger</p>}
+      {empty && <p className="text-micro text-ink-400 mt-1">Ask the customer to sign above the line</p>}
     </div>
   )
 })

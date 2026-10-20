@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext'
 import useDriverLocation from '../hooks/useDriverLocation'
 import { relativeTime } from '../utils/time'
 import { speak } from '../utils/speak'
+import Icon from '../components/icons'
 
 const FAILURE_REASONS = ['Customer not available', 'Address not found', 'Customer refused delivery', 'Access restricted / gate locked', 'Package damaged']
 
@@ -84,7 +85,7 @@ export default function DriverPanel() {
   const mapData = useMemo(() => {
     if (!route) return null
     return {
-      lines: [{ id: 'r', coordinates: route.geometry?.coordinates || [], color: '#2563eb', width: 5 }],
+      lines: [{ id: 'r', coordinates: route.geometry?.coordinates || [], width: 4.5 }],
       points: [
         ...(route.depot?.coordinates ? [{ id: 'depot', coordinates: route.depot.coordinates, label: 'H', variant: 'depot', title: route.depot.name }] : []),
         ...route.stops.map((s, i) => ({ id: s._id, coordinates: s.coordinates, label: s.sequence, variant: stopVariant(s, i === currentIndex), title: s.address }))
@@ -104,7 +105,7 @@ export default function DriverPanel() {
       <div className="page-header">
         <div>
           <h1 className="page-title">My deliveries</h1>
-          <p className="page-subtitle">Assigned routes, navigation and delivery status</p>
+          <p className="page-subtitle">Your routes for today, turn-by-turn navigation and proof of delivery.</p>
         </div>
       </div>
 
@@ -121,7 +122,7 @@ export default function DriverPanel() {
                   <li key={r._id}>
                     <button type="button" className={`route-select ${r._id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(r._id)}>
                       <span className="flex-between gap-2"><span className="font-medium truncate">{r.name}</span><StatusBadge status={r.status} /></span>
-                      <span className="text-xs text-muted">{done}/{r.stops.length} stops · {formatKm(r.totalDistance)} · {formatDuration(r.estimatedTime)}</span>
+                      <span className="text-micro text-ink-400">{done} of {r.stops.length} stops done, {formatKm(r.totalDistance)}, about {formatDuration(r.estimatedTime)}</span>
                     </button>
                   </li>
                 )
@@ -140,11 +141,11 @@ export default function DriverPanel() {
                 <div className="card-body flex-between flex-wrap gap-3">
                   <div>
                     <p className="font-semibold">{route.name}</p>
-                    <p className="text-xs text-muted">{route.routeId}{route.vehicle ? ` · ${route.vehicle.name} (${route.vehicle.licensePlate})` : ''}</p>
+                    <p className="text-micro text-ink-400">{route.routeId}{route.vehicle ? `, ${route.vehicle.name} (${route.vehicle.licensePlate})` : ''}</p>
                   </div>
                   <div className="flex gap-2">
                     <Link to={`/routes/${route._id}`} className="btn btn-ghost btn-sm">Details</Link>
-                    {route.status === 'planned' && <button type="button" className="btn btn-primary" onClick={startRoute} disabled={busy}>Start route</button>}
+                    {route.status === 'planned' && <button type="button" className="btn btn-primary" onClick={startRoute} disabled={busy}><Icon name="play" />Start route</button>}
                   </div>
                 </div>
               </div>
@@ -162,21 +163,21 @@ export default function DriverPanel() {
                       <p className="text-sm mt-1">
                         ETA <strong>{formatClock(currentStop.estimatedArrival)}</strong>
                         {minutesUntil(currentStop.estimatedArrival) !== null && ` (${minutesUntil(currentStop.estimatedArrival) >= 0 ? 'in ' : ''}${Math.abs(minutesUntil(currentStop.estimatedArrival))} min${minutesUntil(currentStop.estimatedArrival) < 0 ? ' ago' : ''})`}
-                        {(currentStop.windowStart || currentStop.windowEnd) && <> · window {currentStop.windowStart || '…'}–{currentStop.windowEnd || '…'}</>}
+                        {(currentStop.windowStart || currentStop.windowEnd) && <>. Window {currentStop.windowStart || '…'} to {currentStop.windowEnd || '…'}</>}
                       </p>
                       {currentStop.notes && <p className="alert alert-info mt-2 text-sm">{currentStop.notes}</p>}
-                      {currentStop.packageWeightKg > 0 && <p className="text-xs text-muted mt-1">{currentStop.deliveryId} · {currentStop.packageWeightKg} kg · {currentStop.packageSize}</p>}
+                      {currentStop.packageWeightKg > 0 && <p className="text-micro text-ink-400 mt-1">{currentStop.deliveryId}, {currentStop.packageWeightKg} kg {currentStop.packageSize} parcel</p>}
                     </div>
                     <div className="driver-actions">
                       <a className="btn btn-secondary" target="_blank" rel="noopener noreferrer"
                         href={`https://www.google.com/maps/dir/?api=1&destination=${currentStop.coordinates[1]},${currentStop.coordinates[0]}&travelmode=driving`}>
-                        Navigate
+                        <Icon name="navigation" />Navigate
                       </a>
-                      {currentStop.customerPhone && <a className="btn btn-outline" href={`tel:${currentStop.customerPhone}`}>Call</a>}
+                      {currentStop.customerPhone && <a className="btn btn-outline" href={`tel:${currentStop.customerPhone}`}><Icon name="phone" />Call</a>}
                       {currentStop.trackingToken && <ShareTrackingButton token={currentStop.trackingToken} name={currentStop.customerName} />}
-                      <button type="button" className="btn btn-success" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}>Mark delivered</button>
-                      <button type="button" className="btn btn-danger" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}>Failed</button>
-                      <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDialog({ kind: 'issue', stop: currentStop })}>Report issue / delay</button>
+                      <button type="button" className="btn btn-success" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}><Icon name="check" />Mark delivered</button>
+                      <button type="button" className="btn btn-danger" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}><Icon name="x" />Couldn&apos;t deliver</button>
+                      <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDialog({ kind: 'issue', stop: currentStop })}><Icon name="flag" />Report a problem</button>
                     </div>
                   </div>
                 </div>
@@ -236,9 +237,9 @@ function FailDialog({ stop, onClose, onSubmit }) {
   const [other, setOther] = useState('')
   const final = reason === 'Other' ? other.trim() : reason
   return (
-    <Modal title={`Delivery failed: ${stop.customerName || stop.address.split(',')[0]}`} onClose={onClose}>
+    <Modal title={`Couldn’t deliver to ${stop.customerName || stop.address.split(',')[0]}`} onClose={onClose}>
       <fieldset className="space-y-2">
-        <legend className="form-label">Reason</legend>
+        <legend className="form-label">What happened?</legend>
         {[...FAILURE_REASONS, 'Other'].map(r => (
           <label key={r} className="toggle-row">
             <input type="radio" name="reason" value={r} checked={reason === r} onChange={() => setReason(r)} /> <span>{r}</span>
@@ -350,5 +351,5 @@ function ShareTrackingButton({ token, name }) {
       }
     } catch { /* share sheet dismissed */ }
   }
-  return <button type="button" className="btn btn-outline" onClick={share}>Share tracking</button>
+  return <button type="button" className="btn btn-outline" onClick={share}><Icon name="share" />Share tracking</button>
 }

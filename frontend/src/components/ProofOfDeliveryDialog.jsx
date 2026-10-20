@@ -4,6 +4,7 @@ import { Modal } from './ui'
 import SignaturePad from './SignaturePad'
 import api, { errorMessage } from '../utils/api'
 import { compressImage } from '../utils/image'
+import Icon from './icons'
 
 // Completing a stop: delivery photo (camera or file), customer signature, optional note
 export default function ProofOfDeliveryDialog({ route, stop, onClose, onCompleted }) {
@@ -50,12 +51,12 @@ export default function ProofOfDeliveryDialog({ route, stop, onClose, onComplete
   }
 
   return (
-    <Modal title={`Proof of delivery: ${stop.customerName || stop.address.split(',')[0]}`} onClose={busy ? () => {} : onClose} size="lg"
+    <Modal title={`Deliver to ${stop.customerName || stop.address.split(',')[0]}`} onClose={busy ? () => {} : onClose} size="lg"
       footer={(
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="button" className="btn btn-success" onClick={submit} disabled={busy || (!photo && !signed)}>
-            {busy ? <><span className="spinner" /> Uploading…</> : 'Complete delivery'}
+            {busy ? <><span className="spinner" /> Uploading</> : <><Icon name="check" />Complete delivery</>}
           </button>
         </>
       )}>
@@ -69,7 +70,7 @@ export default function ProofOfDeliveryDialog({ route, stop, onClose, onComplete
             </div>
           ) : (
             <button type="button" className="pod-photo-empty" onClick={() => fileRef.current?.click()}>
-              <span aria-hidden="true">📷</span>
+              <Icon name="camera" />
               <span>Take or upload a photo</span>
             </button>
           )}
@@ -82,7 +83,7 @@ export default function ProofOfDeliveryDialog({ route, stop, onClose, onComplete
         <textarea id="pod-note" className="form-input" rows={2} maxLength={500} value={note} onChange={e => setNote(e.target.value)}
           placeholder="e.g. Handed to the security guard at gate 2" />
       </div>
-      <p className="text-xs text-muted">At least a photo or a signature is required. Images are stored privately with this delivery.</p>
+      <p className="text-micro text-ink-400">Add a photo, a signature, or both. They&apos;re stored privately with this delivery.</p>
     </Modal>
   )
 }

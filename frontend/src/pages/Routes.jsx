@@ -87,8 +87,8 @@ export default function RoutesPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Routes & Dispatch</h1>
-          <p className="page-subtitle">Delivery batches, driver assignment and progress</p>
+          <h1 className="page-title">Routes and dispatch</h1>
+          <p className="page-subtitle">Every batch you&apos;ve planned, who&apos;s driving it, and how far along it is.</p>
         </div>
         <div className="flex gap-2 flex-wrap" id="dispatch-actions">
           <DemoSeedButton />
@@ -118,10 +118,10 @@ export default function RoutesPage() {
       ) : (
         <div className="card">
           <div className="table-container">
-            <table className="table">
+            <table className="table min-w-[920px]">
               <thead>
                 <tr>
-                  <th>Route</th><th>Status</th><th>Stops</th><th>Distance · time</th><th>Fuel</th><th>Planned start</th><th>Driver</th><th className="text-right">Actions</th>
+                  <th>Route</th><th>Status</th><th>Stops</th><th>Distance and time</th><th>Fuel</th><th>Planned start</th><th>Driver</th><th className="text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -131,16 +131,16 @@ export default function RoutesPage() {
                   return (
                     <tr key={r._id}>
                       <td>
-                        <Link to={`/routes/${r._id}`} className="font-medium">{r.name}</Link>
-                        <div className="text-xs text-muted font-mono">{r.routeId} · {r.batchId}</div>
-                        {r.violations?.length > 0 && <div className="text-xs text-warning">{r.violations.length} window(s) at risk</div>}
-                        {r.needsRecalculation && <div className="text-xs text-warning">Traffic changed: recalculate</div>}
+                        <Link to={`/routes/${r._id}`} className="font-medium no-underline hover:underline">{r.name}</Link>
+                        <div className="text-micro text-ink-400 whitespace-nowrap">{r.routeId}, {r.batchId}</div>
+                        {r.violations?.length > 0 && <div className="text-micro text-signal-amber">{r.violations.length} window{r.violations.length > 1 ? 's' : ''} at risk</div>}
+                        {r.needsRecalculation && <div className="text-micro text-signal-amber">Traffic changed, recalculate</div>}
                       </td>
                       <td><StatusBadge status={r.status} /></td>
-                      <td>{done}/{r.stops.length}</td>
-                      <td>{formatKm(r.totalDistance)}<div className="text-xs text-muted">{formatDuration(r.estimatedTime)}</div></td>
-                      <td>{formatINR(r.fuelCost)}</td>
-                      <td className="text-sm">{formatDateTime(r.plannedStart)}</td>
+                      <td className="nd-tabular">{done}/{r.stops.length}</td>
+                      <td className="nd-tabular whitespace-nowrap">{formatKm(r.totalDistance)}<div className="text-micro text-ink-400">{formatDuration(r.estimatedTime)}</div></td>
+                      <td className="nd-tabular whitespace-nowrap">{formatINR(r.fuelCost)}</td>
+                      <td className="text-small whitespace-nowrap">{formatDateTime(r.plannedStart)}</td>
                       <td>
                         {editable ? (
                           <select className="form-input form-select form-input-sm" aria-label={`Driver for ${r.name}`} value={r.driver?._id || ''} disabled={busy === r._id}
@@ -148,13 +148,13 @@ export default function RoutesPage() {
                             <option value="">Unassigned</option>
                             {drivers.map(d => <option key={d._id} value={d._id}>{d.name}{d.onRoute ? ' (on route)' : ''}</option>)}
                           </select>
-                        ) : (r.driver?.name || <span className="text-muted">-</span>)}
-                        {r.vehicle && <div className="text-xs text-muted">{r.vehicle.name}</div>}
+                        ) : (<span className="whitespace-nowrap">{r.driver?.name || <span className="text-ink-400">—</span>}</span>)}
+                        {r.vehicle && <div className="text-micro text-ink-400 whitespace-nowrap">{r.vehicle.name}</div>}
                       </td>
                       <td className="text-right whitespace-nowrap">
                         <Link to={`/routes/${r._id}`} className="btn btn-ghost btn-sm">Open</Link>
-                        {editable && <button type="button" className="btn btn-ghost btn-sm text-warning" disabled={busy === r._id} onClick={() => patchRoute(r, { status: 'cancelled' }, 'Route cancelled')}>Cancel</button>}
-                        {r.status !== 'active' && <button type="button" className="btn btn-ghost btn-sm text-error" disabled={busy === r._id} onClick={() => remove(r)}>Delete</button>}
+                        {editable && <button type="button" className="btn btn-ghost btn-sm" disabled={busy === r._id} onClick={() => patchRoute(r, { status: 'cancelled' }, 'Route cancelled')}>Cancel route</button>}
+                        {r.status !== 'active' && <button type="button" className="btn btn-ghost btn-sm btn-icon hover:text-signal-coral" disabled={busy === r._id} onClick={() => remove(r)} aria-label={`Delete ${r.name}`} title="Delete"><Icon name="trash" /></button>}
                       </td>
                     </tr>
                   )

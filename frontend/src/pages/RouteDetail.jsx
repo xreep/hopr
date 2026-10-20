@@ -7,6 +7,7 @@ import usePolling from '../hooks/usePolling'
 import MapView from '../components/MapView'
 import { StatusBadge, PageLoader, EmptyState } from '../components/ui'
 import AuthImage from '../components/AuthImage'
+import Icon from '../components/icons'
 import { formatDuration, formatINR, formatKm, initials } from '../utils/format'
 import { formatClock, formatDateTime, relativeTime } from '../utils/time'
 import { vehicleTypeLabel } from '../config'
@@ -62,7 +63,7 @@ export default function RouteDetail() {
     if (!route) return null
     const current = route.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress')
     return {
-      lines: [{ id: 'route', coordinates: route.geometry?.coordinates || [], color: '#2563eb', width: 5 }],
+      lines: [{ id: 'route', coordinates: route.geometry?.coordinates || [], width: 4.5 }],
       points: [
         ...(route.depot?.coordinates ? [{ id: 'depot', coordinates: route.depot.coordinates, label: 'H', variant: 'depot', title: route.depot.name }] : []),
         ...route.stops.map((s, i) => ({ id: s._id, coordinates: s.coordinates, label: s.sequence, variant: stopVariant(s, i === current), title: `${s.sequence}. ${s.customerName || ''} ${s.address}` }))
@@ -84,14 +85,14 @@ export default function RouteDetail() {
     <div>
       <div className="page-header">
         <div>
-          <p className="text-sm text-muted"><Link to={isManager ? '/routes' : '/driver-panel'}>← {isManager ? 'Routes' : 'My deliveries'}</Link></p>
-          <h1 className="page-title flex items-center gap-3">{route.name} <StatusBadge status={route.status} /></h1>
-          <p className="page-subtitle font-mono">{route.routeId} · {route.batchId} · planned {formatDateTime(route.plannedStart)}</p>
+          <Link to={isManager ? '/routes' : '/driver-panel'} className="btn btn-ghost btn-sm -ml-2 mb-1"><Icon name="arrowRight" className="rotate-180" />{isManager ? 'All routes' : 'My deliveries'}</Link>
+          <h1 className="page-title flex flex-wrap items-center gap-3">{route.name} <StatusBadge status={route.status} /></h1>
+          <p className="page-subtitle">{route.routeId} in batch {route.batchId}, planned for {formatDateTime(route.plannedStart)}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {canRecalculate && <button type="button" className="btn btn-outline" onClick={recalculate} disabled={busy}>↻ Recalculate remaining</button>}
+          {canRecalculate && <button type="button" className="btn btn-secondary" onClick={recalculate} disabled={busy}><Icon name="refresh" />Recalculate remaining stops</button>}
           {isOwnerDriver && route.status === 'planned' && (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act(() => api.patch(`/routes/${id}/start`), 'Route started')}>Start route</button>
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act(() => api.patch(`/routes/${id}/start`), 'Route started')}><Icon name="play" />Start route</button>
           )}
         </div>
       </div>
@@ -125,8 +126,8 @@ export default function RouteDetail() {
               <tbody>
                 <tr><td>Distance</td><td>{formatKm(route.totalDistance)}{route.roadDistanceKm ? <div className="text-xs text-muted">road {formatKm(route.roadDistanceKm)}</div> : null}</td><td>{route.actualDistance > 0 ? formatKm(route.actualDistance) : '-'}</td></tr>
                 <tr><td>Duration</td><td>{formatDuration(route.estimatedTime)}</td><td>{route.actualTime ? formatDuration(route.actualTime) : route.startedAt ? `running ${formatDuration((Date.now() - new Date(route.startedAt)) / 60000)}` : '-'}</td></tr>
-                <tr><td>Fuel</td><td>{route.fuelEstimate} {route.fuelUnit} · {formatINR(route.fuelCost)}</td><td>-</td></tr>
-                <tr><td>Deliveries</td><td>{route.stops.length}</td><td>{route.stops.filter(s => s.status === 'completed').length} done · {route.stops.filter(s => s.status === 'failed').length} failed</td></tr>
+                <tr><td>Fuel</td><td>{route.fuelEstimate} {route.fuelUnit}, {formatINR(route.fuelCost)}</td><td>—</td></tr>
+                <tr><td>Deliveries</td><td>{route.stops.length}</td><td>{route.stops.filter(s => s.status === 'completed').length} delivered, {route.stops.filter(s => s.status === 'failed').length} failed</td></tr>
               </tbody>
             </table>
             <dl className="detail-list mt-4">
@@ -144,9 +145,11 @@ export default function RouteDetail() {
               <dt>Traffic</dt><dd>×{route.trafficImpactFactor} ({route.trafficLevel}){route.trafficEnabled ? '' : ' · traffic-aware off'}</dd>
               <dt>Load</dt><dd>{route.loadKg} kg{route.capacityKg ? ` of ${route.capacityKg} kg` : ''}</dd>
               <dt>CO₂</dt><dd>{route.co2Kg} kg</dd>
-              {route.savings && (route.savings.distanceKm >= 0
-                ? <><dt>Saved vs entered order</dt><dd>{formatKm(route.savings.distanceKm)} · {formatINR(route.savings.fuelCost)} · {route.savings.minutes} min</dd></>
-                : <><dt>vs entered order</dt><dd>{formatKm(-route.savings.distanceKm)} longer, a trade-off to meet delivery windows and priorities</dd></>)}
+              {route.savings && (route.savings.distanceKm > 0.05
+                ? <><dt>Saved by optimizing</dt><dd>{formatKm(route.savings.distanceKm)}, {formatINR(route.savings.fuelCost)} and {route.savings.minutes} min against the order entered</dd></>
+                : route.savings.distanceKm < -0.05
+                  ? <><dt>Against the order entered</dt><dd>{formatKm(-route.savings.distanceKm)} longer, to meet delivery windows and priorities</dd></>
+                  : <><dt>Against the order entered</dt><dd>The stops were already in the best order</dd></>)}
               {route.driverLocation?.updatedAt && <><dt>Last GPS</dt><dd>{relativeTime(route.driverLocation.updatedAt)}</dd></>}
             </dl>
           </div>
@@ -185,7 +188,7 @@ function StopRow({ stop }) {
       <span className="timeline-dot">{stop.sequence}</span>
       <div className="min-w-0 flex-1">
         <div className="flex-between gap-2 flex-wrap">
-          <p className="font-medium">{stop.customerName || stop.address.split(',')[0]} <span className="text-xs text-muted font-mono">{stop.deliveryId}</span></p>
+          <p className="font-medium">{stop.customerName || stop.address.split(',')[0]} <span className="text-micro text-ink-400 font-normal">{stop.deliveryId}</span></p>
           <StatusBadge status={stop.status} />
         </div>
         <p className="text-sm text-secondary">{stop.address}</p>
@@ -195,11 +198,13 @@ function StopRow({ stop }) {
             ? <span>Delivered {formatClock(stop.completedAt)}</span>
             : stop.status === 'failed'
               ? <span className="text-error">Failed {formatClock(stop.failedAt)}: {stop.failureReason}</span>
-              : <span>ETA {formatClock(stop.estimatedArrival)}{etaDiff ? <span className={etaDiff > 0 ? 'text-error' : 'text-success'}> ({etaDiff > 0 ? '+' : ''}{etaDiff} min vs plan)</span> : null}</span>}
-          {(stop.windowStart || stop.windowEnd) && <span>Window {stop.windowStart || '…'}–{stop.windowEnd || '…'}</span>}
+              : <span>ETA <span className="eta-chip">{formatClock(stop.estimatedArrival)}</span>{etaDiff > 0
+                ? <span className="text-signal-amber">, {formatDuration(etaDiff)} later than planned</span>
+                : etaDiff < -5 ? <span className="text-ink-400">, ahead of plan</span> : null}</span>}
+          {(stop.windowStart || stop.windowEnd) && <span className="text-ink-300">Window {stop.windowStart || '…'} to {stop.windowEnd || '…'}</span>}
           {stop.windowStatus === 'late' && stop.status !== 'completed' && <StatusBadge status="late" label={`${stop.lateByMin} min late`} />}
-          {stop.packageWeightKg > 0 && <span className="text-muted">{stop.packageWeightKg} kg · {stop.packageSize}</span>}
-          {stop.customerPhone && <a href={`tel:${stop.customerPhone}`}>{stop.customerPhone}</a>}
+          {stop.packageWeightKg > 0 && <span className="text-ink-400">{stop.packageWeightKg} kg, {stop.packageSize} parcel</span>}
+          {stop.customerPhone && <a href={`tel:${stop.customerPhone}`} className="no-underline hover:underline whitespace-nowrap">{stop.customerPhone}</a>}
         </div>
         {stop.notes && <p className="text-xs text-muted mt-1">Note: {stop.notes}</p>}
         {stop.trackingToken && stop.status !== 'completed' && stop.status !== 'failed' && (
@@ -209,8 +214,8 @@ function StopRow({ stop }) {
                 await navigator.clipboard.writeText(`${window.location.origin}/track/${stop.trackingToken}`)
                 toast.success('Customer tracking link copied')
               } catch { toast.error('Copy failed') }
-            }}>Copy tracking link</button>
-            <a className="btn btn-ghost btn-sm" href={`/track/${stop.trackingToken}`} target="_blank" rel="noopener noreferrer">Open tracking page</a>
+            }}><Icon name="copy" />Copy tracking link</button>
+            <a className="btn btn-ghost btn-sm" href={`/track/${stop.trackingToken}`} target="_blank" rel="noopener noreferrer"><Icon name="external" />Open tracking page</a>
           </div>
         )}
         {stop.proof && (stop.proof.photo || stop.proof.signature) && (
