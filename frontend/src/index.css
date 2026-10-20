@@ -34,6 +34,8 @@
 }
 
 @layer base {
+  /* Tailwind v4 borders default to currentColor; in Night Dispatch they are hairlines */
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--nd-hair); }
   html { font-size: 16px; -webkit-text-size-adjust: 100%; }
   body {
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -524,4 +526,16 @@
   .icon-tile { width: 2.25rem; height: 2.25rem; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--nd-raised); border: 1px solid var(--nd-hair); color: var(--nd-ink-2); }
   .icon-tile svg { width: 1.15rem; height: 1.15rem; }
   tr:hover .icon-tile { color: var(--nd-ink); border-color: rgb(169 180 200 / 0.22); }
+}
+
+@layer components {
+  .switch { position: relative; display: inline-flex; flex-shrink: 0; width: 2.5rem; height: 1.4rem; }
+  .switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; width: 100%; height: 100%; }
+  .switch-track { width: 100%; height: 100%; border-radius: 999px; background: var(--nd-strong); transition: background-color 0.2s ease; }
+  .switch-thumb { position: absolute; top: 3px; left: 3px; width: calc(1.4rem - 6px); height: calc(1.4rem - 6px); border-radius: 50%; background: var(--nd-ink); transition: transform 0.2s var(--nd-ease-out); }
+  .switch input:checked + .switch-track { background: var(--nd-volt); }
+  .switch input:checked ~ .switch-thumb { transform: translateX(1.1rem); background: var(--nd-bg); }
+  .switch input:focus-visible + .switch-track { box-shadow: 0 0 0 2px var(--nd-bg), 0 0 0 4px var(--nd-volt); }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid var(--nd-hair); }
+  .setting-row:last-child { border-bottom: none; }
 }
