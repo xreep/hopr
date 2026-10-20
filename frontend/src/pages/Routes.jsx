@@ -109,7 +109,7 @@ export default function RoutesPage() {
             <input type="checkbox" checked={unassigned} onChange={e => setFilter('unassigned', e.target.checked ? 'true' : '')} />
             <span className="text-sm">Unassigned only {unassignedCount ? `(${unassignedCount})` : ''}</span>
           </label>
-          {batch && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFilter('batch', '')}>Batch {batch} ✕</button>}
+          {batch && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFilter('batch', '')} aria-label={`Clear batch filter ${batch}`}>Batch {batch}<Icon name="x" /></button>}
         </div>
       </div>
 
@@ -173,7 +173,7 @@ export default function RoutesPage() {
             const n = result.assigned.length
             toast.success(n ? `Auto-dispatch assigned ${n} route${n === 1 ? '' : 's'}` : 'No routes were assigned')
             speak(`Auto-dispatch finished. ${n} route${n === 1 ? '' : 's'} assigned.`)
-            if (result.skipped.length) toast(`${result.skipped.length} skipped: ${result.skipped[0].reason}`, { icon: '⚠️' })
+            if (result.skipped.length) toast(`${result.skipped.length} skipped: ${result.skipped[0].reason}`)
             load()
           }}
         />

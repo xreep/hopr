@@ -8,10 +8,10 @@ export const DEFAULT_DEPOT = {
 
 // Mirrors backend/src/config/fleet.js (labels and defaults shown in the UI)
 export const VEHICLE_TYPES = [
-  { id: 'bike', name: 'Motorbike', fuelType: 'petrol', mileage: 45, unit: 'km/L', capacity: 25, icon: '🏍️' },
-  { id: 'van', name: 'Delivery Van', fuelType: 'diesel', mileage: 16, unit: 'km/L', capacity: 750, icon: '🚐' },
-  { id: 'truck', name: 'Light Truck', fuelType: 'diesel', mileage: 9, unit: 'km/L', capacity: 2500, icon: '🚛' },
-  { id: 'ev_van', name: 'Electric Van', fuelType: 'electric', mileage: 7, unit: 'km/kWh', capacity: 600, icon: '🔋' }
+  { id: 'bike', name: 'Motorbike', fuelType: 'petrol', mileage: 45, unit: 'km/L', capacity: 25 },
+  { id: 'van', name: 'Delivery Van', fuelType: 'diesel', mileage: 16, unit: 'km/L', capacity: 750 },
+  { id: 'truck', name: 'Light Truck', fuelType: 'diesel', mileage: 9, unit: 'km/L', capacity: 2500 },
+  { id: 'ev_van', name: 'Electric Van', fuelType: 'electric', mileage: 7, unit: 'km/kWh', capacity: 600 }
 ]
 export const vehicleTypeLabel = id => VEHICLE_TYPES.find(v => v.id === id)?.name || id
 

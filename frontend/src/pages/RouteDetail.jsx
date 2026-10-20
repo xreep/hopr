@@ -208,7 +208,7 @@ function StopRow({ stop }) {
         </div>
         {stop.notes && <p className="text-xs text-muted mt-1">Note: {stop.notes}</p>}
         {stop.trackingToken && stop.status !== 'completed' && stop.status !== 'failed' && (
-          <div className="flex gap-2 mt-1">
+          <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1 -ml-2">
             <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
               try {
                 await navigator.clipboard.writeText(`${window.location.origin}/track/${stop.trackingToken}`)
