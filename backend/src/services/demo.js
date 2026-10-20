@@ -5,7 +5,7 @@ import Upload from '../models/Upload.js'
 import { planBatch } from './routeOptimizer.js'
 import { routeDocsFromPlan } from './routePlanning.js'
 import { RANCHI_HUB, RANCHI_LOCATIONS as L } from '../data/ranchiLocations.js'
-import { istMinutesOfDay } from '../utils/time.js'
+import { istMinutesOfDay, istDateAt } from '../utils/time.js'
 
 // Demo accounts documented in the README. Only created when missing; existing
 // passwords are never overwritten.
@@ -29,6 +29,9 @@ const hhmm = minutes => {
   const m = Math.max(0, Math.min(23 * 60 + 59, Math.round(minutes)))
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 }
+
+// The last demo window closes this long after departure
+const DEMO_WINDOW_SPAN_MIN = 210
 
 // Five real Ranchi deliveries with windows placed relative to the departure time
 export function demoStops(departure) {
@@ -81,7 +84,12 @@ export async function seedDemo({ createdBy, now = new Date() } = {}) {
   const removed = await Route.deleteMany({ _id: { $in: stale.map(r => r._id) } })
   await Route.updateMany({ isDemo: true, status: 'active' }, { status: 'cancelled' })
 
-  const departure = new Date(Math.ceil((now.getTime() + 5 * 60000) / 60000) * 60000)
+  // Leave in 5 minutes, unless the last delivery window (start + 210 min) would run past
+  // midnight: then schedule the demo for 10:00 IST the next morning, as a dispatcher would
+  let departure = new Date(Math.ceil((now.getTime() + 5 * 60000) / 60000) * 60000)
+  if (istMinutesOfDay(departure) + DEMO_WINDOW_SPAN_MIN > 23 * 60 + 59) {
+    departure = istDateAt(new Date(departure.getTime() + 24 * 3600000), '10:00')
+  }
   const plan = planBatch({
     depot: RANCHI_HUB,
     stops: demoStops(departure),

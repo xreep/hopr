@@ -28,6 +28,14 @@ describe('demo seeder', () => {
     expect(await Vehicle.countDocuments()).toBe(4)
   })
 
+  it('still works late at night by scheduling the demo for the next morning', async () => {
+    const { seedDemo } = await import('../src/services/demo.js')
+    // 23:10 IST on 20 Oct 2026: windows would run past midnight
+    const { route } = await seedDemo({ now: new Date('2026-10-20T17:40:00Z') })
+    expect(route.plannedStart.toISOString()).toBe('2026-10-21T04:30:00.000Z') // 10:00 IST next day
+    for (const s of route.stops) expect(s.windowEnd > s.windowStart).toBe(true)
+  })
+
   it('is not available to drivers', async () => {
     const driver = await createUser('driver')
     expect((await api().post('/api/demo/seed').set(driver.auth)).status).toBe(403)
