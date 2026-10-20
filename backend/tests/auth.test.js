@@ -44,6 +44,14 @@ describe('auth', () => {
     expect(res.status).toBe(401)
   })
 
+  it('does not count session checks (GET /me) against the strict auth limit of 20', async () => {
+    const reg = await api().post('/api/auth/register').send(newUser)
+    for (let i = 0; i < 25; i++) {
+      const res = await api().get('/api/auth/me').set('Authorization', `Bearer ${reg.body.token}`)
+      expect(res.status).toBe(200)
+    }
+  })
+
   it('locks the account on the 6th bad login', async () => {
     await api().post('/api/auth/register').send(newUser)
     for (let i = 0; i < 5; i++) {
