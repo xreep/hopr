@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
@@ -22,10 +22,35 @@ const DesignSystem = lazy(() => import('./pages/DesignSystem'))
 
 const MANAGERS = ['admin', 'fleet_manager']
 
+// The session check failed without a 401 (rate limited, server unreachable): keep the
+// session and retry instead of bouncing a signed-in user to the login page
+function SessionRetry() {
+  const { sessionError, refreshUser, logout } = useAuth()
+  const limited = sessionError.status === 429
+  const waitSeconds = Math.min(Math.max(sessionError.retryAfter ?? 5, 3), 30)
+
+  useEffect(() => {
+    const t = setTimeout(refreshUser, waitSeconds * 1000)
+    return () => clearTimeout(t)
+  }, [sessionError, refreshUser, waitSeconds])
+
+  return (
+    <div className="empty-state min-h-screen flex flex-col items-center justify-center">
+      <p>{limited ? 'Too many requests for a moment' : 'Can\u2019t reach Hopr right now'}</p>
+      <p className="text-small mt-1 max-w-[46ch]">You&apos;re still signed in. Trying again in about {waitSeconds} seconds.</p>
+      <div className="mt-4 flex gap-2">
+        <button type="button" className="btn btn-secondary" onClick={refreshUser}>Try again</button>
+        <button type="button" className="btn btn-ghost" onClick={logout}>Sign out</button>
+      </div>
+    </div>
+  )
+}
+
 function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useAuth()
+  const { user, loading, sessionError } = useAuth()
 
   if (loading) return <PageLoader />
+  if (!user && sessionError) return <SessionRetry />
   if (!user) return <Navigate to="/login" replace />
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />
