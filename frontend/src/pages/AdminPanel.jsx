@@ -1,397 +1,227 @@
-import { useState, useEffect } from 'react'
-import api from '../utils/api'
+import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
+import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
+import { formatDate } from '../utils/time'
+import { MAPBOX_TOKEN } from '../config'
+import DemoSeedButton from '../components/DemoSeedButton'
+import Icon from '../components/icons'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const ROLES = ['admin', 'fleet_manager', 'driver']
+const roleLabel = r => r.replace('_', ' ')
+const initialFormData = { name: '', email: '', password: '', role: 'driver', phone: '', isActive: true }
 
 export default function AdminPanel() {
-  const { isAdmin } = useAuth()
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editingUser, setEditingUser] = useState(null)
+  const { user: me } = useAuth()
+  const [users, setUsers] = useState(null)
+  const [config, setConfig] = useState(null)
+  const [editing, setEditing] = useState(null) // null | 'new' | user
   const [formData, setFormData] = useState(initialFormData)
-  const [submitting, setSubmitting] = false
+  const [submitting, setSubmitting] = useState(false)
+  const [roleFilter, setRoleFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const confirm = useConfirm()
 
-  const initialFormData = {
-    name: '',
-    email: '',
-    password: '',
-    role: 'driver',
-    phone: '',
-    isActive: true
-  }
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/users', { params: { limit: 100, ...(roleFilter && { role: roleFilter }), ...(search && { search }) } })
+      setUsers(res.data.users)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to load users'))
+      setUsers([])
+    }
+  }, [roleFilter, search])
 
   useEffect(() => {
-    if (!isAdmin) return
-    fetchUsers()
-  }, [isAdmin])
+    const t = setTimeout(load, search ? 300 : 0)
+    return () => clearTimeout(t)
+  }, [load, search])
 
-  const fetchUsers = async () => {
-    try {
-      const response = await api.get('/admin/users')
-      setUsers(response.data.users || [])
-    } catch (error) {
-      toast.error('Failed to load users')
-    } finally {
-      setLoading(false)
-    }
+  useEffect(() => {
+    api.get('/map/config').then(res => setConfig(res.data)).catch(() => {})
+  }, [])
+
+  const open = (user = null) => {
+    setEditing(user || 'new')
+    setFormData(user ? { ...initialFormData, name: user.name, email: user.email, role: user.role, phone: user.phone || '', isActive: user.isActive } : initialFormData)
   }
+  const close = () => setEditing(null)
+  const set = (key, value) => setFormData(prev => ({ ...prev, [key]: value }))
 
-  const handleOpenModal = (user = null) => {
-    if (user) {
-      setEditingUser(user)
-      setFormData({ ...initialFormData, ...user, password: '' })
-    } else {
-      setEditingUser(null)
-      setFormData(initialFormData)
-    }
-    setShowModal(true)
-  }
-
-  const handleCloseModal = () => {
-    setShowModal(false)
-    setEditingUser(null)
-    setFormData(initialFormData)
-  }
-
-  const handleSubmit = async (e) => {
+  const submit = async e => {
     e.preventDefault()
     setSubmitting(true)
     try {
       const data = { ...formData }
       if (!data.password) delete data.password
-      
-      if (editingUser) {
-        await api.put(`/admin/users/${editingUser._id}`, data)
-        toast.success('User updated')
-      } else {
+      if (editing === 'new') {
+        delete data.isActive
         await api.post('/admin/users', data)
         toast.success('User created')
+      } else {
+        await api.put(`/admin/users/${editing._id}`, data)
+        toast.success(data.password ? 'User updated · their sessions were signed out' : 'User updated')
       }
-      handleCloseModal()
-      fetchUsers()
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to save user')
+      close()
+      load()
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to save user'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleInputChange = (e) => {
-    const { name, value, type } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? e.target.checked : value
-    }))
+  const toggleStatus = async user => {
+    try {
+      await api.patch(`/admin/users/${user._id}/status`, { isActive: !user.isActive })
+      toast.success(`${user.name} ${user.isActive ? 'deactivated' : 'activated'}`)
+      load()
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to update status'))
+    }
   }
 
-  const handleDelete = async (user) => {
-    if (user._id === 'current') return
-    if (!window.confirm(`Delete ${user.name} (${user.email})?`)) return
+  const remove = async user => {
+    const ok = await confirm({
+      title: `Delete ${user.name}?`,
+      message: [`${user.email} will no longer be able to sign in.`, 'This cannot be undone. To keep their history, deactivate the account instead.'],
+      confirmLabel: 'Delete user',
+      tone: 'danger'
+    })
+    if (!ok) return
     try {
       await api.delete(`/admin/users/${user._id}`)
       toast.success('User deleted')
-      fetchUsers()
-    } catch (error) {
-      toast.error('Failed to delete user')
+      load()
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to delete user'))
     }
   }
 
-  const handleToggleStatus = async (user) => {
-    try {
-      await api.patch(`/admin/users/${user._id}/status`, { isActive: !user.isActive })
-      toast.success(`User ${!user.isActive ? 'activated' : 'deactivated'}`)
-      fetchUsers()
-    } catch (error) {
-      toast.error('Failed to update status')
-    }
-  }
-
-  const stats = {
-    total: users.length,
-    admins: users.filter(u => u.role === 'admin').length,
-    managers: users.filter(u => u.role === 'fleet_manager').length,
-    drivers: users.filter(u => u.role === 'driver').length,
-    active: users.filter(u => u.isActive).length
-  }
+  const list = users || []
+  const isSelf = u => u._id === me?._id
+  const editingSelf = editing && editing !== 'new' && isSelf(editing)
 
   return (
     <div>
-      <div className="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="page-title">Admin Panel</h1>
-          <p className="page-subtitle">Manage users, roles, and system settings</p>
+          <h1 className="page-title">Admin</h1>
+          <p className="page-subtitle">People who can sign in, what they can do, and how Hopr is configured.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => handleOpenModal()}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-          </svg>
-          Add User
-        </button>
+        <button className="btn btn-primary" onClick={() => open()}><Icon name="plus" />Add user</button>
       </div>
 
-      <div className="grid grid-5 gap-4 mb-6">
-        <div className="card stats-card">
-          <p className="stats-label">Total Users</p>
-          <p className="stats-value">{stats.total}</p>
-        </div>
-        <div className="card stats-card">
-          <p className="stats-label">Admins</p>
-          <p className="stats-value text-primary">{stats.admins}</p>
-        </div>
-        <div className="card stats-card">
-          <p className="stats-label">Fleet Managers</p>
-          <p className="stats-value text-secondary">{stats.managers}</p>
-        </div>
-        <div className="card stats-card">
-          <p className="stats-label">Drivers</p>
-          <p className="stats-value text-success">{stats.drivers}</p>
-        </div>
-        <div className="card stats-card">
-          <p className="stats-label">Active</p>
-          <p className="stats-value text-success">{stats.active}</p>
+      <div className="grid grid-4 mb-6">
+        <StatCard label="Users" value={list.length} />
+        <StatCard label="Admins" value={list.filter(u => u.role === 'admin').length} />
+        <StatCard label="Fleet managers" value={list.filter(u => u.role === 'fleet_manager').length} />
+        <StatCard label="Drivers" value={list.filter(u => u.role === 'driver').length} hint={`${list.filter(u => u.isActive).length} active accounts in total`} />
+      </div>
+
+      <div className="card mb-6">
+        <div className="card-body flex-between flex-wrap gap-3">
+          <div>
+            <p className="font-display text-h3 font-medium">Demo data</p>
+            <p className="text-small text-ink-400 mt-1 max-w-[60ch]">Adds the demo accounts and fleet if they&apos;re missing, plus a fresh five-stop Ranchi route with delivery windows, assigned to driver@hopr.com.</p>
+          </div>
+          <DemoSeedButton className="btn btn-secondary" />
         </div>
       </div>
 
       <div className="card">
-        <div className="card-body p-0">
-          {loading ? (
-            <div className="page-loader py-12"><div className="spinner" /></div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-12 text-secondary">
-              <p>No users found</p>
-              <button className="btn btn-primary mt-3" onClick={() => handleOpenModal()}>Add your first user</button>
-            </div>
-          ) : (
-            <div className="table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Phone</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(user => (
-                    <tr key={user._id}>
-                      <td className="font-medium">{user.name}</td>
-                      <td>{user.email}</td>
-                      <td>
-                        <span className={`badge ${getRoleBadge(user.role)}`}>
-                          {user.role.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td>{user.phone || '-'}</td>
-                      <td>
-                        <span className={`badge ${user.isActive ? 'badge-success' : 'badge-error'}`}>
-                          {user.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="text-muted text-sm">
-                        {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
-                      </td>
-                      <td className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => handleOpenModal(user)}
-                            aria-label={`Edit ${user.name}`}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            className={`btn btn-ghost btn-sm ${user.isActive ? 'text-warning' : 'text-success'}`}
-                            onClick={() => handleToggleStatus(user)}
-                            aria-label={`${user.isActive ? 'Deactivate' : 'Activate'} ${user.name}`}
-                          >
-                            {user.isActive ? (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </button>
-                          {user._id !== 'current' && (
-                            <button
-                              className="btn btn-ghost btn-sm text-error"
-                              onClick={() => handleDelete(user)}
-                              aria-label={`Delete ${user.name}`}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="card-header flex flex-wrap gap-2">
+          <select className="form-input form-select w-auto" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} aria-label="Filter by role">
+            <option value="">All roles</option>
+            {ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
+          </select>
+          <input type="search" className="form-input flex-1 min-w-[180px]" placeholder="Search name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search users" />
         </div>
+        {!users ? <SkeletonRows label="Loading users" /> : list.length === 0 ? <EmptyState title="No users found" /> : (
+          <div className="table-container">
+            <table className="table">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Phone</th><th>Status</th><th>Last login</th><th className="text-right">Actions</th></tr></thead>
+              <tbody>
+                {list.map(u => (
+                  <tr key={u._id}>
+                    <td className="font-medium">{u.name}{isSelf(u) && <span className="text-xs text-muted"> (you)</span>}</td>
+                    <td>{u.email}</td>
+                    <td><span className="badge badge-neutral badge-plain capitalize">{roleLabel(u.role)}</span></td>
+                    <td className="whitespace-nowrap nd-tabular">{u.phone || '—'}</td>
+                    <td><StatusBadge status={u.isActive ? 'enabled' : 'inactive'} /></td>
+                    <td className="text-small text-ink-300 whitespace-nowrap">{u.lastLogin ? formatDate(u.lastLogin) : 'Never'}</td>
+                    <td className="text-right whitespace-nowrap">
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => open(u)} aria-label={`Edit ${u.name}`} title="Edit"><Icon name="edit" /></button>
+                      {!isSelf(u) && (
+                        <>
+                          <button className="btn btn-ghost btn-sm" onClick={() => toggleStatus(u)}>{u.isActive ? 'Deactivate' : 'Activate'}</button>
+                          <button className="btn btn-ghost btn-sm btn-icon hover:text-signal-coral" onClick={() => remove(u)} aria-label={`Delete ${u.name}`} title="Delete"><Icon name="trash" /></button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card mt-6">
-        <div className="card-header">
-          <h3 className="font-semibold">System Settings</h3>
-        </div>
-        <div className="card-body space-y-6">
-          <div className="grid grid-2 gap-6">
-            <div>
-              <h4 className="font-medium mb-3">Map Configuration</h4>
-              <div className="space-y-3">
-                <div className="form-group">
-                  <label htmlFor="mapboxToken" className="form-label">Mapbox Access Token</label>
-                  <input
-                    type="password"
-                    id="mapboxToken"
-                    className="form-input"
-                    placeholder="pk.xxxxxxxxxxxxxxxx"
-                    defaultValue={import.meta.env.VITE_MAPBOX_TOKEN || ''}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="googleMapsKey" className="form-label">Google Maps API Key</label>
-                  <input
-                    type="password"
-                    id="googleMapsKey"
-                    className="form-input"
-                    placeholder="AIzaSyxxxxxxxxxxxx"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-3">Default Settings</h4>
-              <div className="space-y-3">
-                <div className="form-group">
-                  <label htmlFor="defaultFuelPrice" className="form-label">Default Fuel Price ($/L)</label>
-                  <input
-                    type="number"
-                    id="defaultFuelPrice"
-                    className="form-input"
-                    step="0.01"
-                    min="0"
-                    defaultValue="1.50"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="optimizationTimeout" className="form-label">Route Optimization Timeout (seconds)</label>
-                  <input
-                    type="number"
-                    id="optimizationTimeout"
-                    className="form-input"
-                    min="5"
-                    max="60"
-                    defaultValue="10"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t flex justify-end">
-            <button className="btn btn-primary">Save Settings</button>
-          </div>
+        <div className="card-header"><h3>System configuration</h3></div>
+        <div className="card-body">
+          <dl className="detail-list">
+            <dt>Map tiles (browser)</dt><dd>{MAPBOX_TOKEN ? 'Mapbox GL (token configured)' : 'Schematic fallback. Set VITE_MAPBOX_TOKEN on Vercel.'}</dd>
+            <dt>Geocoding (server)</dt><dd>{config ? (config.geocoder === 'mapbox' ? 'Mapbox Geocoding API' : 'OpenStreetMap Photon (set MAPBOX_TOKEN on Render for Mapbox)') : '…'}</dd>
+            <dt>Default depot</dt><dd>{config?.depot?.address || '…'}</dd>
+            <dt>Fuel prices</dt><dd>Ranchi retail defaults, overridable with FUEL_PRICE_* environment variables on the server</dd>
+          </dl>
+          <p className="text-xs text-muted mt-3">Secrets are managed as environment variables on the hosting platforms and are never shown in the app.</p>
         </div>
       </div>
 
-      {showModal && (
-        <div className="modal-overlay" onClick={handleCloseModal} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="card-header flex-between">
-              <h3 id="modal-title" className="font-semibold">{editingUser ? 'Edit User' : 'Add User'}</h3>
-              <button className="btn btn-ghost" onClick={handleCloseModal} aria-label="Close modal">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {editing && (
+        <Modal title={editing === 'new' ? 'Add user' : `Edit ${editing.name}`} onClose={close}>
+          <form onSubmit={submit} className="space-y-4">
+            <div className="grid grid-2 gap-4">
+              <div>
+                <label htmlFor="uname" className="form-label">Full name</label>
+                <input id="uname" className="form-input" value={formData.name} onChange={e => set('name', e.target.value)} required maxLength={100} />
+              </div>
+              <div>
+                <label htmlFor="uemail" className="form-label">Email</label>
+                <input id="uemail" type="email" className="form-input" value={formData.email} onChange={e => set('email', e.target.value)} required />
+              </div>
+              <div>
+                <label htmlFor="urole" className="form-label">Role</label>
+                <select id="urole" className="form-input form-select capitalize" value={formData.role} onChange={e => set('role', e.target.value)} disabled={editingSelf}>
+                  {ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="uphone" className="form-label">Phone</label>
+                <input id="uphone" type="tel" className="form-input" value={formData.phone} onChange={e => set('phone', e.target.value)} placeholder="+91 98xxx xxxxx" maxLength={20} />
+              </div>
             </div>
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
-              <div className="grid grid-2 gap-4">
-                <div className="form-group">
-                  <label htmlFor="name" className="form-label">Full Name</label>
-                  <input type="text" id="name" name="name" className="form-input" value={formData.name} onChange={handleInputChange} required />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="email" className="form-label">Email</label>
-                  <input type="email" id="email" name="email" className="form-input" value={formData.email} onChange={handleInputChange} required />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="role" className="form-label">Role</label>
-                  <select id="role" name="role" className="form-input form-select" value={formData.role} onChange={handleInputChange} required>
-                    {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="phone" className="form-label">Phone</label>
-                  <input type="tel" id="phone" name="phone" className="form-input" value={formData.phone} onChange={handleInputChange} placeholder="+1 (555) 000-0000" />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="password" className="form-label">
-                  Password {editingUser ? '(leave blank to keep current)' : ''}
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  name="password"
-                  className="form-input"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  required={!editingUser}
-                  minLength={6}
-                  placeholder={editingUser ? '••••••••' : 'Enter password'}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  name="isActive"
-                  className="w-4 h-4 text-primary rounded border-border focus:ring-primary"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                />
-                <label htmlFor="isActive" className="text-sm">Active</label>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <button type="button" className="btn btn-outline" onClick={handleCloseModal}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? <span className="flex items-center gap-2"><span className="spinner" />Saving...</span> : (editingUser ? 'Update' : 'Create User')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div>
+              <label htmlFor="upassword" className="form-label">{editing === 'new' ? 'Password' : 'Reset password (leave blank to keep)'}</label>
+              <input id="upassword" type="password" className="form-input" value={formData.password} onChange={e => set('password', e.target.value)}
+                required={editing === 'new'} minLength={6} maxLength={128} autoComplete="new-password" />
+            </div>
+            {editing !== 'new' && !editingSelf && (
+              <label className="toggle-row">
+                <input type="checkbox" checked={formData.isActive} onChange={e => set('isActive', e.target.checked)} /> <span>Account active</span>
+              </label>
+            )}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn btn-outline" onClick={close}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving…' : editing === 'new' ? 'Create user' : 'Save changes'}</button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   )
-}
-
-function getRoleBadge(role) {
-  switch (role) {
-    case 'admin': return 'badge-error'
-    case 'fleet_manager': return 'badge-primary'
-    case 'driver': return 'badge-success'
-    default: return 'badge-info'
-  }
 }

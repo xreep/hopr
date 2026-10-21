@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { VEHICLE_TYPES, FUEL_TYPES } from '../config/fleet.js'
 
 const vehicleSchema = new mongoose.Schema({
   vehicleId: {
@@ -15,19 +16,21 @@ const vehicleSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['van', 'truck', 'bike', 'ev_van'],
+    enum: VEHICLE_TYPES,
     required: true
   },
   fuelType: {
     type: String,
-    enum: ['diesel', 'petrol', 'electric', 'cng', 'hybrid'],
+    enum: FUEL_TYPES,
     required: true
   },
+  // km per unit of fuel: litre (petrol/diesel/hybrid), kg (CNG) or kWh (electric)
   mileage: {
     type: Number,
     default: 0,
     min: 0
   },
+  // Payload capacity in kg
   capacity: {
     type: Number,
     required: true,

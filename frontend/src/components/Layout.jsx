@@ -1,146 +1,86 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { initials } from '../utils/format'
+import MuteToggle from './MuteToggle'
+import Icon, { HopMark } from './icons'
+import ErrorBoundary from './ErrorBoundary'
+import CommandPalette from './CommandPalette'
+import { isMac } from '../utils/platform'
+import usePageTitle from '../hooks/usePageTitle'
 
+const MANAGERS = ['admin', 'fleet_manager']
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: DashboardIcon, roles: ['admin', 'fleet_manager', 'driver'] },
-  { name: 'Route Planner', href: '/route-planner', icon: RouteIcon, roles: ['admin', 'fleet_manager'] },
-  { name: 'Vehicles', href: '/vehicles', icon: VehicleIcon, roles: ['admin', 'fleet_manager'] },
-  { name: 'Drivers', href: '/drivers', icon: DriverIcon, roles: ['admin', 'fleet_manager'] },
-  { name: 'Analytics', href: '/analytics', icon: AnalyticsIcon, roles: ['admin', 'fleet_manager'] },
-  { name: 'Admin Panel', href: '/admin', icon: AdminIcon, roles: ['admin'] },
-  { name: 'Driver Panel', href: '/driver-panel', icon: DriverPanelIcon, roles: ['driver'] },
+  { name: 'Dashboard', href: '/dashboard', icon: 'dashboard', roles: ['admin', 'fleet_manager', 'driver'] },
+  { name: 'My deliveries', href: '/driver-panel', icon: 'navigation', roles: ['driver'] },
+  { name: 'Route planner', href: '/route-planner', icon: 'map', roles: MANAGERS },
+  { name: 'Routes & dispatch', href: '/routes', icon: 'list', roles: MANAGERS },
+  { name: 'Live monitor', href: '/monitor', icon: 'radar', roles: MANAGERS },
+  { name: 'Vehicles', href: '/vehicles', icon: 'truck', roles: MANAGERS },
+  { name: 'Drivers', href: '/drivers', icon: 'users', roles: MANAGERS },
+  { name: 'Analytics', href: '/analytics', icon: 'chart', roles: MANAGERS },
+  { name: 'Admin', href: '/admin', icon: 'shield', roles: ['admin'] },
+  { name: 'Profile', href: '/profile', icon: 'user', roles: ['admin', 'fleet_manager', 'driver'] }
 ]
 
-function DashboardIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-    </svg>
-  )
-}
+const PAGE_TITLES = Object.fromEntries(navigation.map(item => [item.href, item.name]))
 
-function RouteIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-    </svg>
-  )
-}
-
-function VehicleIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zm0 0L19.5 7.5M13.381 16H8" />
-    </svg>
-  )
-}
-
-function DriverIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  )
-}
-
-function AnalyticsIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-    </svg>
-  )
-}
-
-function AdminIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  )
-}
-
-function DriverPanelIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  )
-}
-
-function MenuIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  )
-}
-
-function UserIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-    </svg>
-  )
-}
-
-function LogoutIcon({ className }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-    </svg>
-  )
-}
+const todayIST = () => new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long' })
+const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'Driver' }
 
 export default function Layout() {
-  const { user, logout, isAdmin, isFleetManager, isDriver } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
-  const filteredNav = navigation.filter(item => 
-    item.roles.some(role => 
-      (role === 'admin' && isAdmin) ||
-      (role === 'fleet_manager' && isFleetManager) ||
-      (role === 'driver' && isDriver)
-    )
-  )
+  // Cmd/Ctrl+K anywhere, or "/" when not typing, opens search
+  useEffect(() => {
+    const onKey = e => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(open => !open)
+      } else if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        setPaletteOpen(true)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => { setSidebarOpen(false) }, [location.pathname])
+  // Route detail pages name themselves after the route
+  usePageTitle(location.pathname.startsWith('/routes/') ? null : PAGE_TITLES[location.pathname] || 'Page not found')
+
+  const filteredNav = navigation.filter(item => item.roles.includes(user?.role))
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
 
-  const userInitials = user?.name
-    ?.split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || 'U'
-
   return (
-    <div className="flex min-h-screen">
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} role="navigation" aria-label="Main navigation">
-        <div className="sidebar-header">
-          <h1 className="text-xl font-bold text-primary flex items-center gap-2">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-            Hopr
-          </h1>
+    <div className="app-shell">
+      <a href="#main" className="skip-link">Skip to content</a>
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} aria-label="Main navigation">
+        <div className="sidebar-header flex-between">
+          <NavLink to="/dashboard" className="brand" aria-label="Hopr dashboard">
+            <HopMark size={30} />
+            <span>Hopr</span>
+          </NavLink>
+          <button type="button" className="btn btn-ghost btn-sm btn-icon menu-button" onClick={() => setSidebarOpen(false)} aria-label="Close navigation menu">
+            <Icon name="x" />
+          </button>
         </div>
         <nav className="sidebar-nav">
-          <ul role="list">
+          <ul>
             {filteredNav.map(item => (
               <li key={item.href}>
-                <NavLink
-                  to={item.href}
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                  onClick={() => setSidebarOpen(false)}
-                  end={item.href === '/dashboard'}
-                >
-                  <item.icon className="w-5 h-5" aria-hidden="true" />
+                <NavLink to={item.href} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} end={item.href === '/routes'}>
+                  <Icon name={item.icon} />
                   {item.name}
                 </NavLink>
               </li>
@@ -149,53 +89,45 @@ export default function Layout() {
         </nav>
         <div className="sidebar-footer">
           <div className="flex items-center gap-3">
-            <div className="avatar">{userInitials}</div>
+            <div className="avatar" aria-hidden="true">{initials(user?.name)}</div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted capitalize">{user?.role?.replace('_', ' ')}</p>
+              <p className="text-body font-medium truncate">{user?.name}</p>
+              <p className="text-micro text-ink-400">{ROLE_LABELS[user?.role]}</p>
             </div>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={handleLogout} aria-label="Log out" title="Log out">
+              <Icon name="logout" />
+            </button>
           </div>
-          <button
-            className="btn btn-ghost w-full mt-3 justify-start"
-            onClick={handleLogout}
-          >
-            <LogoutIcon className="w-5 h-5" aria-hidden="true" />
-            Logout
-          </button>
         </div>
       </aside>
 
       <div className="main-content">
-        <header className="top-bar" role="banner">
-          <div className="flex items-center gap-3">
-            <button
-              className="btn btn-ghost lg:hidden"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Toggle navigation menu"
-              aria-expanded={sidebarOpen}
-            >
-              <MenuIcon className="w-6 h-6" aria-hidden="true" />
+        <header className="top-bar">
+          <div className="flex items-center gap-3 min-w-0">
+            <button className="btn btn-ghost btn-icon menu-button" onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu" aria-expanded={sidebarOpen}>
+              <Icon name="menu" size={20} />
             </button>
-            <h2 className="text-lg font-semibold text-primary hidden sm:block">Hopr</h2>
+            <NavLink to="/dashboard" className="brand lg:hidden" aria-label="Hopr dashboard"><HopMark size={24} /></NavLink>
+            <span className="text-small text-ink-400 hidden md:block">{todayIST()}, Ranchi</span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-secondary hidden md:block">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-            </span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="btn btn-ghost btn-sm palette-trigger" onClick={() => setPaletteOpen(true)} aria-label="Search and run commands" aria-keyshortcuts={isMac() ? 'Meta+K' : 'Control+K'}>
+              <Icon name="search" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="hidden md:inline-flex">{isMac() ? '⌘K' : 'Ctrl K'}</kbd>
+            </button>
+            <MuteToggle />
           </div>
         </header>
-        <main className="page-content" role="main">
-          <Outlet />
+        <main id="main" className="page-content">
+          <ErrorBoundary resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 lg:hidden z-50"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={filteredNav} />
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden="true" />}
     </div>
   )
 }

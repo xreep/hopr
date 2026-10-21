@@ -1,11 +1,14 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../utils/api'
+import { clearImageCache } from '../utils/imageCache'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Set when the session check failed for a reason other than auth (rate limit, server down)
+  const [sessionError, setSessionError] = useState(null)
 
   const fetchUser = useCallback(async () => {
     const token = localStorage.getItem('token')
@@ -13,13 +16,20 @@ export function AuthProvider({ children }) {
       setLoading(false)
       return
     }
-
     try {
       const response = await api.get('/auth/me')
       setUser(response.data.user)
+      setSessionError(null)
     } catch (error) {
-      localStorage.removeItem('token')
-      setUser(null)
+      // Only an authentication failure ends the session; rate limits or network blips keep it
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token')
+        setUser(null)
+        setSessionError(null)
+      } else {
+        const retryAfter = Number(error.response?.headers?.['retry-after'])
+        setSessionError({ status: error.response?.status ?? null, retryAfter: Number.isFinite(retryAfter) ? retryAfter : null })
+      }
     } finally {
       setLoading(false)
     }
@@ -29,43 +39,48 @@ export function AuthProvider({ children }) {
     fetchUser()
   }, [fetchUser])
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
-    const { token, user } = response.data
+    const { token, user: loggedIn } = response.data
     localStorage.setItem('token', token)
-    setUser(user)
-    return user
-  }
+    setUser(loggedIn)
+    return loggedIn
+  }, [])
 
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     const response = await api.post('/auth/register', userData)
-    const { token, user } = response.data
+    const { token, user: created } = response.data
     localStorage.setItem('token', token)
-    setUser(user)
-    return user
-  }
+    setUser(created)
+    return created
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token')
+    clearImageCache() // proof photos belong to this session
     setUser(null)
-  }
+    setSessionError(null)
+  }, [])
 
-  const updateUser = (updates) => {
+  const updateUser = useCallback((updates) => {
     setUser(prev => ({ ...prev, ...updates }))
-  }
+  }, [])
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     loading,
+    sessionError,
     login,
     register,
     logout,
     updateUser,
+    refreshUser: fetchUser,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
     isFleetManager: user?.role === 'fleet_manager',
+    isManager: user?.role === 'admin' || user?.role === 'fleet_manager',
     isDriver: user?.role === 'driver'
-  }
+  }), [user, loading, sessionError, login, register, logout, updateUser, fetchUser])
 
   return (
     <AuthContext.Provider value={value}>
@@ -74,6 +89,7 @@ export function AuthProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext)
   if (!context) {

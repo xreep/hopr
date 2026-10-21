@@ -1,31 +1,21 @@
 import express from 'express'
-import jwt from 'jsonwebtoken'
-import { body, validationResult } from 'express-validator'
+import { body } from 'express-validator'
 import User from '../models/User.js'
 import { authenticate } from '../middleware/auth.js'
+import { validateRequest, pick } from '../middleware/validate.js'
+import { generateToken } from '../services/token.js'
 
 const router = express.Router()
 
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user._id, role: user.role, tokenVersion: user.tokenVersion },
-    process.env.JWT_SECRET || 'hopr-secret-key',
-    { expiresIn: '7d' }
-  )
-}
-
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
-}
+// H4: fields a user may change on their own profile
+const profileFields = ['name', 'email', 'phone', 'address']
+const notificationFields = ['email', 'sms', 'push', 'routeUpdates', 'maintenanceAlerts', 'weeklyReports']
 
 router.post('/register', [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('password').isLength({ min: 6, max: 128 }).withMessage('Password must be 6-128 characters'),
+  body('phone').optional({ values: 'falsy' }).trim().isLength({ max: 20 }),
   validateRequest
 ], async (req, res) => {
   try {
@@ -138,17 +128,21 @@ router.get('/me', authenticate, async (req, res) => {
 })
 
 router.put('/profile', authenticate, [
-  body('name').optional().trim().notEmpty(),
+  body('name').optional().trim().notEmpty().isLength({ max: 100 }),
   body('email').optional().isEmail().normalizeEmail(),
-  body('phone').optional().trim(),
-  body('address').optional().trim(),
+  body('phone').optional().trim().isLength({ max: 20 }),
+  body('address').optional().trim().isLength({ max: 300 }),
   validateRequest
 ], async (req, res) => {
   try {
-    const updates = req.body
-    delete updates.password
-    delete updates.role
-    delete updates.isActive
+    const updates = pick(req.body, profileFields)
+
+    if (updates.email) {
+      const taken = await User.exists({ email: updates.email, _id: { $ne: req.user.id } })
+      if (taken) {
+        return res.status(409).json({ message: 'Email already in use' })
+      }
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user.id,
@@ -168,7 +162,7 @@ router.put('/profile', authenticate, [
 
 router.put('/password', authenticate, [
   body('currentPassword').notEmpty().withMessage('Current password is required'),
-  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+  body('newPassword').isLength({ min: 6, max: 128 }).withMessage('New password must be 6-128 characters'),
   validateRequest
 ], async (req, res) => {
   try {
@@ -204,9 +198,14 @@ router.put('/notifications', authenticate, [
   validateRequest
 ], async (req, res) => {
   try {
+    // Merge individual flags instead of replacing the whole sub-document
+    const updates = {}
+    for (const [key, value] of Object.entries(pick(req.body, notificationFields))) {
+      updates[`notifications.${key}`] = value
+    }
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      { notifications: req.body },
+      { $set: updates },
       { new: true, runValidators: true }
     )
 

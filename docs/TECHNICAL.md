@@ -1,0 +1,653 @@
+# Hopr technical documentation
+
+Hopr is a route optimization system for last-mile delivery in Ranchi, Jharkhand. Fleet managers plan multi-stop, multi-vehicle batches, dispatch them to drivers, and watch them live. Drivers follow the route, collect proof of delivery and report problems. Customers follow their parcel on a public tracking page.
+
+This document maps the implementation to the project specification (*Smart Route Optimization System for Last-Mile Delivery*). Section numbers in the traceability table point to the parts of this document that cover each requirement.
+
+- [1. Spec traceability](#1-spec-traceability)
+- [2. Architecture](#2-architecture)
+- [3. Data models](#3-data-models)
+- [4. Routing algorithm](#4-routing-algorithm)
+- [5. Traffic handling](#5-traffic-handling)
+- [6. Fuel estimation](#6-fuel-estimation)
+- [7. Dispatch, tracking and delivery features](#7-dispatch-tracking-and-delivery-features)
+- [8. Authentication, roles and security](#8-authentication-roles-and-security)
+- [9. API reference](#9-api-reference)
+- [10. KPI definitions](#10-kpi-definitions)
+- [11. Non-functional requirements](#11-non-functional-requirements)
+- [12. Frontend](#12-frontend)
+- [13. Testing](#13-testing)
+- [14. Limitations and future work](#14-limitations-and-future-work)
+
+---
+
+## 1. Spec traceability
+
+| Spec requirement | Where it lives | Section |
+|---|---|---|
+| Manual entry or CSV upload of delivery addresses | Route planner: stop editor with address autocomplete, CSV import with template | [12](#12-frontend) |
+| Selection of number and type of vehicles | Planner: pick fleet vehicles, or a vehicle type and count (1–10) | [4.5](#45-multi-vehicle-batches) |
+| Delivery priority (urgent/standard) | `priority: urgent \| standard \| low` per stop, weighted in the objective | [4.2](#42-objective-operating-cost-in-inr) |
+| Optimized sequence and ETA calculation | `services/routeOptimizer.js` | [4](#4-routing-algorithm) |
+| Map API integration (Google Maps / Mapbox) | Mapbox GL in the browser; Mapbox Geocoding and Directions on the server. Without a token: OpenStreetMap Photon geocoding and a schematic map | [2.4](#24-map-integration) |
+| Traffic-aware suggestions, dynamic recalculation, closures and congestion | Simulated Ranchi traffic profile, manager-reported incidents, recalculation from the driver's position | [5](#5-traffic-handling) |
+| Fuel per route, compare options, vehicle type, distance vs cost | `services/fuel.js`, route alternatives, per-type comparison | [6](#6-fuel-estimation) |
+| Driver: view route, map navigation, mark Pending / Completed / Failed, report issues or delays | Driver panel, Google Maps hand-off, proof-of-delivery dialog, issue and delay reports | [7](#7-dispatch-tracking-and-delivery-features) |
+| Manager: batches, assign vehicles and drivers, track deliveries, planned vs actual, reports | Routes and dispatch, auto-dispatch, live monitor, route detail, analytics with CSV export | [7](#7-dispatch-tracking-and-delivery-features), [10](#10-kpi-definitions) |
+| Data requirements (delivery, vehicle, route, driver) | Mongoose models | [3](#3-data-models) |
+| KPIs (6) | `services/analytics.js`, `services/metrics.js` | [10](#10-kpi-definitions) |
+| NFRs: under 10 s planning, secure auth, availability, scalability, responsive UI | Measured and documented | [11](#11-non-functional-requirements) |
+| 6–8 interconnected pages, role-based auth | 12 authenticated pages plus login and public tracking; 3 roles | [8](#8-authentication-roles-and-security), [12](#12-frontend) |
+| Realistic data, not dummy data | Geocoded Ranchi landmarks, Ranchi fuel prices, Indian grid emission factor | [3.6](#36-reference-data), [6](#6-fuel-estimation) |
+
+---
+
+## 2. Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    M[Manager and driver app<br/>React 18 + Vite]
+    C[Customer tracking page<br/>/track/:token]
+  end
+  subgraph Vercel
+    S[Static build<br/>SPA rewrites]
+  end
+  subgraph Render
+    A[Express API<br/>Node 20]
+    O[Routing engine<br/>pure functions]
+  end
+  DB[(MongoDB Atlas M0)]
+  MB[Mapbox<br/>tiles, geocoding, directions]
+  PH[OpenStreetMap Photon<br/>geocoding fallback]
+
+  M -- HTTPS JSON, JWT --> A
+  C -- HTTPS JSON, token in URL --> A
+  S --> M
+  S --> C
+  A --> O
+  A --> DB
+  A -. optional .-> MB
+  A -. fallback .-> PH
+  M -. optional map tiles .-> MB
+```
+
+### 2.1 Stack
+
+| Layer | Choice |
+|---|---|
+| Frontend | React 18, Vite, React Router 7, Tailwind CSS 4, Chart.js, Mapbox GL JS, react-hot-toast |
+| Backend | Node.js, Express, Mongoose, express-validator, multer, helmet, express-rate-limit, express-mongo-sanitize, bcryptjs, jsonwebtoken |
+| Database | MongoDB (Atlas M0 in production; a local `mongod` in development and `mongodb-memory-server` in tests) |
+| Tests | Vitest, Supertest, Testing Library, jsdom |
+| Hosting | Vercel (frontend), Render free web service (API), MongoDB Atlas M0. Total cost ₹0 |
+
+### 2.2 Repository layout
+
+```
+hopr/
+├── backend/
+│   ├── src/
+│   │   ├── app.js              Express app: security middleware, rate limits, routers
+│   │   ├── index.js            Startup: env checks, MongoDB connection, listen
+│   │   ├── config/fleet.js     Vehicle profiles, fuel prices, emission factors, cost model
+│   │   ├── data/               Geocoded Ranchi landmarks and the Kokar hub
+│   │   ├── middleware/         auth (JWT + roles), validation, uploads
+│   │   ├── models/             User, Vehicle, Route (stops embedded), TrafficIncident, Upload
+│   │   ├── routes/             One router per resource (see section 9)
+│   │   ├── services/           routeOptimizer, routePlanning, traffic, fuel, dispatch,
+│   │   │                       tracking, analytics, metrics, geometry, geocoding, demo
+│   │   └── utils/              geo and IST time helpers
+│   └── tests/                  API and unit tests against an in-memory MongoDB
+├── frontend/
+│   ├── public/                 Icons and web manifest
+│   ├── src/
+│   │   ├── pages/              One component per screen
+│   │   ├── components/         Map, dialogs, command palette, UI kit
+│   │   ├── hooks/              Polling, driver location, count-up, media query, page title
+│   │   ├── context/            Auth session
+│   │   └── utils/              API client, IST time, geo, tracking animation, speech, CSV
+│   └── vercel.json             Rewrites client routes to index.html
+└── docs/                       This document and the PRD
+```
+
+### 2.3 Request flow
+
+1. The browser calls `/api/...` with `Authorization: Bearer <JWT>`. In development Vite proxies `/api` to the API; in production `VITE_API_URL` points at the Render service.
+2. `app.js` applies helmet, CORS (only `FRONTEND_URL`), a 100 kB JSON limit, NoSQL-injection sanitising, security logging and the rate limiters (section 8.3).
+3. The router validates input with express-validator, `authenticate` verifies the token and loads the user, and `authorize(...)` checks the role.
+4. Planning endpoints call the routing engine (`services/routeOptimizer.js`), which is a set of pure, synchronous functions with no I/O. That keeps it deterministic and fast to test.
+5. Errors return JSON. In production a 5xx says only "Internal server error"; stack traces are never sent.
+
+### 2.4 Map integration
+
+| Capability | With `MAPBOX_TOKEN` / `VITE_MAPBOX_TOKEN` | Without a token |
+|---|---|---|
+| Map in the browser | Mapbox GL `dark-v11` with live traffic tiles and glowing route lines | Schematic SVG map: same markers, lines and driver animation, no street tiles |
+| Address search | Mapbox Geocoding, limited to the Ranchi service area | OpenStreetMap Photon, limited to the same area |
+| Road geometry | Mapbox Directions, in chunks of 25 waypoints | Straight legs × 1.35 circuity factor (typical for Indian city grids) |
+
+Address suggestions always lead with Hopr's curated Ranchi landmarks when they match what was typed. Provider results are searched inside a box of about 45 km around Ranchi, widened to all of India only when nothing local matches, and de-duplicated (same label, or within 30 m). Geocoding results are cached in memory for 24 hours.
+
+---
+
+## 3. Data models
+
+All models are Mongoose schemas in `backend/src/models`. Each one is listed next to the spec's data requirements.
+
+### 3.1 Delivery (a stop embedded in a route)
+
+| Spec field | Field | Notes |
+|---|---|---|
+| Delivery ID | `deliveryId` | `DLV-XXXXXX`, generated |
+| Customer name | `customerName`, `customerPhone` | |
+| Address | `address`, `coordinates` | `[lng, lat]`, validated |
+| Priority level | `priority` | `urgent`, `standard`, `low` |
+| Delivery time window | `windowStart`, `windowEnd` | `HH:MM` in IST |
+| Package weight / size | `packageWeightKg`, `packageSize` | `small`, `medium`, `large` |
+| | `sequence`, `status` | status `pending`, `in_progress`, `completed`, `failed` |
+| | `plannedArrival`, `estimatedArrival` | plan kept for planned-vs-actual; forecast updated live |
+| | `windowStatus`, `lateByMin` | `on_time`, `early`, `late`, `none` |
+| | `proofOfDelivery` | photo and signature (Upload refs), note, `completedAt`, `completedBy` |
+| | `issues[]` | `issue` or `delay` (minutes), reporter and time |
+| | `trackingToken` | 144-bit random token for the public tracking page |
+
+### 3.2 Vehicle
+
+| Spec field | Field |
+|---|---|
+| Vehicle ID | `vehicleId` (unique), `licensePlate` (unique) |
+| Fuel type | `fuelType`: `diesel`, `petrol`, `electric`, `cng`, `hybrid` |
+| Mileage (km/l) | `mileage`: km per litre, kg of CNG, or kWh |
+| Capacity | `capacity` (kg) |
+| Assigned driver | `driver` (User ref). Assigning moves the driver off any other vehicle |
+| | `type` (`bike`, `van`, `truck`, `ev_van`), `status` (`active`, `maintenance`, `inactive`), maintenance dates, totals |
+
+### 3.3 Route
+
+| Spec field | Field |
+|---|---|
+| Total distance | `totalDistance` (planned km), `actualDistance` (km driven, from GPS) |
+| Estimated fuel consumption | `fuelEstimate`, `fuelUnit`, `fuelPrice`, `fuelCost` (INR), `co2Kg` |
+| Estimated delivery time | `estimatedTime` (min), `actualTime` |
+| Traffic impact factor | `trafficImpactFactor` (traffic time ÷ free-flow time), `trafficLevel` |
+| Route status | `status`: `planned`, `active`, `completed`, `cancelled` |
+| | `routeId`, `batchId`, `stops[]` (1–30), `depot`, `vehicle`, `vehicleType`, `driver`, `plannedStart`, `startedAt`, `completedAt` |
+| | `geometry` (GeoJSON LineString), `violations[]`, `savings`, `alternatives[]`, `loadKg`, `capacityKg` |
+| | `driverLocation` (live GPS), `needsRecalculation`, `recalculations[]` |
+
+Indexes: `{driver, status}`, `{vehicle}`, `{status}`, `{createdAt: -1}`, `batchId`, `stops.trackingToken`.
+
+### 3.4 Driver (a User with role `driver`)
+
+| Spec field | Field |
+|---|---|
+| Driver ID | `_id` |
+| Contact details | `name`, `email`, `phone`, `address` |
+| Assigned vehicle | the Vehicle whose `driver` is this user |
+| Performance metrics | computed, not stored: deliveries, on-time rate, completion rate, average delivery time, distance (section 10) |
+| | `role`, `isActive`, `lastLogin`, `lastLocation`, `failedAttempts`, `lockUntil`, `tokenVersion`, `notifications` |
+
+### 3.5 Supporting models
+
+- **TrafficIncident**: `type` (`congestion` or `closure`), `label`, `coordinates`, `radiusKm` (0.1–5), `severity` (1–4, a travel-time multiplier), `active`, `expiresAt`.
+- **Upload**: proof photos and signatures stored in MongoDB (no paid storage). Fields: `kind`, `contentType` (`image/jpeg`, `image/png` or `image/webp`), `size`, `data` (not selected by default), `route`, `stopId`, `uploadedBy`.
+
+### 3.6 Reference data
+
+`backend/src/data/ranchiLocations.js` holds 16 real Ranchi locations (Lalpur Chowk, Morabadi Maidan, Ranchi Junction, Birsa Munda Airport and others), geocoded with OpenStreetMap Nominatim, plus the Hopr hub in Kokar. The demo seeder and the tests use them, so every distance and ETA is a real Ranchi distance.
+
+---
+
+## 4. Routing algorithm
+
+`backend/src/services/routeOptimizer.js`. One depot, up to 30 stops per vehicle, up to 10 vehicles per batch.
+
+### 4.1 Travel model
+
+- **Distance** between two points: great-circle distance × 1.35 road circuity, or real road distance from Mapbox Directions for the drawn geometry.
+- **Free-flow time**: distance ÷ the vehicle's city speed (bike 28, van 24, truck 20, electric van 24 km/h).
+- **Traffic**: free-flow time × the time-of-day factor at the moment the leg starts × any incident on the leg (section 5).
+- **Service time** at each stop: bike 4, van 6, truck 10, electric van 6 minutes.
+- **Windows**: arriving before `windowStart` means waiting; arriving after `windowEnd` is lateness.
+
+### 4.2 Objective: operating cost in INR
+
+Hopr does not minimise distance alone. It minimises what a route costs to run, which lets distance, traffic, fuel and priority trade off in one consistent unit:
+
+```
+cost = (drive + wait minutes) × ₹3                    driver time (about ₹180/h with overhead)
+     + km × fuel cost per km of this vehicle           fuel efficiency
+     + minutes after windowEnd × ₹30                   missed delivery windows
+     + Σ minutes each stop waits from route start × weight
+         weight: urgent ₹1.5, standard ₹0.15, low ₹0    delivery priority
+```
+
+Because traffic changes leg times, the same set of stops can be sequenced differently at 08:00 than at 14:00.
+
+### 4.3 Search
+
+1. **Construction seeds**
+   - *Greedy cheapest append*: start at the depot and repeatedly append the stop that adds the least cost. With cost reduced to distance this is the classic nearest-neighbour heuristic; with the full objective it is nearest-neighbour on operating cost.
+   - *Earliest deadline first*: stops ordered by window end (no window last), so tight windows start from a feasible order.
+2. **Local search** on each seed until no move improves the cost, or the time budget (3 s per route) runs out:
+   - *2-opt*: reverse a segment of the route, removing crossings.
+   - *Or-opt (relocate)*: move one stop to another position in the route.
+3. The cheapest result wins. The engine also returns three alternatives for comparison: *Hopr optimized*, *Shortest distance only*, and *Order as entered*. The savings shown to managers are optimized versus as entered.
+
+The search is deterministic: the same input gives the same route. That makes it testable, and the tests check it against brute force on 5 real Ranchi stops (all 120 orders).
+
+### 4.4 Why at most 30 stops per route
+
+This is a deliberate trade-off, documented rather than "fixed":
+
+- Each 2-opt or relocate pass tries O(n²) moves, and every move re-simulates the route (traffic depends on arrival time), so a pass costs O(n³). Up to 30 stops this converges well inside the time budget (30 stops: about 50 ms).
+- Past about 30 stops, a single route stops being realistic for one vehicle on a working day in Ranchi traffic (service time alone is 2–5 hours).
+- Larger jobs are batches: split across vehicles first (4.5), so each route stays within the limit. One batch accepts up to 300 stops (30 × 10 vehicles).
+
+### 4.5 Multi-vehicle batches
+
+`planBatch` handles several vehicles at once:
+
+1. **Partition**: a capacity-aware angular sweep around the depot. Stops are sorted by bearing, starting after the widest empty sector, then each vehicle is filled in turn up to an even share of stops, without exceeding its capacity or 30 stops.
+2. Each vehicle's stops are optimised independently, as in 4.3.
+3. A batch heavier than the whole fleet is rejected with a clear message.
+4. The batch budget is 7 s. The largest batch, 300 stops on 10 vehicles, plans in about 480 ms on the test machine.
+
+### 4.6 Re-timing without re-sequencing
+
+`retimeSequence` computes ETAs, window status and fuel for a fixed order. It is used when:
+
+- **A planned route moves to another vehicle** (auto-dispatch or a manual change). Stops and distance stay the same; ETAs, windows, fuel, CO₂ and capacity follow the new vehicle. Example: a van route sent to a motorbike changes from ₹107.60 diesel to ₹30.34 petrol.
+- **A driver starts a route.** Stops are forecast from the depot at the real start time with current traffic. Starting early helps stops without windows but never lands a stop before its window opens. Planned ETAs are kept for planned-vs-actual reporting.
+
+### 4.7 On the spec's suggested algorithms
+
+The spec suggests shortest-path algorithms (Dijkstra / A*) and multi-stop sequencing logic. Hopr splits the problem the same way:
+
+- **Shortest path between two points** is a road-network problem. Mapbox Directions solves it on the real road graph when a token is set; otherwise Hopr uses the circuity estimate.
+- **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr uses the nearest-neighbour-style construction plus 2-opt / Or-opt improvement described above, the standard practical approach at this size.
+
+---
+
+## 5. Traffic handling
+
+The spec allows API-based or simulated traffic. Hopr simulates it, which makes ETAs deterministic and testable and costs nothing. When a Mapbox token is set, live traffic is also drawn on the map.
+
+### 5.1 Ranchi weekday profile
+
+Travel-time multiplier by hour (IST), from `services/traffic.js`:
+
+| Hours | 00–05 | 06 | 07 | 08 | 09 | 10 | 11 | 12–14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Factor | 1.00–1.05 | 1.15 | 1.30 | 1.55 | 1.60 | 1.45 | 1.30 | 1.25 | 1.30 | 1.40 | 1.60 | 1.65 | 1.50 | 1.35 | 1.20 | 1.10 | 1.05 |
+
+The morning peak (school and office) and the evening peak (Main Road, Lalpur, Kanke Road) are the heaviest. Sundays get 15% relief, but never below free-flow. Each leg uses the factor at the moment it starts, so a route that runs into the evening peak slows down part-way. Levels: light (below 1.25), moderate (1.25 to 1.5), heavy (1.5 and above).
+
+### 5.2 Incidents: congestion and closures
+
+Managers report incidents on the Live monitor (a point, a radius and a duration):
+
+- **Congestion** multiplies the travel time of any leg passing through the zone by its severity (default 1.8).
+- **Closure** forces a detour around the zone: extra distance and time on every leg that crosses it.
+
+When an incident is reported, every planned or active route crossing it is flagged `needsRecalculation` and shown on the dashboard and monitor.
+
+### 5.3 Dynamic recalculation
+
+`POST /api/routes/:id/recalculate` re-optimises the stops still to visit, from the driver's current position (live GPS, else the last finished stop, else the depot), at the current time, with today's traffic and active incidents. The previous and new finish times are recorded in `recalculations[]`.
+
+A driver's **delay report** shifts every remaining ETA by the reported minutes, and the customer tracking pages follow automatically.
+
+---
+
+## 6. Fuel estimation
+
+`services/fuel.js`:
+
+```
+quantity = distance km ÷ mileage (km per L, kg or kWh)
+cost (₹) = quantity × unit price
+CO₂ (kg) = quantity × emission factor
+```
+
+| Type | Default mileage | Energy | Capacity | City speed |
+|---|---|---|---|---|
+| Motorbike | 45 km/L | petrol | 25 kg | 28 km/h |
+| Delivery van | 16 km/L | diesel | 750 kg | 24 km/h |
+| Light truck | 9 km/L | diesel | 2,500 kg | 20 km/h |
+| Electric van | 7 km/kWh | electricity | 600 kg | 24 km/h |
+
+A vehicle record's own mileage and capacity override the type defaults.
+
+| Fuel | Default price (₹) | CO₂ per unit (kg) |
+|---|---|---|
+| Petrol | 97.90 / L | 2.31 |
+| Diesel | 92.60 / L | 2.68 |
+| CNG | 91.50 / kg | 2.75 |
+| Electricity | 10.00 / kWh (depot tariff) | 0.71 (India grid, CEA) |
+
+Prices are Ranchi retail defaults and can be overridden with `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG` and `FUEL_PRICE_ELECTRICITY`.
+
+**Comparing options** (spec: "compare route options based on fuel efficiency", "distance vs estimated fuel cost"):
+
+- Each plan returns the three alternatives from 4.3 with distance, minutes, fuel quantity, fuel cost, CO₂ and late stops.
+- Each plan also returns a per-vehicle-type comparison: the same route by motorbike, van, truck and electric van, with fuel, cost, CO₂, time and whether the load fits.
+- Fuel cost also enters the optimizer's objective, so cheaper-to-drive orders win when time is equal.
+
+---
+
+## 7. Dispatch, tracking and delivery features
+
+### 7.1 Assignment and auto-dispatch
+
+Managers can assign a driver and vehicle to any planned route by hand, or press **Auto-dispatch**. `services/dispatch.js` scores every (route, available driver with a vehicle) pair:
+
+```
+score = 0.6 × proximity + 0.4 × capacity fit (+ 0.05 if the vehicle type matches the plan)
+proximity    = 1 / (1 + km from the driver to the route start ÷ 3)
+capacity fit = load ÷ capacity (vehicles that are too small are excluded)
+```
+
+The driver's position is their last GPS fix if it is under 12 hours old, else the depot. Matching is greedy best-pair: one route per driver and per vehicle, with deterministic tie-breaks. The manager sees a preview ("Route A → Driver X", score and reasons) and confirms. On confirm every pair is re-validated, so a stale preview cannot double-book anyone.
+
+### 7.2 Driver workflow
+
+Starting a route forecasts the ETAs (4.6). The driver panel shows:
+- the current stop, with plain-language timing ("in 12m" or "running at least 25m late") and the window state (opens in, open until, closed at)
+- navigation (a Google Maps hand-off)
+- call and share-tracking buttons
+- on phones, a dock with Navigate, Couldn't deliver and Delivered
+
+The panel also announces assignments and outcomes aloud.
+
+### 7.3 Proof of delivery (F1)
+
+Completing a stop opens a dialog with a photo (camera or file), a signature pad and an optional note; at least a photo or a signature is required. Uploads go through multer memory storage, with these limits:
+- at most 5 MB per image and 2 files per request
+- the type is checked from the file's own bytes (JPEG, PNG or WebP), not its name
+
+They are stored in MongoDB with `completedAt` and `completedBy`. Proof images can be read only by managers and the route's driver, and are deleted with their route. Managers can complete a stop without proof; drivers cannot.
+
+### 7.4 Live customer tracking (F2)
+
+- **Driver side**: while a route is active the driver app sends GPS every 5 seconds (`PATCH /api/routes/:id/location`), with "Update location" and "Pick on map" fallbacks and a demo drive mode. The demo drive stops at the next undelivered stop. The server ignores GPS jitter and implausible jumps when adding up driven distance.
+- **Customer side**: `/track/:token` needs no login; the random per-stop token is the only credential. It shows:
+  - the driver's initials, smoothly animated along the remaining route (it never teleports), with the remaining-route line
+  - a live "N min away" ETA
+  - a timeline: Packed, On the way, Arriving (within 500 m), Delivered
+  - a "stale" state after 60 seconds without a ping
+- **Privacy**: the tracking response contains no other customers' stops and no contact details.
+
+### 7.5 Delivery time windows (F3)
+
+Optional `windowStart` and `windowEnd` per stop. The objective penalises lateness heavily (₹30 a minute) and the search includes an earliest-deadline seed, so ETAs land inside windows where possible. Windows that cannot be met are flagged in plain language (for example "Stop 4 ETA 16:20, window ends 16:00"), and the planner and route detail show each stop's ETA against its window.
+
+### 7.6 Address autocomplete (F5) and spoken notifications (F6)
+
+- **Autocomplete**: search as you type (debounced, keyboard accessible); see 2.4 for the providers. Choosing a result fills the address and coordinates.
+- **Spoken notifications**: a dependency-free `speak()` using the Web Speech API (English voice, rate 1, cancels speech in progress, silent where unsupported). It speaks when a route is assigned, a delivery is completed or failed, auto-dispatch finishes, and the customer's driver is arriving or has delivered. Mute is a header toggle persisted in `localStorage`; visual toasts always appear too.
+
+---
+
+## 8. Authentication, roles and security
+
+### 8.1 Authentication
+
+- **Passwords**: bcrypt with cost 12; never returned by the API.
+- **Tokens**: JWT signed with `JWT_SECRET`; 7-day expiry (a documented trade-off). In production the server refuses to start without `JWT_SECRET`.
+- **Revocation**: every token carries the user's `tokenVersion`. Changing a password, or an admin resetting it, increments the version and signs out every existing session, including the current one.
+- **Lockout**: five failed logins lock the account for 15 minutes. The sixth attempt is refused with 429, even with the right password.
+- **Session storage**: the token lives in `localStorage` (a documented trade-off: simple, and no CSRF surface, at the cost of XSS exposure, mitigated by React's escaping and helmet's headers). Only a 401 ends a session in the browser; a rate limit or network failure shows a retry screen instead of signing the user out.
+- **Registration**: public sign-up always creates a driver, whatever role is sent. Only admins create admins and fleet managers.
+
+### 8.2 Roles
+
+| Capability | Admin | Fleet manager | Driver |
+|---|---|---|---|
+| Plan, save, edit, cancel and delete routes | ✓ | ✓ | |
+| Assign drivers and vehicles, auto-dispatch | ✓ | ✓ | |
+| Live monitor, report incidents | ✓ | ✓ | |
+| Vehicles: create, edit, assign | ✓ | ✓ | |
+| Delete vehicles | ✓ | | |
+| Drivers: list, performance, activate | ✓ | ✓ | |
+| Analytics and CSV reports | ✓ | ✓ | |
+| Users: create any role, edit, deactivate, delete | ✓ | | |
+| Own assigned routes: start, deliver, fail, report issues, send GPS | | | ✓ |
+| Profile, password, notification settings | ✓ | ✓ | ✓ |
+
+Drivers can read only their own routes and proof images. Managers can complete a stop without proof; drivers must provide a photo or signature. An admin cannot delete or deactivate their own account.
+
+### 8.3 Security controls
+
+| Control | Implementation |
+|---|---|
+| HTTP headers | helmet |
+| CORS | only `FRONTEND_URL` |
+| Body size | 100 kB JSON / form; images 5 MB |
+| NoSQL injection | express-mongo-sanitize; search text is regex-escaped |
+| Mass assignment | explicit field whitelists on every write |
+| Input validation | express-validator on every route; malformed IDs return 400, not 500 |
+| Rate limiting | see below |
+| Errors | no stack traces or internals in production responses |
+| Security logging | 401 and 429 responses, account lockouts and admin changes are logged |
+| Uploads | file type from magic bytes, size and count limits, private by default |
+| Dependencies | `npm audit` reports 0 vulnerabilities in both workspaces |
+
+Rate limits (per signed-in user, or per IP when anonymous):
+
+| Traffic | Limit |
+|---|---|
+| General API | 100 requests per 15 minutes |
+| Login, register, password changes | 20 per 15 minutes per IP, plus the account lockout |
+| Driver GPS pings | 30 per minute |
+| Public tracking page | 30 per minute per IP |
+| Live reads (dashboard, routes, incidents) | 60 per minute |
+
+Behind Render's proxy, `TRUST_PROXY` (on by default in production) makes the limits see the real client IP.
+
+---
+
+## 9. API reference
+
+Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fleet manager. Errors return `{ "message": "..." }` with a 4xx or 5xx status.
+
+### Auth (`/api/auth`)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| POST | `/register` | public | Create an account (always role `driver`). Body: `name`, `email`, `password`, `phone?`. Returns `{ token, user }` with 201 |
+| POST | `/login` | public | Body: `email`, `password`. Returns `{ token, user }`. 401 for wrong credentials, 429 when locked |
+| GET | `/me` | signed in | The current user |
+| PUT | `/profile` | signed in | Update `name`, `email`, `phone`, `address` |
+| PUT | `/password` | signed in | Body: `currentPassword`, `newPassword`. Every session, including this one, is signed out and must log in again |
+| PUT | `/notifications` | signed in | Notification preferences |
+
+### Routes (`/api/routes`)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| POST | `/optimize` | manager | Plan without saving. Body: `stops[]` (1–300), `vehicleIds[]` or `vehicleType` + `vehicleCount`, `departureTime`, `depot?`, `trafficEnabled?`, `returnToDepot?`. Returns routes with sequence, ETAs, violations, totals, alternatives |
+| POST | `/` | manager | Plan and save a batch. Same body plus `name`, `assignments[]`. Figures are recomputed on the server; client totals are ignored |
+| GET | `/` | signed in | List. Query: `status`, `driver`, `vehicle`, `batchId`, `unassigned`, `withGeometry`, `page`, `limit` (≤100). Drivers see only their own |
+| GET | `/driver/assigned` | driver | The driver's planned and active routes |
+| GET | `/:id` | manager or the route's driver | Full route with stops, proof, geometry |
+| PATCH | `/:id` | manager | Rename, assign or unassign `driver` and `vehicle` (a planned route is re-timed for a new vehicle), cancel or restore (`status`) |
+| PATCH | `/:id/start` | the route's driver or a manager | Start: status `active`, ETAs forecast from now |
+| PATCH | `/:id/stops/:stopId/status` | the route's driver or a manager | `in_progress`, `completed` (managers only without proof) or `failed` with `reason` |
+| POST | `/:id/stops/:stopId/complete` | the route's driver or a manager | Proof of delivery, `multipart/form-data`: `photo?`, `signature?`, `note?`; at least one image |
+| POST | `/:id/stops/:stopId/issues` | the route's driver or a manager | Body: `type` (`issue` or `delay`), `description`, `delayMinutes?` (a delay shifts remaining ETAs) |
+| PATCH | `/:id/location` | the route's driver | GPS ping: `coordinates`, `accuracy?`, `heading?`, `speed?` |
+| POST | `/:id/recalculate` | the route's driver or a manager | Re-optimise remaining stops from the current position |
+| DELETE | `/:id` | manager | Delete a route and its proof images |
+
+### Dispatch (`/api/dispatch`)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| POST | `/preview` | manager | Proposed pairs with scores and reasons, plus routes that cannot be placed and why |
+| POST | `/confirm` | manager | Body: `assignments[]` of `{ route, driver, vehicle }`. Re-validated; returns `{ assigned, skipped }` |
+
+### Vehicles (`/api/vehicles`)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| GET | `/` | manager | List. Query: `status`, `fuelType`, `search`, `page`, `limit` |
+| GET | `/available` | manager | Active vehicles without a driver |
+| GET | `/:id` | manager | One vehicle |
+| POST | `/` | manager | Create (`vehicleId`, `name`, `type`, `fuelType`, `mileage`, `capacity`, `licensePlate`, `status`, `driver?`, dates). 409 on a duplicate plate or ID |
+| PUT | `/:id` | manager | Update |
+| PATCH | `/:id/assign-driver` | manager | Body: `driverId` or `null` |
+| DELETE | `/:id` | admin | Refused (409) while the vehicle is on a planned or active route |
+
+### Drivers (`/api/drivers`)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| GET | `/` | manager | Drivers with vehicle, active route and performance metrics. Query: `search`, `page`, `limit` |
+| GET | `/available` | manager | Active drivers, marking those already on a route |
+| GET | `/:id` | manager | One driver with metrics |
+| PATCH | `/:id/status` | manager | Activate or deactivate a driver |
+
+### Live operations
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/dashboard` | signed in | Role-specific summary: today's KPIs, live routes, counts behind the attention alerts (waiting routes, traffic changes, incidents), recent routes |
+| GET | `/api/incidents` | signed in | Active incidents |
+| POST | `/api/incidents` | manager | Report `congestion` or `closure` with `coordinates`, `radiusKm`, `severity`, `durationMinutes`; flags affected routes |
+| PATCH | `/api/incidents/:id/resolve` | manager | Resolve an incident |
+| GET | `/api/track/:token` | public | Customer tracking: status, timeline, delivery, driver initials and first name, vehicle type, location, remaining path, ETA |
+| GET | `/api/uploads/:id` | manager or the route's driver | A proof photo or signature |
+
+### Analytics and admin
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/analytics` | manager | KPIs, previous-period comparison, daily trends, status breakdown, vehicle utilisation. Query: `range` = `7d`, `30d` (default), `90d` or `1y` |
+| GET | `/api/analytics/report.csv` | manager | Route-level CSV report. Cells are escaped and formula-neutralised |
+| GET | `/api/admin/users` | admin | List users. Query: `role`, `search`, `page`, `limit` |
+| POST | `/api/admin/users` | admin | Create a user with any role |
+| GET / PUT / DELETE | `/api/admin/users/:id` | admin | Read, update (a password reset signs the user out), delete |
+| PATCH | `/api/admin/users/:id/status` | admin | Activate or deactivate |
+| POST | `/api/demo/seed` | manager | Idempotent demo data: accounts, fleet and a five-stop Ranchi route with windows assigned to the demo driver |
+
+### Maps (`/api/map`, signed in)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/config` | Depot, map centre, which geocoder is active |
+| GET | `/suggest?q=&limit=` | Address suggestions (section 2.4) |
+| GET | `/geocode?address=` | First match for an address |
+| GET | `/reverse-geocode?lng=&lat=` | Address for a point |
+| GET | `/directions?coordinates=` | Road geometry and distance (Mapbox), or an estimate |
+
+`GET /api/health` returns `{ status: "ok" }` for uptime checks.
+
+---
+
+## 10. KPI definitions
+
+All KPIs come from recorded deliveries; nothing is simulated. The analytics window runs to the end of the current IST day. A route counts in a period if it was planned, started or completed in it.
+
+| KPI (spec) | Definition |
+|---|---|
+| Average delivery time | Minutes from the route starting to each parcel being delivered, averaged |
+| On-time delivery rate | Delivered stops completed by their window end (or, without a window, by the promised ETA + 15 minutes) ÷ delivered stops |
+| Fuel cost per delivery | Fuel cost of dispatched routes ÷ delivered stops |
+| Route efficiency score | Planned km ÷ driven km × 100 (capped at 100), averaged over completed routes with GPS distance |
+| Vehicle utilization rate | Distinct vehicles used ÷ active vehicles × 100 |
+| Delivery completion rate | Delivered stops ÷ stops on dispatched routes × 100 |
+
+Also reported: capacity utilisation (load ÷ capacity), total distance, fuel cost and CO₂, kilometres and rupees saved by optimisation, and the change against the previous period of the same length. When there is no data a KPI shows "—" rather than an invented number.
+
+---
+
+## 11. Non-functional requirements
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Fast route computation, under 10 s for batch planning | Met | 30-stop route in about 50 ms; 300 stops on 10 vehicles in about 480 ms (hard budgets: 3 s per route, 7 s per batch). Covered by tests |
+| Secure user authentication | Met | Section 8: bcrypt, JWT with revocation, lockout, rate limits, validation, audit logging, 0 known vulnerabilities |
+| High availability (99% uptime) | Partly met, by design of the ₹0 budget | Atlas M0 and Vercel are highly available. Render's free plan sleeps after 15 minutes idle, and the first request then takes up to about a minute; the app tells the user so after 4 seconds. A free uptime monitor pinging `/api/health` every 10 minutes keeps the service awake; a paid Render instance removes the limitation |
+| Scalable architecture | Met for this scope | Stateless API (JWT), indexed queries, routing engine as pure functions, so instances can scale horizontally. Rate-limit counters and the geocoding cache are in memory per instance; across several instances they would move to a shared store such as Redis |
+| Responsive UI | Met | Every page verified at 375 px wide (no horizontal scroll) and on desktop up to 1440 px; phone-specific driver dock and bottom-sheet dialogs |
+
+Accessibility: keyboard focus is always visible, there is a skip link, dialogs trap focus and close with Esc, and the command palette uses combobox/listbox semantics. Reduced-motion preferences turn animation off.
+
+---
+
+## 12. Frontend
+
+### 12.1 Screens
+
+| Screen | Path | Roles |
+|---|---|---|
+| Login and registration | `/login` | public |
+| Dashboard | `/dashboard` | all (role-specific content) |
+| Route planner | `/route-planner` | manager |
+| Routes and dispatch | `/routes` | manager |
+| Route detail | `/routes/:id` | manager, the route's driver |
+| Live monitor | `/monitor` | manager |
+| Vehicles | `/vehicles` | manager |
+| Drivers | `/drivers` | manager |
+| My deliveries (driver panel) | `/driver-panel` | driver |
+| Analytics | `/analytics` | manager |
+| Admin | `/admin` | admin |
+| Profile | `/profile` | all |
+| Customer tracking | `/track/:token` | public |
+
+### 12.2 Building blocks
+
+- **Design system "Night Dispatch"**: a deep night-blue background, white and grey text, and a single volt-lime accent (#D4FF3F), kept for route lines, primary actions, active states and key numbers (under 10% of any screen). Space Grotesk for display, Inter for text. The signature motion is the *hop*: routes draw themselves, stops pop in sequence, numbers count up. Tokens live in `tailwind.config.js` and `index.css`; a living style guide is at `/design-system` in development builds.
+- **MapView**: Mapbox GL when a token is set, otherwise an SVG schematic map with the same API (lines, markers, drivers, incidents, map clicks).
+- **Command palette** (⌘K / Ctrl K, or `/`): jump to any page or route and run actions such as auto-dispatch.
+- **Polling** (`usePolling`): pauses or slows in background tabs. Dashboard every 30 s, routes 20 s, live monitor 10 s, tracking page 5 s.
+- **Resilience**: error boundaries with a recovery screen, a session-retry screen on 429 or network failure, skeleton loaders with a "server waking up" notice, and proof photos cached for the session.
+- **IST everywhere**: all operational times are shown in Indian Standard Time regardless of the viewer's device.
+- **Installable**: web manifest and icons, so drivers can add Hopr to their home screen.
+
+---
+
+## 13. Testing
+
+```bash
+npm test --workspace=backend    # 109 tests, in-memory MongoDB
+npm test --workspace=frontend   # 37 tests, jsdom
+npm run lint --workspace=backend && npm run lint --workspace=frontend
+npm run build --workspace=frontend
+```
+
+| Area | Tests | Highlights |
+|---|---|---|
+| Routing engine | 19 | Brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
+| Auth | 10 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit |
+| Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
+| Routes and workflow | 15 | Planning API, batches, assignment, end-to-end driver workflow, delays, recalculation, incidents, re-timing on vehicle change and on start |
+| Auto-dispatch | 9 | Proximity, stale GPS fallback, capacity fit and exact score formula, global matching, preview and confirm with re-validation |
+| Proof of delivery | 9 | Photo, signature and note; type sniffing; 5 MB limit; privacy; deletion with the route |
+| Tracking | 10 | GPS pings and odometer filtering, dedicated rate limit, public page states, privacy |
+| Analytics | 8 | Every KPI formula, empty data, period comparison, CSV safety |
+| Fleet, maps, demo, health, geocoding | 21 | Vehicles and drivers, geocoding validation, demo seeder (including late at night), security headers, landmark matching and de-duplication |
+| Frontend | 37 | Tracking animation never teleports, geo helpers, CSV import, speech, stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache |
+
+An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.
+
+---
+
+## 14. Limitations and future work
+
+**Current limitations**
+
+- Traffic is simulated (section 5). Mapbox's live traffic layer is drawn on the map but not fed into ETAs.
+- One depot per batch. Routes do not chain several trips per vehicle in a day.
+- Free hosting sleeps when idle (section 11).
+- Notifications are in-app and spoken. Email and SMS preferences are stored but not sent (no free provider is wired in).
+
+**Future enhancements** (from the spec)
+
+- AI-based demand prediction
+- An electric-vehicle optimisation mode (charging stops, range limits)
+- A carbon tracking dashboard (CO₂ is already computed per route)
+- Integration with e-commerce platforms (order webhooks to create stops)
+- Predictive maintenance analytics (maintenance dates and distance are already recorded)

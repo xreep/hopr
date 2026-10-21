@@ -1,245 +1,203 @@
-import { useState, useEffect } from 'react'
-import api from '../utils/api'
-import toast from 'react-hot-toast'
+import { useCallback, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
+import usePolling from '../hooks/usePolling'
+import { StatCard, StatusBadge, EmptyState, PageSkeleton } from '../components/ui'
+import Icon from '../components/icons'
+import MapView from '../components/MapView'
+import useMediaQuery from '../hooks/useMediaQuery'
+import { buildFleetMap } from '../utils/fleetMap'
+import { formatKm, formatDuration, initials } from '../utils/format'
+import { formatClock, relativeTime, formatDateTime } from '../utils/time'
 
-const colorClasses = {
-  primary: 'bg-blue-100 text-blue-600',
-  secondary: 'bg-cyan-100 text-cyan-600',
-  success: 'bg-emerald-100 text-emerald-600',
-  warning: 'bg-amber-100 text-amber-600',
-  error: 'bg-red-100 text-red-600',
-  info: 'bg-sky-100 text-sky-600'
-}
-
-function StatsCard({ title, value, trend, trendLabel, icon: Icon, color = 'primary' }) {
-  return (
-    <div className="card stats-card">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="stats-label">{title}</p>
-          <p className="stats-value">{value}</p>
-          {trend !== undefined && (
-            <span className={`stats-trend ${trend >= 0 ? 'positive' : 'negative'}`}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                {trend >= 0 ? (
-                  <path d="M18 15l-6-6-6 6" />
-                ) : (
-                  <path d="M6 9l6 6 6-6" />
-                )}
-              </svg>
-              {Math.abs(trend)}% {trendLabel}
-            </span>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg ${colorClasses[color] || colorClasses.primary}`}>
-          <Icon className="w-6 h-6" aria-hidden="true" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function TruckIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zm0 0L19.5 7.5M13.381 16H8" /></svg>
-}
-function RouteIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" /></svg>
-}
-function ClockIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-}
-function DollarIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-}
-function UserIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-}
-function CheckIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+function greeting() {
+  const hour = Number(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }))
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
 }
 
 export default function Dashboard() {
-  const { user, isAdmin, isFleetManager, isDriver } = useAuth()
-  const [stats, setStats] = useState(null)
-  const [recentRoutes, setRecentRoutes] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { user, isDriver } = useAuth()
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [])
-
-  const fetchDashboardData = async () => {
+  const load = useCallback(async () => {
     try {
-      const [statsRes, routesRes] = await Promise.all([
-        api.get('/dashboard/stats'),
-        api.get('/routes?limit=5&sort=-createdAt')
-      ])
-      setStats(statsRes.data)
-      setRecentRoutes(routesRes.data.routes || [])
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error)
-      setStats({
-        totalRoutes: 0,
-        activeRoutes: 0,
-        completedToday: 0,
-        totalDistance: 0,
-        fuelSaved: 0,
-        onTimeRate: 0
-      })
-    } finally {
-      setLoading(false)
+      const res = await api.get('/dashboard')
+      setData(res.data)
+      setError('')
+    } catch (err) {
+      setError(errorMessage(err, 'Could not load the dashboard'))
     }
-  }
+  }, [])
+  usePolling(load, 30000)
 
-  if (loading) {
-    return (
-      <div className="page-loader">
-        <div className="spinner" />
-      </div>
-    )
-  }
-
-  const driverStats = [
-    { title: 'Assigned Routes', value: stats?.assignedRoutes || 0, icon: RouteIcon, color: 'primary' },
-    { title: 'Completed Today', value: stats?.completedToday || 0, icon: CheckIcon, color: 'success', trend: 12, trendLabel: 'vs yesterday' },
-    { title: 'Distance (km)', value: stats?.totalDistance || 0, icon: TruckIcon, color: 'secondary' },
-    { title: 'On-Time Rate', value: `${stats?.onTimeRate || 0}%`, icon: ClockIcon, color: 'warning', trend: 5, trendLabel: 'this week' }
-  ]
-
-  const managerStats = [
-    { title: 'Total Routes', value: stats?.totalRoutes || 0, icon: RouteIcon, color: 'primary', trend: 8, trendLabel: 'this month' },
-    { title: 'Active Routes', value: stats?.activeRoutes || 0, icon: TruckIcon, color: 'secondary' },
-    { title: 'Fuel Saved (L)', value: stats?.fuelSaved || 0, icon: DollarIcon, color: 'success', trend: 15, trendLabel: 'vs last month' },
-    { title: 'On-Time Rate', value: `${stats?.onTimeRate || 0}%`, icon: ClockIcon, color: 'warning', trend: 3, trendLabel: 'this quarter' }
-  ]
-
-  const adminStats = [
-    { title: 'Total Routes', value: stats?.totalRoutes || 0, icon: RouteIcon, color: 'primary', trend: 12, trendLabel: 'this month' },
-    { title: 'Active Drivers', value: stats?.activeDrivers || 0, icon: UserIcon, color: 'secondary', trend: 5, trendLabel: 'this week' },
-    { title: 'Vehicles', value: stats?.totalVehicles || 0, icon: TruckIcon, color: 'success' },
-    { title: 'Revenue', value: `$${(stats?.revenue || 0).toLocaleString()}`, icon: DollarIcon, color: 'warning', trend: 18, trendLabel: 'vs last month' }
-  ]
-
-  const displayStats = isDriver ? driverStats : isAdmin ? adminStats : managerStats
+  if (!data && !error) return <PageSkeleton label="Loading the dashboard" />
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Welcome back, {user?.name}. Here&apos;s your overview.</p>
+          <h1 className="page-title">{greeting()}, {user?.name?.split(' ')[0]}</h1>
+          <p className="page-subtitle">{isDriver ? 'Your deliveries for today.' : 'Here is how today’s deliveries are going across Ranchi.'}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => window.location.href = '/route-planner'}>
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Route
-        </button>
+        {isDriver
+          ? <Link to="/driver-panel" className="btn btn-primary"><Icon name="navigation" />Open my deliveries</Link>
+          : <Link to="/route-planner" className="btn btn-primary"><Icon name="plus" />Plan routes</Link>}
       </div>
-
-      <div className="grid grid-4 mb-6" role="region" aria-label="Key metrics">
-        {displayStats.map((stat, index) => (
-          <StatsCard key={index} {...stat} />
-        ))}
-      </div>
-
-      <div className="grid grid-2 gap-6">
-        <div className="card">
-          <div className="card-header flex-between">
-            <h3 className="text-lg font-semibold">Recent Routes</h3>
-            <a href="/routes" className="text-sm text-primary">View all</a>
-          </div>
-          <div className="card-body p-0">
-            {recentRoutes.length === 0 ? (
-              <div className="text-center py-8 text-secondary">
-                <RouteIcon className="w-12 h-12 mx-auto mb-3 text-muted" aria-hidden="true" />
-                <p>No routes yet</p>
-                <button className="btn btn-primary mt-3" onClick={() => window.location.href = '/route-planner'}>
-                  Create your first route
-                </button>
-              </div>
-            ) : (
-              <div className="table-container">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Route ID</th>
-                      <th>Stops</th>
-                      <th>Distance</th>
-                      <th>Status</th>
-                      <th>Driver</th>
-                      <th>ETA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentRoutes.map(route => (
-                      <tr key={route._id}>
-                        <td className="font-mono text-sm">{route.routeId?.slice(-8).toUpperCase()}</td>
-                        <td>{route.stops?.length || 0}</td>
-                        <td>{(route.totalDistance || 0).toFixed(1)} km</td>
-                        <td>
-                          <span className={`badge ${getStatusBadge(route.status)}`}>
-                            {route.status}
-                          </span>
-                        </td>
-                        <td>{route.driver?.name || 'Unassigned'}</td>
-                        <td>{route.estimatedTime ? formatTime(route.estimatedTime) : '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header flex-between">
-            <h3 className="text-lg font-semibold">Quick Actions</h3>
-          </div>
-          <div className="card-body">
-            <div className="grid grid-2 gap-3">
-              <button className="btn btn-outline p-4 flex flex-col items-start gap-2" onClick={() => window.location.href = '/route-planner'}>
-                <RouteIcon className="w-6 h-6 text-primary" aria-hidden="true" />
-                <span className="font-medium">Plan Route</span>
-                <span className="text-xs text-muted">Optimize multi-stop delivery</span>
-              </button>
-              <button className="btn btn-outline p-4 flex flex-col items-start gap-2" onClick={() => window.location.href = '/vehicles'}>
-                <TruckIcon className="w-6 h-6 text-secondary" aria-hidden="true" />
-                <span className="font-medium">Manage Vehicles</span>
-                <span className="text-xs text-muted">Add or edit fleet vehicles</span>
-              </button>
-              <button className="btn btn-outline p-4 flex flex-col items-start gap-2" onClick={() => window.location.href = '/drivers'}>
-                <UserIcon className="w-6 h-6 text-success" aria-hidden="true" />
-                <span className="font-medium">Assign Drivers</span>
-                <span className="text-xs text-muted">Match drivers to routes</span>
-              </button>
-              <button className="btn btn-outline p-4 flex flex-col items-start gap-2" onClick={() => window.location.href = '/analytics'}>
-                <svg className="w-6 h-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z" /></svg>
-                <span className="font-medium">View Analytics</span>
-                <span className="text-xs text-muted">Performance insights</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      {error && <div className="alert alert-error mb-4">{error}</div>}
+      {data && (isDriver ? <DriverDashboard data={data} /> : <ManagerDashboard data={data} />)}
     </div>
   )
 }
 
-function getStatusBadge(status) {
-  switch (status?.toLowerCase()) {
-    case 'completed': return 'badge-success'
-    case 'in_progress': return 'badge-primary'
-    case 'pending': return 'badge-warning'
-    case 'failed': return 'badge-error'
-    default: return 'badge-info'
-  }
+function DriverDashboard({ data }) {
+  return (
+    <>
+      <div className="grid grid-4 mb-6">
+        <StatCard label="Delivered today" value={data.completedToday} isKey />
+        <StatCard label="Assigned routes" value={data.assignedRoutes} />
+        <StatCard label="On-time rate" value={data.onTimeRate} suffix="%" hint="Last 30 days" />
+        <StatCard label="Completion rate" value={data.completionRate} suffix="%" hint="Last 30 days" />
+      </div>
+      <div className="card">
+        <div className="card-header"><h3>My routes</h3></div>
+        <div className="card-body">
+          {data.routes.length === 0
+            ? <EmptyState title="No routes assigned yet">You&apos;ll hear an announcement when your fleet manager assigns one.</EmptyState>
+            : <LiveRoutes routes={data.routes} />}
+        </div>
+      </div>
+    </>
+  )
 }
 
-function formatTime(minutes) {
-  const hrs = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+function ManagerDashboard({ data }) {
+  const alerts = [
+    data.unassignedRoutes > 0 && { icon: 'users', text: `${data.unassignedRoutes} route${data.unassignedRoutes > 1 ? 's are' : ' is'} waiting for a driver`, to: '/routes?dispatch=1', action: 'Auto-dispatch' },
+    data.routesNeedingRecalculation > 0 && { icon: 'refresh', text: `${data.routesNeedingRecalculation} route${data.routesNeedingRecalculation > 1 ? 's are' : ' is'} affected by new traffic`, to: '/monitor', action: 'Review' },
+    data.activeIncidents > 0 && { icon: 'alert', text: `${data.activeIncidents} active traffic incident${data.activeIncidents > 1 ? 's' : ''}`, to: '/monitor', action: 'View on map' }
+  ].filter(Boolean)
+
+  return (
+    <>
+      <div className="grid grid-4 mb-6">
+        <StatCard label="Delivered today" value={data.deliveriesToday} isKey hint={`${data.failedToday} failed, ${data.pendingToday} still to go`} />
+        <StatCard label="On-time today" value={data.onTimeRateToday} suffix="%" hint="Within the window, or ETA + 15 min" />
+        <StatCard label="Routes on the road" value={data.activeRoutes} hint={`${data.drivers.onRoute} of ${data.drivers.active} drivers driving`} />
+        <StatCard label="Vehicles ready" value={data.vehicles.active} hint={data.vehicles.maintenance ? `${data.vehicles.maintenance} in maintenance` : 'None in maintenance'} />
+      </div>
+
+      {alerts.length > 0 && (
+        <ul className="card mb-6 divide-y divide-white/5" aria-label="Needs attention">
+          {alerts.map(a => (
+            <li key={a.text} className="flex items-center gap-3 px-5 py-3">
+              <span className="text-signal-amber"><Icon name={a.icon} /></span>
+              <span className="flex-1 text-body">{a.text}</span>
+              <Link to={a.to} className="btn btn-ghost btn-sm">{a.action}<Icon name="arrowRight" /></Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <FleetCard liveRoutes={data.liveRoutes} />
+
+      <div className="card">
+        <div className="card-header flex-between">
+          <h3>Recent routes</h3>
+          <Link to="/routes" className="btn btn-ghost btn-sm">All routes<Icon name="arrowRight" /></Link>
+        </div>
+        {data.recentRoutes.length === 0 ? (
+          <EmptyState title="No routes yet" action={<Link to="/route-planner" className="btn btn-secondary btn-sm">Plan your first route</Link>} />
+        ) : (
+          <ul className="divide-y divide-white/5">
+            {data.recentRoutes.map(r => (
+              <li key={r._id} className="flex items-center gap-3 px-5 py-3">
+                <div className="min-w-0 flex-1">
+                  <Link to={`/routes/${r._id}`} className="font-medium no-underline hover:underline">{r.name}</Link>
+                  <p className="text-micro text-ink-400 truncate">
+                    {r.driver?.name || 'No driver yet'}, {formatKm(r.totalDistance)}, planned {formatDateTime(r.plannedStart)}
+                  </p>
+                </div>
+                <StatusBadge status={r.status} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  )
+}
+
+// The fleet right now: every route on the road on one map, next to the list of drivers.
+// Pointing at a driver highlights their route; the rest stay muted.
+function FleetCard({ liveRoutes }) {
+  const [routes, setRoutes] = useState([])
+  const [focus, setFocus] = useState(null)
+  const narrow = useMediaQuery('(max-width: 1100px)')
+  const loadFleet = useCallback(async () => {
+    try {
+      const res = await api.get('/routes', { params: { status: 'active', withGeometry: true, limit: 50 } })
+      setRoutes(res.data.routes)
+    } catch { /* the list beside the map still shows progress */ }
+  }, [])
+  usePolling(loadFleet, 15000)
+  const map = useMemo(() => buildFleetMap(routes, focus, { focusOnly: false }), [routes, focus])
+
+  return (
+    <section className="card fleet-card mb-6" aria-label="Fleet on the road">
+      <div className="fleet-map">
+        <MapView lines={map.lines} points={map.points} drivers={map.drivers} fitKey={`fleet-${routes.map(r => r._id).join()}`} height={narrow ? 300 : 460} />
+        {liveRoutes.length === 0 && <p className="fleet-empty">No drivers on the road</p>}
+      </div>
+      <div className="fleet-side">
+        <div className="card-header flex-between">
+          <h3>On the road</h3>
+          <Link to="/monitor" className="btn btn-ghost btn-sm">Live monitor<Icon name="arrowRight" /></Link>
+        </div>
+        <div className="card-body">
+          {liveRoutes.length === 0
+            ? <EmptyState title="Nothing on the road right now">Routes appear here as soon as a driver starts one.</EmptyState>
+            : <LiveRoutes routes={liveRoutes} focus={focus} onFocus={setFocus} />}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function LiveRoutes({ routes, focus, onFocus }) {
+  return (
+    <ul className="live-list">
+      {routes.map(r => {
+        const pct = (r.progress.done / Math.max(1, r.progress.total)) * 100
+        return (
+          <li key={r._id} className={`live-item ${focus === r._id ? 'is-focused' : ''}`}
+            onMouseEnter={onFocus && (() => onFocus(r._id))} onMouseLeave={onFocus && (() => onFocus(null))}
+            onFocus={onFocus && (() => onFocus(r._id))} onBlur={onFocus && (() => onFocus(null))}>
+            <div className="flex items-start gap-3">
+              <span className="avatar avatar-sm" aria-hidden="true">{initials(r.driver?.name || r.name)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex-between gap-2">
+                  <Link to={`/routes/${r._id}`} className="font-medium truncate no-underline hover:underline">{r.driver?.name || r.name}</Link>
+                  <span className="eta-chip">{r.progress.done}/{r.progress.total}</span>
+                </div>
+                <p className="text-micro text-ink-400 truncate">{r.name}, {formatKm(r.totalDistance)}, {formatDuration(r.estimatedTime)}</p>
+                <div className="progress mt-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.progress.done} of ${r.progress.total} stops done`}>
+                  <span style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-micro text-ink-300 mt-1.5">
+                  {r.nextStop ? <>Next: {r.nextStop.customerName || r.nextStop.address.split(',')[0]} at <span className="eta-chip">{formatClock(r.nextStop.estimatedArrival)}</span></> : 'All stops done'}
+                  {r.lastPingSecondsAgo !== null && <span className="text-ink-400">. GPS {relativeTime(Date.now() - r.lastPingSecondsAgo * 1000)}</span>}
+                  {r.lateStops > 0 && <span className="text-signal-amber">. {r.lateStops} at risk</span>}
+                  {r.needsRecalculation && <span className="text-signal-amber">. Traffic changed</span>}
+                </p>
+              </div>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
 }

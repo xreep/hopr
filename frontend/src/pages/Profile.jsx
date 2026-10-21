@@ -1,321 +1,188 @@
 import { useState } from 'react'
-import api from '../utils/api'
 import toast from 'react-hot-toast'
+import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
+import Icon from '../components/icons'
+import { initials } from '../utils/format'
+import { formatDate, formatDateTime } from '../utils/time'
+import PasswordInput from '../components/PasswordInput'
+
+const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'Driver' }
+
+const CHANNELS = [
+  { key: 'push', label: 'In-app notifications', desc: 'Toasts and voice announcements while Hopr is open' },
+  { key: 'email', label: 'Email', desc: 'Summaries and alerts sent to your inbox' },
+  { key: 'sms', label: 'SMS', desc: 'Text messages for urgent changes' }
+]
+const TOPICS = [
+  { key: 'routeUpdates', label: 'Route changes', desc: 'New assignments, recalculations and delays' },
+  { key: 'maintenanceAlerts', label: 'Vehicle maintenance', desc: 'Upcoming service dates for your vehicles' },
+  { key: 'weeklyReports', label: 'Weekly report', desc: 'A Monday summary of last week’s deliveries' }
+]
 
 export default function Profile() {
-  const { user, updateUser } = useAuth()
-  const [activeTab, setActiveTab] = useState('profile')
-  const [loading, setLoading] = useState(false)
-  
+  const { user, updateUser, logout } = useAuth()
+  const [saving, setSaving] = useState('')
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
     email: user?.email || '',
     phone: user?.phone || '',
     address: user?.address || ''
   })
-
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  })
-
+  const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  // Start from the preferences saved on the account
   const [notifications, setNotifications] = useState({
-    email: true,
-    sms: false,
-    push: true,
-    routeUpdates: true,
-    maintenanceAlerts: true,
-    weeklyReports: false
+    email: true, sms: false, push: true, routeUpdates: true, maintenanceAlerts: true, weeklyReports: false,
+    ...(user?.notifications || {})
   })
 
-  const handleProfileSubmit = async (e) => {
+  const saveProfile = async e => {
     e.preventDefault()
-    setLoading(true)
+    setSaving('profile')
     try {
-      const response = await api.put('/auth/profile', profileData)
-      updateUser(response.data.user)
-      toast.success('Profile updated')
-    } catch (error) {
-      toast.error('Failed to update profile')
+      const res = await api.put('/auth/profile', profileData)
+      updateUser(res.data.user)
+      toast.success('Profile saved')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not save your profile'))
     } finally {
-      setLoading(false)
+      setSaving('')
     }
   }
 
-  const handlePasswordSubmit = async (e) => {
+  const changePassword = async e => {
     e.preventDefault()
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('Passwords do not match')
-      return
-    }
-    if (passwordData.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters')
-      return
-    }
-    setLoading(true)
+    if (passwordData.newPassword !== passwordData.confirmPassword) return toast.error('The new passwords don’t match')
+    if (passwordData.newPassword.length < 6) return toast.error('Use at least 6 characters')
+    setSaving('password')
     try {
-      await api.put('/auth/password', {
-        currentPassword: passwordData.currentPassword,
-        newPassword: passwordData.newPassword
-      })
-      toast.success('Password changed')
+      await api.put('/auth/password', { currentPassword: passwordData.currentPassword, newPassword: passwordData.newPassword })
+      toast.success('Password changed. Sign in again with the new one.')
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to change password')
+      // Existing tokens are revoked server-side (tokenVersion), so sign out locally too
+      setTimeout(() => { logout() }, 1200)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not change the password'))
     } finally {
-      setLoading(false)
+      setSaving('')
     }
   }
 
-  const handleNotificationChange = (key, value) => {
-    setNotifications(prev => ({ ...prev, [key]: value }))
-  }
-
-  const handleNotificationSave = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+  const saveNotifications = async () => {
+    setSaving('notifications')
     try {
-      await api.put('/auth/notifications', notifications)
-      toast.success('Notifications updated')
-    } catch (error) {
-      toast.error('Failed to update notifications')
+      const res = await api.put('/auth/notifications', notifications)
+      updateUser({ notifications: res.data.notifications })
+      toast.success('Notification preferences saved')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not save preferences'))
     } finally {
-      setLoading(false)
+      setSaving('')
     }
   }
 
-  const tabs = [
-    { id: 'profile', label: 'Profile', icon: UserIcon },
-    { id: 'security', label: 'Security', icon: LockIcon },
-    { id: 'notifications', label: 'Notifications', icon: BellIcon }
-  ]
+  const setP = (key, value) => setProfileData(prev => ({ ...prev, [key]: value }))
+  const setPw = (key, value) => setPasswordData(prev => ({ ...prev, [key]: value }))
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-[880px]">
       <div className="page-header">
-        <h1 className="page-title">Profile Settings</h1>
-        <p className="page-subtitle">Manage your account information and preferences</p>
-      </div>
-
-      <div className="card">
-        <div className="card-header border-b">
-          <nav className="flex gap-1" role="tablist" aria-label="Profile sections">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`${tab.id}-panel`}
-                id={`${tab.id}-tab`}
-                className={`btn btn-ghost flex-1 flex items-center justify-center gap-2 ${
-                  activeTab === tab.id ? 'bg-primary/5 text-primary' : 'text-secondary hover:text-primary'
-                }`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <tab.icon className="w-4 h-4" aria-hidden="true" />
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div className="card-body">
-          {activeTab === 'profile' && (
-            <form onSubmit={handleProfileSubmit} id="profile-panel" role="tabpanel" aria-labelledby="profile-tab" className="space-y-4">
-              <div className="grid grid-2 gap-4">
-                <div className="form-group">
-                  <label htmlFor="name" className="form-label">Full Name</label>
-                  <input
-                    type="text"
-                    id="name"
-                    className="form-input"
-                    value={profileData.name}
-                    onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="email" className="form-label">Email</label>
-                  <input
-                    type="email"
-                    id="email"
-                    className="form-input"
-                    value={profileData.email}
-                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="phone" className="form-label">Phone Number</label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    className="form-input"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="address" className="form-label">Address</label>
-                  <input
-                    type="text"
-                    id="address"
-                    className="form-input"
-                    value={profileData.address}
-                    onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                    placeholder="Home/Base address"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? <span className="flex items-center gap-2"><span className="spinner" />Saving...</span> : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {activeTab === 'security' && (
-            <form onSubmit={handlePasswordSubmit} id="security-panel" role="tabpanel" aria-labelledby="security-tab" className="space-y-4">
-              <div className="form-group">
-                <label htmlFor="currentPassword" className="form-label">Current Password</label>
-                <input
-                  type="password"
-                  id="currentPassword"
-                  className="form-input"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  required
-                  autoComplete="current-password"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="newPassword" className="form-label">New Password</label>
-                <input
-                  type="password"
-                  id="newPassword"
-                  className="form-input"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  required
-                  minLength={6}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="confirmPassword" className="form-label">Confirm New Password</label>
-                <input
-                  type="password"
-                  id="confirmPassword"
-                  className="form-input"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? <span className="flex items-center gap-2"><span className="spinner" />Changing...</span> : 'Change Password'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {activeTab === 'notifications' && (
-            <form onSubmit={handleNotificationSave} id="notifications-panel" role="tabpanel" aria-labelledby="notifications-tab" className="space-y-6">
-              <div>
-                <h4 className="font-medium mb-3">Notification Channels</h4>
-                <div className="space-y-3">
-                  {[
-                    { key: 'email', label: 'Email', desc: 'Receive notifications via email' },
-                    { key: 'sms', label: 'SMS', desc: 'Receive notifications via text message' },
-                    { key: 'push', label: 'Push Notifications', desc: 'Receive notifications in the app' }
-                  ].map(item => (
-                    <label key={item.key} className="flex items-center gap-3 p-3 bg-background rounded-lg cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 text-primary rounded border-border focus:ring-primary"
-                        checked={notifications[item.key]}
-                        onChange={(e) => handleNotificationChange(item.key, e.target.checked)}
-                      />
-                      <div>
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-sm text-muted">{item.desc}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <h4 className="font-medium mb-3">Notification Types</h4>
-                <div className="space-y-3">
-                  {[
-                    { key: 'routeUpdates', label: 'Route Updates', desc: 'Changes to assigned routes and schedules' },
-                    { key: 'maintenanceAlerts', label: 'Vehicle Maintenance', desc: 'Upcoming maintenance and service reminders' },
-                    { key: 'weeklyReports', label: 'Weekly Reports', desc: 'Weekly performance summary emails' }
-                  ].map(item => (
-                    <label key={item.key} className="flex items-center gap-3 p-3 bg-background rounded-lg cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 text-primary rounded border-border focus:ring-primary"
-                        checked={notifications[item.key]}
-                        onChange={(e) => handleNotificationChange(item.key, e.target.checked)}
-                      />
-                      <div>
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-sm text-muted">{item.desc}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? <span className="flex items-center gap-2"><span className="spinner" />Saving...</span> : 'Save Preferences'}
-                </button>
-              </div>
-            </form>
-          )}
+        <div>
+          <h1 className="page-title">Profile</h1>
+          <p className="page-subtitle">Your details, password and how Hopr keeps you informed.</p>
         </div>
       </div>
 
-      <div className="card mt-6">
-        <div className="card-header">
-          <h3 className="font-semibold">Account Info</h3>
+      <section className="card p-5 mb-5 flex flex-wrap items-center gap-5" aria-label="Account">
+        <span className="avatar !w-16 !h-16 !text-xl" aria-hidden="true">{initials(user?.name)}</span>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-h2 font-semibold truncate">{user?.name}</p>
+          <p className="text-body text-ink-300">{ROLE_LABELS[user?.role]}, member since {formatDate(user?.createdAt)}</p>
         </div>
-        <div className="card-body">
-          <dl className="grid grid-2 gap-4 text-sm">
-            <dt className="text-muted">User ID</dt>
-            <dd className="font-mono font-medium">{user?._id}</dd>
-            <dt className="text-muted">Role</dt>
-            <dd className="capitalize">{user?.role?.replace('_', ' ')}</dd>
-            <dt className="text-muted">Member Since</dt>
-            <dd>{user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</dd>
-            <dt className="text-muted">Last Login</dt>
-            <dd>{user?.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</dd>
-          </dl>
-        </div>
+        <dl className="text-small">
+          <dt className="text-ink-400">Last signed in</dt>
+          <dd className="text-ink-50">{user?.lastLogin ? formatDateTime(user.lastLogin) : 'Never'}</dd>
+        </dl>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <form className="card" onSubmit={saveProfile} aria-labelledby="details-title">
+          <div className="card-header flex items-center gap-2"><Icon name="user" /><h3 id="details-title">Personal details</h3></div>
+          <div className="card-body">
+            <div className="form-group">
+              <label htmlFor="name" className="form-label">Full name</label>
+              <input id="name" className="form-input" value={profileData.name} onChange={e => setP('name', e.target.value)} required maxLength={100} autoComplete="name" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="email" className="form-label">Email</label>
+              <input id="email" type="email" className="form-input" value={profileData.email} onChange={e => setP('email', e.target.value)} required autoComplete="email" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="phone" className="form-label">Phone</label>
+              <input id="phone" type="tel" className="form-input" value={profileData.phone} onChange={e => setP('phone', e.target.value)} placeholder="+91 98xxx xxxxx" maxLength={20} autoComplete="tel" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="address" className="form-label">Home or base address</label>
+              <input id="address" className="form-input" value={profileData.address} onChange={e => setP('address', e.target.value)} placeholder="Where you start your day" maxLength={300} autoComplete="street-address" />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={saving === 'profile'}>
+              {saving === 'profile' ? <><span className="spinner spinner-sm" /> Saving</> : 'Save details'}
+            </button>
+          </div>
+        </form>
+
+        <form className="card" onSubmit={changePassword} aria-labelledby="password-title">
+          <div className="card-header flex items-center gap-2"><Icon name="lock" /><h3 id="password-title">Password</h3></div>
+          <div className="card-body">
+            <div className="form-group">
+              <label htmlFor="currentPassword" className="form-label">Current password</label>
+              <PasswordInput id="currentPassword" value={passwordData.currentPassword} onChange={e => setPw('currentPassword', e.target.value)} required autoComplete="current-password" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="newPassword" className="form-label">New password</label>
+              <PasswordInput id="newPassword" value={passwordData.newPassword} onChange={e => setPw('newPassword', e.target.value)} required minLength={6} maxLength={128} autoComplete="new-password" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="confirmPassword" className="form-label">Confirm new password</label>
+              <PasswordInput id="confirmPassword" value={passwordData.confirmPassword} onChange={e => setPw('confirmPassword', e.target.value)} required autoComplete="new-password" />
+            </div>
+            <p className="text-micro text-ink-400 mb-4">Changing it signs you out everywhere, including other devices.</p>
+            <button type="submit" className="btn btn-secondary" disabled={saving === 'password'}>
+              {saving === 'password' ? <><span className="spinner spinner-sm" /> Changing</> : 'Change password'}
+            </button>
+          </div>
+        </form>
       </div>
+
+      <section className="card mt-5" aria-labelledby="notify-title">
+        <div className="card-header flex items-center gap-2"><Icon name="bell" /><h3 id="notify-title">Notifications</h3></div>
+        <div className="card-body grid gap-x-10 md:grid-cols-2">
+          {[['How to reach you', CHANNELS], ['What to tell you about', TOPICS]].map(([heading, items]) => (
+            <div key={heading}>
+              <p className="text-small font-medium text-ink-300 mb-1">{heading}</p>
+              {items.map(item => (
+                <div key={item.key} className="setting-row">
+                  <label htmlFor={`n-${item.key}`} className="min-w-0 cursor-pointer">
+                    <span className="block text-body font-medium">{item.label}</span>
+                    <span className="block text-micro text-ink-400">{item.desc}</span>
+                  </label>
+                  <span className="switch">
+                    <input id={`n-${item.key}`} type="checkbox" role="switch" checked={Boolean(notifications[item.key])}
+                      onChange={e => setNotifications(prev => ({ ...prev, [item.key]: e.target.checked }))} />
+                    <span className="switch-track" aria-hidden="true" />
+                    <span className="switch-thumb" aria-hidden="true" />
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="px-5 pb-5">
+          <button type="button" className="btn btn-secondary" onClick={saveNotifications} disabled={saving === 'notifications'}>
+            {saving === 'notifications' ? <><span className="spinner spinner-sm" /> Saving</> : 'Save preferences'}
+          </button>
+        </div>
+      </section>
     </div>
   )
-}
-
-function UserIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-}
-
-function LockIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-}
-
-function BellIcon({ className }) {
-  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
 }

@@ -40,6 +40,11 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date
   },
+  // Last GPS fix reported from the driver app (used by auto-dispatch proximity scoring)
+  lastLocation: {
+    coordinates: { type: [Number], default: undefined },
+    updatedAt: Date
+  },
   // H10: Per-account brute-force lockout
   failedAttempts: {
     type: Number,

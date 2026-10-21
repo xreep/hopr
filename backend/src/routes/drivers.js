@@ -1,33 +1,29 @@
 import express from 'express'
-import { body, query, validationResult } from 'express-validator'
+import { body, query } from 'express-validator'
 import User from '../models/User.js'
 import Route from '../models/Route.js'
+import Vehicle from '../models/Vehicle.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { validateRequest, escapeRegex, objectIdParam } from '../middleware/validate.js'
+import { driverPerformance } from '../services/metrics.js'
 
 const router = express.Router()
-
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
-}
+router.param('id', objectIdParam)
 
 router.get('/', authenticate, authorize('admin', 'fleet_manager'), [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }),
-  query('search').optional().trim(),
+  query('search').optional().trim().isLength({ max: 100 }),
   validateRequest
 ], async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 20
+    const limit = parseInt(req.query.limit) || 50
     const skip = (page - 1) * limit
 
     const filter = { role: 'driver' }
     if (req.query.search) {
-      const search = req.query.search
+      const search = escapeRegex(req.query.search)
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
@@ -35,59 +31,67 @@ router.get('/', authenticate, authorize('admin', 'fleet_manager'), [
     }
 
     const [drivers, total] = await Promise.all([
-      User.find(filter)
-        .select('-password')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
+      User.find(filter).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limit),
       User.countDocuments(filter)
     ])
 
-    const driverStats = await Promise.all(drivers.map(async (driver) => {
-      const routes = await Route.find({ driver: driver._id })
-      const completed = routes.filter(r => r.status === 'completed')
-      const totalDeliveries = completed.reduce((sum, r) => sum + (r.stops?.length || 0), 0)
-      const onTime = completed.filter(r => {
-        if (!r.stops) return true
-        return r.stops.every(s => !s.estimatedArrival || new Date(s.actualArrival) <= new Date(s.estimatedArrival))
-      }).length
-      const onTimeRate = completed.length > 0 ? (onTime / completed.length) * 100 : 0
-      const avgRating = 4.5 + Math.random() * 0.5
-
-      return {
-        _id: driver._id,
-        name: driver.name,
-        email: driver.email,
-        phone: driver.phone,
-        isActive: driver.isActive,
-        totalDeliveries,
-        onTimeRate: Math.round(onTimeRate * 10) / 10,
-        rating: Math.round(avgRating * 10) / 10,
-        assignedRoutes: routes.filter(r => r.status === 'active').length
-      }
-    }))
+    // One query each for routes and vehicles instead of one per driver
+    const ids = drivers.map(d => d._id)
+    const [routes, vehicles] = await Promise.all([
+      Route.find({ driver: { $in: ids } }).select('driver status stops totalDistance actualDistance plannedStart startedAt createdAt routeId name').lean(),
+      Vehicle.find({ driver: { $in: ids } }).select('driver vehicleId name type licensePlate capacity').lean()
+    ])
+    const routesByDriver = new Map()
+    for (const r of routes) {
+      const key = r.driver.toString()
+      if (!routesByDriver.has(key)) routesByDriver.set(key, [])
+      routesByDriver.get(key).push(r)
+    }
+    const vehicleByDriver = new Map(vehicles.map(v => [v.driver.toString(), v]))
 
     res.json({
-      drivers: driverStats,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
-      }
+      drivers: drivers.map(driver => {
+        const mine = routesByDriver.get(driver._id.toString()) || []
+        const active = mine.find(r => r.status === 'active')
+        return {
+          _id: driver._id,
+          name: driver.name,
+          email: driver.email,
+          phone: driver.phone,
+          isActive: driver.isActive,
+          lastLogin: driver.lastLogin,
+          lastLocation: driver.lastLocation,
+          vehicle: vehicleByDriver.get(driver._id.toString()) || null,
+          activeRoute: active ? { _id: active._id, routeId: active.routeId, name: active.name } : null,
+          plannedRoutes: mine.filter(r => r.status === 'planned').length,
+          ...driverPerformance(mine)
+        }
+      }),
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch drivers' })
   }
 })
 
+// Active drivers with their vehicle and whether they are currently on a route
 router.get('/available', authenticate, authorize('admin', 'fleet_manager'), async (req, res) => {
   try {
-    const drivers = await User.find({ 
-      role: 'driver',
-      isActive: true
-    }).select('name email phone')
-    res.json({ drivers })
+    const drivers = await User.find({ role: 'driver', isActive: true }).select('name email phone lastLocation').lean()
+    const ids = drivers.map(d => d._id)
+    const [vehicles, busy] = await Promise.all([
+      Vehicle.find({ driver: { $in: ids } }).select('driver vehicleId name type capacity status').lean(),
+      Route.distinct('driver', { driver: { $in: ids }, status: 'active' })
+    ])
+    const vehicleByDriver = new Map(vehicles.map(v => [v.driver.toString(), v]))
+    const busySet = new Set(busy.map(String))
+    res.json({
+      drivers: drivers.map(d => ({
+        ...d,
+        vehicle: vehicleByDriver.get(d._id.toString()) || null,
+        onRoute: busySet.has(d._id.toString())
+      }))
+    })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch available drivers' })
   }
@@ -95,25 +99,21 @@ router.get('/available', authenticate, authorize('admin', 'fleet_manager'), asyn
 
 router.get('/:id', authenticate, authorize('admin', 'fleet_manager'), async (req, res) => {
   try {
-    const driver = await User.findById(req.params.id).select('-password')
-    if (!driver || driver.role !== 'driver') {
+    const driver = await User.findOne({ _id: req.params.id, role: 'driver' }).select('-password')
+    if (!driver) {
       return res.status(404).json({ message: 'Driver not found' })
     }
 
-    const routes = await Route.find({ driver: driver._id })
-      .populate('vehicle', 'vehicleId name')
-      .sort({ createdAt: -1 })
-      .limit(20)
+    const [routes, vehicle] = await Promise.all([
+      Route.find({ driver: driver._id })
+        .select('-alternatives -geometry -stops.trackingToken')
+        .populate('vehicle', 'vehicleId name')
+        .sort({ createdAt: -1 })
+        .limit(50),
+      Vehicle.findOne({ driver: driver._id }).select('vehicleId name type licensePlate capacity')
+    ])
 
-    const stats = {
-      totalRoutes: routes.length,
-      completedRoutes: routes.filter(r => r.status === 'completed').length,
-      activeRoutes: routes.filter(r => r.status === 'active').length,
-      totalDistance: routes.reduce((sum, r) => sum + (r.totalDistance || 0), 0),
-      totalDeliveries: routes.reduce((sum, r) => sum + (r.stops?.length || 0), 0)
-    }
-
-    res.json({ driver, routes, stats })
+    res.json({ driver, vehicle, routes: routes.slice(0, 20), stats: driverPerformance(routes) })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch driver' })
   }
@@ -125,8 +125,9 @@ router.patch('/:id/status', authenticate, authorize('admin', 'fleet_manager'), [
 ], async (req, res) => {
   try {
     const { isActive } = req.body
-    const driver = await User.findByIdAndUpdate(
-      req.params.id,
+    // Scoped to drivers: managers must not be able to deactivate admins or other managers
+    const driver = await User.findOneAndUpdate(
+      { _id: req.params.id, role: 'driver' },
       { isActive },
       { new: true }
     ).select('-password')

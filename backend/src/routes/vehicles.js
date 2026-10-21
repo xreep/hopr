@@ -1,98 +1,120 @@
 import express from 'express'
-import { body, query, validationResult } from 'express-validator'
+import { body, query } from 'express-validator'
 import Vehicle from '../models/Vehicle.js'
+import User from '../models/User.js'
+import Route from '../models/Route.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { validateRequest, pick, escapeRegex, objectIdParam } from '../middleware/validate.js'
+import { VEHICLE_TYPES, FUEL_TYPES, VEHICLE_PROFILES } from '../config/fleet.js'
 
 const router = express.Router()
-
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() })
-  }
-  next()
-}
+router.param('id', objectIdParam)
 
 // H4: Whitelist allowed fields for vehicle creation/update
-const vehicleCreateFields = [
+const vehicleFields = [
   'vehicleId', 'name', 'type', 'fuelType', 'mileage', 'capacity',
-  'licensePlate', 'driver', 'status', 'purchaseDate', 'lastMaintenance', 'nextMaintenance'
+  'licensePlate', 'status', 'purchaseDate', 'lastMaintenance', 'nextMaintenance'
 ]
 
-const vehicleUpdateFields = [
-  'vehicleId', 'name', 'type', 'fuelType', 'mileage', 'capacity',
-  'licensePlate', 'driver', 'status', 'purchaseDate', 'lastMaintenance', 'nextMaintenance'
-]
+const isObjectIdOrNull = v => v === null || v === '' || /^[a-f\d]{24}$/i.test(v)
 
-function pick(obj, allowed) {
-  const picked = {}
-  for (const key of allowed) {
-    if (obj[key] !== undefined) picked[key] = obj[key]
-  }
-  return picked
+const vehicleValidators = (optional) => {
+  const req = chain => (optional ? chain.optional() : chain)
+  return [
+    req(body('vehicleId')).trim().notEmpty().isLength({ max: 30 }).withMessage('Vehicle ID is required'),
+    req(body('name')).trim().notEmpty().isLength({ max: 80 }).withMessage('Name is required'),
+    req(body('type')).isIn(VEHICLE_TYPES).withMessage('Invalid type'),
+    req(body('fuelType')).isIn(FUEL_TYPES).withMessage('Invalid fuel type'),
+    body('mileage').optional({ values: 'falsy' }).isFloat({ min: 0, max: 200 }).withMessage('Mileage must be 0-200'),
+    req(body('capacity')).isFloat({ min: 1, max: 50000 }).withMessage('Capacity (kg) is required'),
+    req(body('licensePlate')).trim().notEmpty().isLength({ max: 20 }).withMessage('License plate is required'),
+    body('driver').optional({ nullable: true }).custom(isObjectIdOrNull).withMessage('Invalid driver'),
+    body('status').optional().isIn(['active', 'maintenance', 'inactive']),
+    // Blank date inputs arrive as "" and mean "not set"
+    body('purchaseDate').optional({ values: 'falsy' }).isISO8601(),
+    body('lastMaintenance').optional({ values: 'falsy' }).isISO8601(),
+    body('nextMaintenance').optional({ values: 'falsy' }).isISO8601(),
+    validateRequest
+  ]
 }
 
-router.post('/', authenticate, authorize('admin', 'fleet_manager'), [
-  body('vehicleId').trim().notEmpty().withMessage('Vehicle ID is required'),
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('type').isIn(['van', 'truck', 'bike', 'ev_van']).withMessage('Invalid type'),
-  body('fuelType').isIn(['diesel', 'petrol', 'electric', 'cng', 'hybrid']).withMessage('Invalid fuel type'),
-  body('mileage').optional().isFloat({ min: 0 }),
-  body('capacity').isFloat({ min: 0 }).withMessage('Capacity is required'),
-  body('licensePlate').trim().notEmpty().withMessage('License plate is required'),
-  body('driver').optional().isMongoId(),
-  body('status').optional().isIn(['active', 'maintenance', 'inactive']),
-  body('purchaseDate').optional().isISO8601(),
-  body('lastMaintenance').optional().isISO8601(),
-  body('nextMaintenance').optional().isISO8601(),
-  validateRequest
-], async (req, res) => {
+// `fallbackType` is used to default a blank mileage (e.g. electric vans entered without km/kWh)
+function cleanVehicleData(source, { fallbackType } = {}) {
+  const data = pick(source, vehicleFields)
+  for (const key of ['purchaseDate', 'lastMaintenance', 'nextMaintenance']) {
+    if (data[key] === '') data[key] = null
+  }
+  if (data.vehicleId) data.vehicleId = data.vehicleId.toUpperCase()
+  if (data.licensePlate) data.licensePlate = data.licensePlate.toUpperCase().replace(/\s+/g, '')
+  const type = data.type || fallbackType
+  const mileageGiven = Object.hasOwn(source, 'mileage')
+  if (mileageGiven && !(Number(source.mileage) > 0)) {
+    data.mileage = VEHICLE_PROFILES[type]?.mileage
+  } else if (!mileageGiven && !fallbackType) {
+    data.mileage = VEHICLE_PROFILES[type]?.mileage // create without mileage
+  }
+  return data
+}
+
+// A driver drives one vehicle at a time: assigning moves them off any other vehicle
+async function resolveDriver(driverValue, vehicleId) {
+  if (driverValue === undefined) return undefined
+  if (driverValue === null || driverValue === '') return null
+  const driver = await User.findOne({ _id: driverValue, role: 'driver', isActive: true })
+  if (!driver) {
+    const err = new Error('Driver not found or inactive')
+    err.status = 400
+    throw err
+  }
+  await Vehicle.updateMany({ driver: driver._id, _id: { $ne: vehicleId } }, { driver: null })
+  return driver._id
+}
+
+function handleError(res, error, fallback) {
+  if (error.status) return res.status(error.status).json({ message: error.message })
+  if (error.code === 11000) return res.status(409).json({ message: 'Vehicle ID or license plate already exists' })
+  if (error.name === 'ValidationError') return res.status(400).json({ message: Object.values(error.errors)[0]?.message })
+  return res.status(500).json({ message: fallback })
+}
+
+router.post('/', authenticate, authorize('admin', 'fleet_manager'), vehicleValidators(false), async (req, res) => {
   try {
-    const allowedData = pick(req.body, vehicleCreateFields)
-    const existing = await Vehicle.findOne({ 
-      $or: [
-        { vehicleId: allowedData.vehicleId?.toUpperCase() },
-        { licensePlate: allowedData.licensePlate?.toUpperCase() }
-      ]
-    })
+    const data = cleanVehicleData(req.body)
+    const existing = await Vehicle.findOne({ $or: [{ vehicleId: data.vehicleId }, { licensePlate: data.licensePlate }] })
     if (existing) {
-      return res.status(400).json({ message: 'Vehicle ID or license plate already exists' })
+      return res.status(409).json({ message: 'Vehicle ID or license plate already exists' })
     }
 
-    const vehicle = await Vehicle.create({
-      ...allowedData,
-      vehicleId: allowedData.vehicleId?.toUpperCase(),
-      licensePlate: allowedData.licensePlate?.toUpperCase()
-    })
-
-    if (req.body.driver) {
-      await vehicle.populate('driver', 'name email')
-    }
+    const vehicle = new Vehicle(data)
+    const driver = await resolveDriver(req.body.driver, vehicle._id)
+    if (driver !== undefined) vehicle.driver = driver
+    await vehicle.save()
+    await vehicle.populate('driver', 'name email phone')
 
     res.status(201).json({ vehicle })
   } catch (error) {
-    res.status(500).json({ message: 'Failed to create vehicle' })
+    handleError(res, error, 'Failed to create vehicle')
   }
 })
 
-router.get('/', authenticate, [
+router.get('/', authenticate, authorize('admin', 'fleet_manager'), [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }),
   query('status').optional().isIn(['active', 'maintenance', 'inactive']),
-  query('fuelType').optional().isIn(['diesel', 'petrol', 'electric', 'cng', 'hybrid']),
-  query('search').optional().trim(),
+  query('fuelType').optional().isIn(FUEL_TYPES),
+  query('search').optional().trim().isLength({ max: 100 }),
   validateRequest
 ], async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 20
+    const limit = parseInt(req.query.limit) || 50
     const skip = (page - 1) * limit
 
     const filter = {}
     if (req.query.status) filter.status = req.query.status
     if (req.query.fuelType) filter.fuelType = req.query.fuelType
     if (req.query.search) {
-      const search = req.query.search
+      const search = escapeRegex(req.query.search)
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { vehicleId: { $regex: search, $options: 'i' } },
@@ -111,31 +133,25 @@ router.get('/', authenticate, [
 
     res.json({
       vehicles,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
-      }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch vehicles' })
   }
 })
 
+// Active vehicles without a driver
 router.get('/available', authenticate, authorize('admin', 'fleet_manager'), async (req, res) => {
   try {
-    const vehicles = await Vehicle.find({ 
-      status: 'active',
-      driver: { $exists: false } 
-    }).select('vehicleId name type capacity licensePlate')
+    const vehicles = await Vehicle.find({ status: 'active', driver: null })
+      .select('vehicleId name type fuelType capacity mileage licensePlate')
     res.json({ vehicles })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch available vehicles' })
   }
 })
 
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, authorize('admin', 'fleet_manager'), async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id).populate('driver', 'name email phone')
     if (!vehicle) {
@@ -147,69 +163,49 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 })
 
-router.put('/:id', authenticate, authorize('admin', 'fleet_manager'), [
-  body('vehicleId').optional().trim().notEmpty(),
-  body('name').optional().trim().notEmpty(),
-  body('type').optional().isIn(['van', 'truck', 'bike', 'ev_van']),
-  body('fuelType').optional().isIn(['diesel', 'petrol', 'electric', 'cng', 'hybrid']),
-  body('mileage').optional().isFloat({ min: 0 }),
-  body('capacity').optional().isFloat({ min: 0 }),
-  body('licensePlate').optional().trim().notEmpty(),
-  body('driver').optional().isMongoId(),
-  body('status').optional().isIn(['active', 'maintenance', 'inactive']),
-  body('purchaseDate').optional().isISO8601(),
-  body('lastMaintenance').optional().isISO8601(),
-  body('nextMaintenance').optional().isISO8601(),
-  validateRequest
-], async (req, res) => {
+router.put('/:id', authenticate, authorize('admin', 'fleet_manager'), vehicleValidators(true), async (req, res) => {
   try {
-    const allowedData = pick(req.body, vehicleUpdateFields)
-    if (allowedData.vehicleId) allowedData.vehicleId = allowedData.vehicleId.toUpperCase()
-    if (allowedData.licensePlate) allowedData.licensePlate = allowedData.licensePlate.toUpperCase()
-
-    const vehicle = await Vehicle.findByIdAndUpdate(
-      req.params.id,
-      allowedData,
-      { new: true, runValidators: true }
-    ).populate('driver', 'name email phone')
-
-    if (!vehicle) {
-      return res.status(404).json({ message: 'Vehicle not found' })
-    }
-
-    res.json({ vehicle })
-  } catch (error) {
-    res.status(500).json({ message: 'Failed to update vehicle' })
-  }
-})
-
-router.patch('/:id/assign-driver', authenticate, authorize('admin', 'fleet_manager'), [
-  body('driverId').optional().isMongoId(),
-  validateRequest
-], async (req, res) => {
-  try {
-    const { driverId } = req.body
     const vehicle = await Vehicle.findById(req.params.id)
     if (!vehicle) {
       return res.status(404).json({ message: 'Vehicle not found' })
     }
-
-    if (vehicle.driver && vehicle.driver.toString() !== driverId) {
-      return res.status(400).json({ message: 'Vehicle already assigned to another driver' })
-    }
-
-    vehicle.driver = driverId || null
+    const data = cleanVehicleData(req.body, { fallbackType: vehicle.type })
+    Object.assign(vehicle, data)
+    const driver = await resolveDriver(req.body.driver, vehicle._id)
+    if (driver !== undefined) vehicle.driver = driver
     await vehicle.save()
+    await vehicle.populate('driver', 'name email phone')
 
+    res.json({ vehicle })
+  } catch (error) {
+    handleError(res, error, 'Failed to update vehicle')
+  }
+})
+
+router.patch('/:id/assign-driver', authenticate, authorize('admin', 'fleet_manager'), [
+  body('driverId').optional({ nullable: true }).custom(isObjectIdOrNull).withMessage('Invalid driver'),
+  validateRequest
+], async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id)
+    if (!vehicle) {
+      return res.status(404).json({ message: 'Vehicle not found' })
+    }
+    vehicle.driver = await resolveDriver(req.body.driverId ?? null, vehicle._id)
+    await vehicle.save()
     await vehicle.populate('driver', 'name email phone')
     res.json({ vehicle })
   } catch (error) {
-    res.status(500).json({ message: 'Failed to assign driver' })
+    handleError(res, error, 'Failed to assign driver')
   }
 })
 
 router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
+    const inUse = await Route.exists({ vehicle: req.params.id, status: { $in: ['planned', 'active'] } })
+    if (inUse) {
+      return res.status(409).json({ message: 'Vehicle is assigned to a planned or active route' })
+    }
     const vehicle = await Vehicle.findByIdAndDelete(req.params.id)
     if (!vehicle) {
       return res.status(404).json({ message: 'Vehicle not found' })

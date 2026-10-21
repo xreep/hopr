@@ -1,4 +1,5 @@
 import js from '@eslint/js'
+import globals from 'globals'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import reactRefreshPlugin from 'eslint-plugin-react-refresh'
@@ -9,27 +10,14 @@ export default [
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
-      ecmaVersion: 2020,
-      globals: { 
-        browser: true, 
-        es2020: true,
-        window: 'readonly',
-        document: 'readonly',
-        localStorage: 'readonly',
-        FileReader: 'readonly',
-        URLSearchParams: 'readonly',
-        console: 'readonly',
-        prompt: 'readonly',
-        navigate: 'readonly',
-        useRef: 'readonly'
-      },
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.browser, ...globals.es2021 },
       parserOptions: {
-        ecmaVersion: 'latest',
-        ecmaFeatures: { jsx: true },
-        sourceType: 'module'
+        ecmaFeatures: { jsx: true }
       }
     },
-    settings: { react: { version: '18.2' } },
+    settings: { react: { version: '18.3' } },
     plugins: {
       react: reactPlugin,
       'react-hooks': reactHooksPlugin,
@@ -42,7 +30,11 @@ export default [
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }]
     }
+  },
+  {
+    files: ['*.config.js', 'src/**/*.test.{js,jsx}', 'src/test/**'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } }
   }
 ]
