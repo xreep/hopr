@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../utils/api'
+import { clearImageCache } from '../utils/imageCache'
 
 const AuthContext = createContext(null)
 
@@ -56,6 +57,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('token')
+    clearImageCache() // proof photos belong to this session
     setUser(null)
     setSessionError(null)
   }, [])
