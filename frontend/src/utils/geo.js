@@ -78,6 +78,20 @@ export function slicePolyline(coords, fromKm, toKm = Infinity) {
   return out
 }
 
+// How far along a route (km) each stop is, given in visiting order. Each stop is
+// matched only to the road after the previous one, so a route that doubles back
+// past a later stop does not place it too early.
+export function stopsAlongKm(stops, coords) {
+  const out = []
+  let from = 0
+  for (const stop of stops) {
+    const hit = projectOnPolyline(stop.coordinates, slicePolyline(coords, from))
+    from += hit ? hit.alongKm : 0
+    out.push(from)
+  }
+  return out
+}
+
 export function bearingDeg([lon1, lat1], [lon2, lat2]) {
   const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2))
   const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1))

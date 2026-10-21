@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api, { errorMessage } from '../utils/api'
-import { pointAlong, projectOnPolyline, polylineLengthKm } from '../utils/geo'
+import { pointAlong, projectOnPolyline, polylineLengthKm, stopsAlongKm } from '../utils/geo'
 
 export const PING_INTERVAL_MS = 5000
 const SIM_SPEED_KMH = 24 // demo drive: typical Ranchi city speed
@@ -21,6 +21,7 @@ export default function useDriverLocation(route) {
   const latest = useRef(null)
   const lastSent = useRef(null)
   const simAlong = useRef(null)
+  const simHoldAt = useRef(Infinity)
   const knownLocation = useRef(null)
   useEffect(() => { knownLocation.current = route?.driverLocation?.coordinates || null }, [route?.driverLocation?.coordinates])
 
@@ -67,6 +68,14 @@ export default function useDriverLocation(route) {
     return () => navigator.geolocation.clearWatch(id)
   }, [active, mode])
 
+  // The demo drive pulls up at the next stop and waits there until it is delivered or failed
+  const stops = route?.stops
+  useEffect(() => {
+    const ordered = [...(stops || [])].sort((a, b) => a.sequence - b.sequence)
+    const next = ordered.findIndex(s => s.status === 'pending' || s.status === 'in_progress')
+    simHoldAt.current = next >= 0 && geometry?.length > 1 ? stopsAlongKm(ordered, geometry)[next] : Infinity
+  }, [stops, geometry])
+
   // Demo drive along the route geometry
   useEffect(() => {
     if (!active || mode !== 'simulate' || !(geometry?.length > 1)) return undefined
@@ -78,7 +87,8 @@ export default function useDriverLocation(route) {
       simAlong.current = Math.max(0, ...candidates.map(c => projectOnPolyline(c, geometry)?.alongKm ?? 0))
     }
     const step = () => {
-      simAlong.current = Math.min(total, simAlong.current + (SIM_SPEED_KMH * PING_INTERVAL_MS) / 3600000)
+      const target = Math.min(total, Math.max(simHoldAt.current, simAlong.current))
+      simAlong.current = Math.min(target, simAlong.current + (SIM_SPEED_KMH * PING_INTERVAL_MS) / 3600000)
       const coordinates = pointAlong(geometry, simAlong.current)
       latest.current = { coordinates, accuracy: 5, heading: null, speed: SIM_SPEED_KMH / 3.6 }
       setPosition(coordinates)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { haversineKm, projectOnPolyline, pointAlong, slicePolyline, polylineLengthKm } from './geo'
+import { haversineKm, projectOnPolyline, pointAlong, slicePolyline, polylineLengthKm, stopsAlongKm } from './geo'
 
 const line = [[85.35, 23.37], [85.34, 23.37], [85.34, 23.38]]
 
@@ -25,5 +25,19 @@ describe('geo helpers', () => {
     const rest = slicePolyline(line, haversineKm(line[0], line[1]) / 2)
     expect(rest).toHaveLength(3)
     expect(rest[rest.length - 1]).toEqual(line[2])
+  })
+
+  it('places stops along the route in visiting order, even where the road doubles back', () => {
+    // Out east, a short hop north, then back west 22 m from the outbound road
+    const uTurn = [[85.30, 23.36], [85.34, 23.36], [85.34, 23.3602], [85.30, 23.3602]]
+    const stops = [
+      { coordinates: [85.34, 23.36] }, // end of the outbound leg
+      { coordinates: [85.32, 23.36005] } // on the way back, but closer to the outbound road
+    ]
+    const [first, second] = stopsAlongKm(stops, uTurn)
+    expect(first).toBeCloseTo(haversineKm(uTurn[0], uTurn[1]), 2)
+    expect(second).toBeGreaterThan(first)
+    // Global projection would wrongly put the second stop halfway along the outbound leg
+    expect(projectOnPolyline(stops[1].coordinates, uTurn).alongKm).toBeLessThan(first)
   })
 })
