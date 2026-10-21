@@ -346,8 +346,8 @@
   }
   .palette-trigger kbd { margin-left: 0.35rem; }
   @media (max-width: 640px) {
-    .palette-overlay { padding: 0.75rem; padding-top: 0.75rem; }
-    .palette { max-height: 80vh; }
+    .modal-overlay.palette-overlay { align-items: flex-start; padding: 0.75rem; }
+    .palette { max-height: min(80vh, 560px); border-radius: 18px; }
     .palette-footer { display: none; }
   }
 

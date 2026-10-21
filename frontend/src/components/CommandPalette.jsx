@@ -95,7 +95,7 @@ export default function CommandPalette({ open, onClose, pages }) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={isManager ? 'Search pages, routes and actions' : 'Search pages and actions'}
+            placeholder={isManager ? 'Search routes, pages, actions' : 'Search pages and actions'}
             role="combobox"
             aria-expanded="true"
             aria-controls="palette-list"
