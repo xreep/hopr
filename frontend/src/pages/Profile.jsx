@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import Icon from '../components/icons'
 import { initials } from '../utils/format'
 import { formatDate, formatDateTime } from '../utils/time'
+import PasswordInput from '../components/PasswordInput'
 
 const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'Driver' }
 
@@ -135,15 +136,15 @@ export default function Profile() {
           <div className="card-body">
             <div className="form-group">
               <label htmlFor="currentPassword" className="form-label">Current password</label>
-              <input id="currentPassword" type="password" className="form-input" value={passwordData.currentPassword} onChange={e => setPw('currentPassword', e.target.value)} required autoComplete="current-password" />
+              <PasswordInput id="currentPassword" value={passwordData.currentPassword} onChange={e => setPw('currentPassword', e.target.value)} required autoComplete="current-password" />
             </div>
             <div className="form-group">
               <label htmlFor="newPassword" className="form-label">New password</label>
-              <input id="newPassword" type="password" className="form-input" value={passwordData.newPassword} onChange={e => setPw('newPassword', e.target.value)} required minLength={6} maxLength={128} autoComplete="new-password" />
+              <PasswordInput id="newPassword" value={passwordData.newPassword} onChange={e => setPw('newPassword', e.target.value)} required minLength={6} maxLength={128} autoComplete="new-password" />
             </div>
             <div className="form-group">
               <label htmlFor="confirmPassword" className="form-label">Confirm new password</label>
-              <input id="confirmPassword" type="password" className="form-input" value={passwordData.confirmPassword} onChange={e => setPw('confirmPassword', e.target.value)} required autoComplete="new-password" />
+              <PasswordInput id="confirmPassword" value={passwordData.confirmPassword} onChange={e => setPw('confirmPassword', e.target.value)} required autoComplete="new-password" />
             </div>
             <p className="text-micro text-ink-400 mb-4">Changing it signs you out everywhere, including other devices.</p>
             <button type="submit" className="btn btn-secondary" disabled={saving === 'password'}>

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../utils/api'
 import { HopMark } from '../components/icons'
 import usePageTitle from '../hooks/usePageTitle'
+import PasswordInput from '../components/PasswordInput'
 
 const DEMO_USERS = {
   admin: { email: 'admin@hopr.com', password: 'admin123', label: 'Admin' },
@@ -203,7 +204,7 @@ export default function Login() {
               </div>
               <div className="form-group">
                 <label htmlFor="password" className="form-label">Password</label>
-                <input type="password" id="password" className={`form-input ${errors.password ? 'error' : ''}`} value={form.password}
+                <PasswordInput id="password" className={errors.password ? 'error' : ''} value={form.password}
                   onChange={e => set('password', e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} disabled={loading}
                   aria-invalid={!!errors.password} aria-describedby={errors.password ? 'password-error' : undefined} />
                 {errors.password && <p id="password-error" className="form-error" role="alert">{errors.password}</p>}

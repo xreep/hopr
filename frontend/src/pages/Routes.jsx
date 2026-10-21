@@ -25,6 +25,7 @@ export default function RoutesPage() {
   const status = params.get('status') || ''
   const batch = params.get('batch') || ''
   const unassigned = params.get('unassigned') === 'true'
+  const query = params.get('q') || ''
   const [routes, setRoutes] = useState(null)
   const [drivers, setDrivers] = useState([])
   const [busy, setBusy] = useState(null)
@@ -62,7 +63,7 @@ export default function RoutesPage() {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
-    setParams(next)
+    setParams(next, { replace: key === 'q' }) // typing a search should not fill the back button
   }
 
   const patchRoute = async (route, body, message) => {
@@ -99,6 +100,11 @@ export default function RoutesPage() {
   }
 
   const unassignedCount = routes?.filter(r => r.status === 'planned' && !r.driver).length || 0
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const shown = !routes ? null : !words.length ? routes : routes.filter(r => {
+    const haystack = `${r.name} ${r.routeId} ${r.batchId || ''} ${r.driver?.name || ''} ${r.vehicle?.name || ''}`.toLowerCase()
+    return words.every(w => haystack.includes(w))
+  })
 
   return (
     <div>
@@ -116,6 +122,11 @@ export default function RoutesPage() {
 
       <div className="card mb-4">
         <div className="card-body flex flex-wrap gap-2 items-center">
+          <div className="relative w-full sm:w-64">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"><Icon name="search" size={16} /></span>
+            <input type="search" className="form-input pl-9" placeholder="Name, route ID or driver" value={query}
+              onChange={e => setFilter('q', e.target.value)} aria-label="Search routes" />
+          </div>
           <div className="tabs" role="tablist" aria-label="Filter by status">
             {STATUS_FILTERS.map(f => (
               <button key={f.value} type="button" role="tab" aria-selected={status === f.value} className={`tab ${status === f.value ? 'active' : ''}`}
@@ -130,8 +141,12 @@ export default function RoutesPage() {
         </div>
       </div>
 
-      {!routes ? <SkeletonRows label="Loading routes" /> : routes.length === 0 ? (
-        <div className="card"><EmptyState title="No routes match" action={<Link to="/route-planner" className="btn btn-primary btn-sm">Plan a batch</Link>} /></div>
+      {!shown ? <div className="card"><SkeletonRows label="Loading routes" /></div> : shown.length === 0 ? (
+        <div className="card">
+          {query
+            ? <EmptyState title={`No routes match “${query}”`} action={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setFilter('q', '')}>Clear search</button>}>Search covers route names, route and batch IDs, drivers and vehicles.</EmptyState>
+            : <EmptyState title="No routes match" action={<Link to="/route-planner" className="btn btn-primary btn-sm">Plan a batch</Link>} />}
+        </div>
       ) : (
         <div className="card">
           <div className="table-container">
@@ -142,7 +157,7 @@ export default function RoutesPage() {
                 </tr>
               </thead>
               <tbody>
-                {routes.map(r => {
+                {shown.map(r => {
                   const done = r.stops.filter(s => s.status === 'completed' || s.status === 'failed').length
                   const editable = r.status === 'planned'
                   return (
