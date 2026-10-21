@@ -6,6 +6,7 @@ import { validateRequest } from '../middleware/validate.js'
 import { buildRouteGeometry } from '../services/geometry.js'
 import { DEFAULT_DEPOT } from '../config/fleet.js'
 import { RANCHI_CENTRE } from '../data/ranchiLocations.js'
+import { SERVICE_BBOX, matchLandmarks, dedupeSuggestions } from '../services/geocoding.js'
 
 const router = express.Router()
 
@@ -28,7 +29,7 @@ function cached(key, loader) {
   return value
 }
 
-async function mapboxSearch(q, limit) {
+async function mapboxSearch(q, limit, { local = true } = {}) {
   const { data } = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`, {
     params: {
       access_token: mapboxToken(),
@@ -36,7 +37,8 @@ async function mapboxSearch(q, limit) {
       country: 'in',
       proximity: RANCHI_CENTRE.join(','),
       autocomplete: true,
-      types: 'address,poi,neighborhood,locality,place,postcode'
+      types: 'address,poi,neighborhood,locality,place,postcode',
+      ...(local && { bbox: SERVICE_BBOX.join(',') })
     },
     timeout: 5000
   })
@@ -51,9 +53,9 @@ function photonLabel(p) {
     .join(', ')
 }
 
-async function photonSearch(q, limit) {
+async function photonSearch(q, limit, { local = true } = {}) {
   const { data } = await axios.get('https://photon.komoot.io/api/', {
-    params: { q, limit: limit + 3, lang: 'en', lat: RANCHI_CENTRE[1], lon: RANCHI_CENTRE[0] },
+    params: { q, limit: limit + 3, lang: 'en', lat: RANCHI_CENTRE[1], lon: RANCHI_CENTRE[0], ...(local && { bbox: SERVICE_BBOX.join(',') }) },
     headers: { 'User-Agent': 'Hopr route optimization (student project)' },
     timeout: 5000
   })
@@ -69,17 +71,28 @@ async function search(q, limit) {
     err.status = 503
     throw err
   }
+  // Curated Ranchi landmarks first, then the provider: inside the Ranchi service area,
+  // widening to all of India only when nothing local matches. Repeats are removed.
+  const landmarks = matchLandmarks(q, limit)
   const key = `${mapboxToken() ? 'mb' : 'osm'}:${limit}:${q.toLowerCase()}`
-  return cached(key, async () => {
-    if (mapboxToken()) {
-      try {
-        return await mapboxSearch(q, limit)
-      } catch (error) {
-        console.warn('Mapbox geocoding failed, falling back to OpenStreetMap:', error.message)
-      }
-    }
-    return photonSearch(q, limit)
-  })
+  let provider = []
+  try {
+    provider = await cached(key, async () => {
+      const lookup = mapboxToken()
+        ? (opts) => mapboxSearch(q, limit + 3, opts).catch(error => {
+          console.warn('Mapbox geocoding failed, falling back to OpenStreetMap:', error.message)
+          return photonSearch(q, limit + 3, opts)
+        })
+        : (opts) => photonSearch(q, limit + 3, opts)
+      const local = await lookup({ local: true })
+      return local.length ? local : lookup({ local: false })
+    })
+  } catch (error) {
+    // The landmarks still help when the provider is down
+    if (!landmarks.length) throw error
+    console.warn('Geocoding provider failed, returning landmarks only:', error.message)
+  }
+  return dedupeSuggestions([...landmarks, ...provider], limit)
 }
 
 function sendProviderError(res, error) {
