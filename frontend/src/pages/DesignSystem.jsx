@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import HopLine from '../components/HopLine'
 import useCountUp from '../hooks/useCountUp'
+import { SkeletonRows, PageLoader } from '../components/ui'
 
 // Dev-only living reference for the Night Dispatch design system (/design-system)
 const BG = '#070B14'
@@ -195,6 +196,19 @@ export default function DesignSystem() {
                 <li>More than about 10% of a screen</li>
               </ul>
             </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="loading-title" className="grid gap-8 lg:grid-cols-2">
+          <div>
+            <h2 id="loading-title" className="font-display text-h2 font-semibold text-ink-50 mb-1">Loading a table</h2>
+            <p className="text-small text-ink-400 mb-4">Rows in the shape of the data, never a blank card.</p>
+            <div className="card"><SkeletonRows rows={4} /></div>
+          </div>
+          <div>
+            <h2 className="font-display text-h2 font-semibold text-ink-50 mb-1">Slow server</h2>
+            <p className="text-small text-ink-400 mb-4">After four seconds the loader explains the free plan&apos;s wake-up delay.</p>
+            <div className="card"><PageLoader /></div>
           </div>
         </section>
       </div>

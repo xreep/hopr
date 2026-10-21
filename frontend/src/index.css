@@ -259,7 +259,23 @@
   /* ---------- Misc ---------- */
   .spinner { width: 18px; height: 18px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: nd-spin 0.8s linear infinite; display: inline-block; opacity: 0.85; }
   .spinner-sm { width: 14px; height: 14px; }
-  .page-loader { display: flex; align-items: center; justify-content: center; min-height: 240px; color: var(--nd-ink-3); }
+  .page-loader { display: flex; flex-direction: column; gap: 1rem; align-items: center; justify-content: center; min-height: 240px; color: var(--nd-ink-3); }
+  .slow-notice { max-width: 44ch; margin: 1rem auto 0; text-align: center; font-size: 0.85rem; color: var(--nd-ink-3); animation: nd-fade-in 0.4s ease; }
+
+  /* ---------- Skeletons ---------- */
+  .skeleton {
+    display: inline-block; height: 0.8rem; border-radius: 6px;
+    background: linear-gradient(90deg, rgb(255 255 255 / 0.04) 25%, rgb(255 255 255 / 0.09) 45%, rgb(255 255 255 / 0.04) 65%);
+    background-size: 300% 100%; animation: nd-shimmer 1.5s ease-in-out infinite;
+  }
+  .skeleton-lg { height: 1.9rem; }
+  .skeleton-circle { width: 2rem; height: 2rem; border-radius: 50%; flex-shrink: 0; }
+  .skeleton-rows { padding: 0.5rem 1.25rem 1rem; }
+  .skeleton-row { display: flex; align-items: center; gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid var(--nd-hair); }
+  .skeleton-row:last-of-type { border-bottom: 0; }
+  .skeleton-panel { height: 420px; padding: 1.25rem; }
+  .skeleton-panel .skeleton { width: 100%; height: 100%; border-radius: 14px; }
+  @keyframes nd-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
   .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2.25rem 1rem; color: var(--nd-ink-3); }
   .empty-state > p:first-child { color: var(--nd-ink); font-weight: 500; }
   .stats-card { padding: 1.1rem 1.25rem 1.15rem; display: flex; flex-direction: column; min-height: 8.25rem; }

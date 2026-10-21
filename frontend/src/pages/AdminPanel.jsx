@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
-import { Modal, StatusBadge, EmptyState, PageLoader, StatCard } from '../components/ui'
+import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
 import { formatDate } from '../utils/time'
 import { MAPBOX_TOKEN } from '../config'
 import DemoSeedButton from '../components/DemoSeedButton'
@@ -139,7 +139,7 @@ export default function AdminPanel() {
           </select>
           <input type="search" className="form-input flex-1 min-w-[180px]" placeholder="Search name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search users" />
         </div>
-        {!users ? <PageLoader /> : list.length === 0 ? <EmptyState title="No users found" /> : (
+        {!users ? <SkeletonRows label="Loading users" /> : list.length === 0 ? <EmptyState title="No users found" /> : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Phone</th><th>Status</th><th>Last login</th><th className="text-right">Actions</th></tr></thead>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Icon from './icons'
 import HopLine from './HopLine'
 import useCountUp from '../hooks/useCountUp'
@@ -7,10 +7,69 @@ export function Spinner({ label = 'Loading' }) {
   return <span className="spinner" role="status" aria-label={label} />
 }
 
+// After a few seconds, say why: on the free hosting plan the server sleeps when idle
+// and the first request can take up to a minute while it wakes up
+function useSlowNotice(delayMs = 4000) {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), delayMs)
+    return () => clearTimeout(t)
+  }, [delayMs])
+  return slow
+}
+
+function SlowNotice() {
+  return (
+    <p className="slow-notice" role="status">
+      Still loading. If Hopr hasn&apos;t been used for a while the server is waking up, which can take up to a minute.
+    </p>
+  )
+}
+
 export function PageLoader() {
+  const slow = useSlowNotice()
   return (
     <div className="page-loader">
       <Spinner />
+      {slow && <SlowNotice />}
+    </div>
+  )
+}
+
+// Placeholder rows for a table while it loads
+export function SkeletonRows({ rows = 5, label = 'Loading' }) {
+  const slow = useSlowNotice()
+  return (
+    <div className="skeleton-rows" role="status" aria-label={label}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="skeleton-row">
+          <span className="skeleton skeleton-circle" />
+          <span className="skeleton" style={{ width: `${38 - (i % 3) * 6}%` }} />
+          <span className="skeleton" style={{ width: '14%' }} />
+          <span className="skeleton ml-auto" style={{ width: '10%' }} />
+        </div>
+      ))}
+      {slow && <SlowNotice />}
+    </div>
+  )
+}
+
+// Dashboard-shaped placeholder: four stat cards and a large panel
+export function PageSkeleton({ label = 'Loading' }) {
+  const slow = useSlowNotice()
+  return (
+    <div role="status" aria-label={label}>
+      <div className="grid grid-4 mb-6">
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} className="card card-body space-y-3">
+            <span className="skeleton block" style={{ width: '45%' }} />
+            <span className="skeleton skeleton-lg block" style={{ width: '30%' }} />
+            <span className="skeleton block" style={{ width: '65%' }} />
+          </div>
+        ))}
+      </div>
+      <div className="card skeleton-panel"><span className="skeleton block" /></div>
+      {slow && <SlowNotice />}
     </div>
   )
 }

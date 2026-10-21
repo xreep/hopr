@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { Chart as ChartJS, ArcElement, LineElement, BarElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler } from 'chart.js'
 import { Doughnut, Line, Bar } from 'react-chartjs-2'
 import api, { errorMessage } from '../utils/api'
-import { StatCard, PageLoader, EmptyState } from '../components/ui'
+import { StatCard, PageSkeleton, EmptyState } from '../components/ui'
 import Icon from '../components/icons'
 import { applyChartTheme, CHART_COLORS as C } from '../components/chartTheme'
 import { formatINR, formatKm, formatDuration } from '../utils/format'
@@ -63,7 +63,7 @@ export default function Analytics() {
     }
   }
 
-  if (loading && !data) return <PageLoader />
+  if (loading && !data) return <PageSkeleton label="Loading analytics" />
   if (!data) return <div className="card"><EmptyState title="Analytics are unavailable right now" action={<button className="btn btn-secondary btn-sm" onClick={load}>Try again</button>} /></div>
 
   const { kpis, trends } = data

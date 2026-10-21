@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
-import { Modal, StatusBadge, EmptyState, PageLoader, StatCard } from '../components/ui'
+import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
 import { VEHICLE_TYPES, FUEL_UNITS, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
 import Icon from '../components/icons'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -168,7 +168,7 @@ export default function VehicleManagement() {
             onChange={e => setFilters({ ...filters, search: e.target.value })} aria-label="Search vehicles" />
         </div>
 
-        {!vehicles ? <PageLoader /> : list.length === 0 ? (
+        {!vehicles ? <SkeletonRows label="Loading vehicles" /> : list.length === 0 ? (
           <EmptyState title="No vehicles found" action={<button className="btn btn-primary btn-sm" onClick={() => open()}>Add your first vehicle</button>} />
         ) : (
           <div className="table-container">

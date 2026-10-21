@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
-import { StatusBadge, EmptyState, PageLoader, StatCard } from '../components/ui'
+import { StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
 import { formatKm, initials } from '../utils/format'
 import { relativeTime } from '../utils/time'
 import Icon from '../components/icons'
@@ -90,7 +90,7 @@ export default function Drivers() {
             <input type="search" className="form-input pl-9" placeholder="Search by name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search drivers" />
           </div>
         </div>
-        {!drivers ? <PageLoader /> : list.length === 0 ? (
+        {!drivers ? <SkeletonRows label="Loading drivers" /> : list.length === 0 ? (
           <EmptyState title="No drivers yet">Drivers can register from the login page, or an admin can create them.</EmptyState>
         ) : (
           <div className="table-container">

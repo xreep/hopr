@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import usePolling from '../hooks/usePolling'
-import { StatusBadge, EmptyState, PageLoader } from '../components/ui'
+import { StatusBadge, EmptyState, SkeletonRows } from '../components/ui'
 import DemoSeedButton from '../components/DemoSeedButton'
 import DispatchPreviewDialog from '../components/DispatchPreviewDialog'
 import { speak } from '../utils/speak'
@@ -130,7 +130,7 @@ export default function RoutesPage() {
         </div>
       </div>
 
-      {!routes ? <PageLoader /> : routes.length === 0 ? (
+      {!routes ? <SkeletonRows label="Loading routes" /> : routes.length === 0 ? (
         <div className="card"><EmptyState title="No routes match" action={<Link to="/route-planner" className="btn btn-primary btn-sm">Plan a batch</Link>} /></div>
       ) : (
         <div className="card">

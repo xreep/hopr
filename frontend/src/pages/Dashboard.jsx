@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 import usePolling from '../hooks/usePolling'
-import { StatCard, StatusBadge, EmptyState, PageLoader } from '../components/ui'
+import { StatCard, StatusBadge, EmptyState, PageSkeleton } from '../components/ui'
 import Icon from '../components/icons'
 import MapView from '../components/MapView'
 import useMediaQuery from '../hooks/useMediaQuery'
@@ -34,7 +34,7 @@ export default function Dashboard() {
   }, [])
   usePolling(load, 30000)
 
-  if (!data && !error) return <PageLoader />
+  if (!data && !error) return <PageSkeleton label="Loading the dashboard" />
 
   return (
     <div>
