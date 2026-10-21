@@ -1,282 +1,182 @@
-# Hopr - Smart Route Optimization System for Last-Mile Delivery
+# Hopr
 
-> "Hop through every stop, smarter."
+Route optimization for last-mile delivery in Ranchi. Fleet managers plan multi-stop, multi-vehicle routes that account for traffic, delivery windows, priority and fuel; dispatch them to drivers; and watch them live. Drivers deliver with photo and signature proof. Customers follow their parcel on a live tracking link.
 
-A comprehensive route optimization platform for logistics companies to plan efficient delivery routes, reduce fuel costs, and improve on-time delivery rates.
+- **Live app**: not deployed yet. See [Deployment](#deployment-free-tiers-0); add the URLs here once they exist.
+  - Frontend: `https://<your-app>.vercel.app`
+  - API: `https://<your-api>.onrender.com/api/health`
+- **Technical documentation**: [docs/TECHNICAL.md](docs/TECHNICAL.md), covering architecture, data models, the routing algorithm, traffic, fuel, security, the full API reference, NFRs and tests
+- **Product requirements**: [docs/PRD.md](docs/PRD.md)
 
-## Features
+## What it does
 
-- **Route Planning**: Multi-stop delivery optimization with CSV upload
-- **Traffic-Aware Routing**: Real-time traffic integration (Mapbox/Google Maps)
-- **Fuel Optimization**: Vehicle-specific fuel consumption estimation
-- **Driver Interface**: Mobile-friendly navigation and status updates
-- **Fleet Management**: Vehicle and driver assignment with analytics
-- **Role-Based Access**: Admin, Fleet Manager, and Driver dashboards
-- **Analytics Dashboard**: KPIs, trends, and performance insights
+**Fleet managers and admins**
+- Plan a batch: type addresses (Ranchi autocomplete) or upload a CSV, then set priority, delivery window and weight per stop
+- Choose vehicles: fleet vehicles, or a type (motorbike, van, truck, electric van) and a count
+- Optimise: sequence, ETAs in IST, fuel and CO₂, window violations, savings against the order as entered, and alternatives
+- Dispatch: assign by hand, or auto-dispatch with a preview of every pairing
+- Monitor: a live fleet map on the dashboard and live monitor; report congestion or road closures; recalculate affected routes
+- Analyse: the six KPIs from the spec over 7, 30 or 90 days or a year, compared with the previous period, plus a CSV export
+- Manage vehicles, drivers and, as admin, users and roles
+- Press ⌘K or Ctrl+K anywhere to jump to a page or route and run actions
 
-## Tech Stack
+**Drivers**
+- Today's route, the next stop with plain-language timing, and one-tap navigation
+- Delivered with photo and/or signature; Couldn't deliver with a reason; report a problem or a delay
+- Location shared every 5 seconds while a route is active; spoken announcements
+- Built for phones, with an action dock at the bottom of the screen; installable to the home screen
 
-- **Frontend**: React 18, Vite, Mapbox GL JS, Chart.js, React Router
-- **Backend**: Node.js, Express, MongoDB (Mongoose)
-- **Authentication**: JWT with role-based access control
-- **Routing**: Custom nearest-neighbor + 2-opt optimization algorithm
+**Customers**
+- A tracking link per delivery, no login needed: the driver moving smoothly along the road, a live "N min away" ETA, and an Arriving alert within 500 m
 
-## Project Structure
+## Demo accounts
 
-```
-hopr/
-├── frontend/                 # React application
-│   ├── src/
-│   │   ├── components/       # Reusable UI components
-│   │   ├── pages/            # Page components
-│   │   ├── context/          # React context providers
-│   │   ├── utils/            # Utility functions
-│   │   └── hooks/            # Custom React hooks
-│   └── ...
-├── backend/                  # Express API server
-│   ├── src/
-│   │   ├── models/           # Mongoose models
-│   │   ├── routes/           # API route handlers
-│   │   ├── controllers/      # Business logic
-│   │   ├── services/         # External services
-│   │   ├── middleware/       # Express middleware
-│   │   └── config/           # Configuration
-│   └── ...
-└── README.md
-```
+These accounts are created by the demo seeder (below). They are demo credentials for a demo database; never reuse them for real accounts.
 
-## Getting Started
+| Role | Email | Password |
+|---|---|---|
+| Admin | admin@hopr.com | admin123 |
+| Fleet manager | manager@hopr.com | manager123 |
+| Driver (Ravi Kumar Oraon) | driver@hopr.com | driver123 |
+| Driver (Pooja Kumari) | pooja.driver@hopr.com | driver123 |
+| Driver (Imran Ansari) | imran.driver@hopr.com | driver123 |
 
-### Prerequisites
+The login page has one-click buttons for the first three. The seeder also creates four vehicles and a five-stop Ranchi morning route with delivery windows, assigned to Ravi. Re-running it is safe: it adds a fresh demo route and never overwrites passwords.
 
-- Node.js 18+
-- MongoDB 6+
-- npm or yarn
+## Quick start
 
-### Installation
-
-1. **Clone and install dependencies**
+**Prerequisites**: Node.js 20.19+ or 22.12+, and MongoDB 6+ (local, or a free Atlas cluster).
 
 ```bash
-# Install root dependencies
+git clone https://github.com/xreep/hopr.git
+cd hopr
 npm install
-
-# Install frontend dependencies
-cd frontend && npm install
-
-# Install backend dependencies
-cd ../backend && npm install
 ```
 
-2. **Configure environment variables**
+That installs both workspaces (`frontend/` and `backend/`). Next, create the environment files:
 
 ```bash
-# Backend
-cd backend
-cp .env.example .env
-# Edit .env with your configuration
-
-# Frontend
-cd ../frontend
-cp .env.example .env
-# Edit .env with your Mapbox token (optional)
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-3. **Start development servers**
+Set `JWT_SECRET` in `backend/.env` to a long random string (`openssl rand -hex 32`), and `MONGODB_URI` if you aren't using a local MongoDB. Then load the demo data:
 
 ```bash
-# From root directory - runs both frontend and backend
+npm run seed --workspace=backend
+```
+
+Start both servers:
+
+```bash
 npm run dev
 ```
 
-Or start individually:
+- App: http://localhost:3000
+- API: http://localhost:5001/api, proxied from the app as `/api`
 
-```bash
-# Backend (port 5000)
-cd backend && npm run dev
+The API runs on 5001 locally because macOS uses port 5000 for AirPlay Receiver. To use another port, set `PORT` in `backend/.env` and start the app with the matching proxy target, e.g. `VITE_PROXY_TARGET=http://localhost:5050 npm run dev` (a shell variable, read by `vite.config.js`).
 
-# Frontend (port 3000)
-cd frontend && npm run dev
-```
+No map token is needed to try everything. Without one, Hopr uses OpenStreetMap for address search and draws a schematic map; add Mapbox tokens for street maps and road-following routes.
 
-### Environment Variables
+## Environment variables
 
-**Backend (.env)**
-```env
-PORT=5000
-MONGODB_URI=mongodb://localhost:27017/hopr
-JWT_SECRET=your-secret-key
-FRONTEND_URL=http://localhost:3000
-MAPBOX_TOKEN=your-mapbox-token
-GOOGLE_MAPS_KEY=your-google-maps-key
-DEFAULT_FUEL_PRICE=1.50
-```
+### Backend (`backend/.env`)
 
-**Frontend (.env)**
-```env
-VITE_API_URL=http://localhost:5000/api
-VITE_MAPBOX_TOKEN=your-mapbox-token
-```
+| Variable | Required | Description |
+|---|---|---|
+| `MONGODB_URI` | yes | MongoDB connection string (Atlas in production) |
+| `JWT_SECRET` | yes in production | Long random string used to sign sessions. With `NODE_ENV=production` the server refuses to start without it |
+| `NODE_ENV` | production | `production` on Render: hides error details and enforces `JWT_SECRET` |
+| `FRONTEND_URL` | yes in production | The frontend origin allowed by CORS, e.g. `https://your-app.vercel.app` (no trailing slash) |
+| `PORT` | no | Defaults to 5001 locally; Render sets it automatically |
+| `TRUST_PROXY` | no | Proxy hops to trust for client IPs; defaults to `1` in production |
+| `MAPBOX_TOKEN` | no | Server-side Mapbox token for geocoding and road directions |
+| `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: Ranchi retail 97.90, 92.60, 91.50 and ₹10/kWh) |
 
-## Demo Accounts
+### Frontend (`frontend/.env`)
 
-After starting the server, register users or use these demo credentials:
+| Variable | Required | Description |
+|---|---|---|
+| `VITE_API_URL` | yes | `/api` locally (through the dev proxy); the full Render URL ending in `/api` in production |
+| `VITE_MAPBOX_TOKEN` | no | Mapbox public token (starts with `pk.`) for street maps in the browser |
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@hopr.com | admin123 |
-| Fleet Manager | manager@hopr.com | manager123 |
-| Driver | driver@hopr.com | driver123 |
+Never commit `.env` files; they are git-ignored.
 
-## API Endpoints
+## Scripts
 
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login
-- `GET /api/auth/me` - Get current user
-- `PUT /api/auth/profile` - Update profile
-- `PUT /api/auth/password` - Change password
-- `PUT /api/auth/notifications` - Update notification preferences
+Run from the repository root:
 
-### Routes
-- `POST /api/routes/optimize` - Optimize route (algorithm)
-- `POST /api/routes` - Create route
-- `GET /api/routes` - List routes (with filters)
-- `GET /api/routes/driver/assigned` - Get driver's assigned routes
-- `GET /api/routes/:id` - Get route details
-- `PATCH /api/routes/:id/start` - Start route
-- `PATCH /api/routes/:id/stops/:stopIndex/status` - Update stop status
-- `POST /api/routes/:id/stops/:stopIndex/issues` - Report issue
-
-### Vehicles
-- `POST /api/vehicles` - Add vehicle
-- `GET /api/vehicles` - List vehicles
-- `GET /api/vehicles/available` - Get available vehicles
-- `PUT /api/vehicles/:id` - Update vehicle
-- `PATCH /api/vehicles/:id/assign-driver` - Assign driver
-- `DELETE /api/vehicles/:id` - Delete vehicle
-
-### Drivers
-- `GET /api/drivers` - List drivers with performance
-- `GET /api/drivers/available` - Get available drivers
-- `GET /api/drivers/:id` - Get driver details
-- `PATCH /api/drivers/:id/status` - Update driver status
-
-### Analytics
-- `GET /api/analytics` - Get dashboard analytics
-
-### Admin
-- `GET /api/admin/users` - List all users
-- `POST /api/admin/users` - Create user
-- `PUT /api/admin/users/:id` - Update user
-- `PATCH /api/admin/users/:id/status` - Toggle user status
-- `DELETE /api/admin/users/:id` - Delete user
-
-### Maps
-- `GET /api/map/geocode` - Geocode address
-- `GET /api/map/reverse-geocode` - Reverse geocode
-- `GET /api/map/directions` - Get directions
-
-## Route Optimization Algorithm
-
-The system uses a two-phase optimization:
-
-1. **Nearest Neighbor**: Creates initial route by always visiting the nearest unvisited stop
-2. **2-opt Improvement**: Iteratively swaps route segments to reduce total distance
-
-This provides good results for up to 20-30 stops. For larger problems, consider integrating with dedicated solvers (OR-Tools, etc.).
-
-> **Limit**: The nearest-neighbor + 2-opt solver is documented for ≤ 30 stops. Beyond that, performance degrades and a dedicated VRP solver should be used.
-
-## Map Integration
-
-The application supports both Mapbox and Google Maps APIs. If no API keys are provided, mock data is used for development.
-
-To enable real maps:
-1. Get a Mapbox token from [mapbox.com](https://mapbox.com)
-2. Add to `VITE_MAPBOX_TOKEN` (frontend) and `MAPBOX_TOKEN` (backend)
-3. Or use Google Maps API key
-
-## Deployment (Free Tiers Only — ₹0 Budget)
-
-### Database: MongoDB Atlas M0 (Free)
-1. Create account at [mongodb.com/atlas](https://mongodb.com/atlas)
-2. Create M0 free cluster (shared, 512 MB)
-3. Database Access → Add user with readWrite permissions
-4. Network Access → Add IP `0.0.0.0/0` (allow all) or Render IPs
-5. Connect → Drivers → Copy connection string
-6. Replace `<password>` and `<dbname>` in connection string
-
-### Backend: Render (Free Tier)
-1. Fork this repo to GitHub
-2. New Web Service on Render → Connect GitHub repo
-3. Root directory: `backend`
-4. Build command: `npm install`
-5. Start command: `npm start`
-6. Environment variables:
-   - `MONGODB_URI` = Atlas connection string
-   - `JWT_SECRET` = long random string (32+ chars)
-   - `FRONTEND_URL` = Vercel frontend URL (e.g., `https://hopr.vercel.app`)
-   - `PORT` = `10000` (Render default)
-   - `NODE_ENV` = `production`
-7. Note: Free tier sleeps after 15 min inactivity — first load takes 30-60s
-
-### Frontend: Vercel (Free Tier)
-1. Import GitHub repo on Vercel
-2. Root directory: `frontend`
-3. Build command: `npm run build`
-4. Output directory: `dist`
-5. Environment variables:
-   - `VITE_API_URL` = Render backend URL (e.g., `https://hopr-backend.onrender.com/api`)
-   - `VITE_MAPBOX_TOKEN` = your Mapbox token
-6. Deploy
-
-### Live URLs (update after deployment)
-- **Frontend**: `https://hopr.vercel.app` (replace with your Vercel URL)
-- **Backend**: `https://hopr-backend.onrender.com` (replace with your Render URL)
-
-## Demo Credentials (after deployment)
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@hopr.com | admin123 |
-| Fleet Manager | manager@hopr.com | manager123 |
-| Driver | driver@hopr.com | driver123 |
-
-> **Note**: Register these users via the Admin Panel after first login, or seed them via script.
+| Command | What it does |
+|---|---|
+| `npm run dev` | API and app together, with reload |
+| `npm run build` | Production build of the app and a startup check of the API |
+| `npm test` | All tests in both workspaces |
+| `npm run lint` | ESLint in both workspaces |
+| `npm start` | Start the API in production mode |
+| `npm run seed --workspace=backend` | Load demo accounts, fleet and a demo route into `MONGODB_URI` |
 
 ## Testing
 
 ```bash
-# Backend tests
-cd backend && npm test
-
-# Frontend tests
-cd frontend && npm test
+npm test --workspace=backend    # 109 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics
+npm test --workspace=frontend   # 37 tests: tracking animation, timing, session handling, dialogs, command palette
 ```
 
-## Scripts
+Backend tests run against an in-memory MongoDB, so no database setup is needed. [docs/TECHNICAL.md](docs/TECHNICAL.md#13-testing) has the full breakdown and the end-to-end smoke test results.
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start both frontend and backend |
-| `npm run dev:frontend` | Start frontend only |
-| `npm run dev:backend` | Start backend only |
-| `npm run build` | Build both for production |
-| `npm run test` | Run all tests |
-| `npm run lint` | Lint all code |
+## Deployment (free tiers, ₹0)
 
-## Contributing
+### 1. Database: MongoDB Atlas M0
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
+1. Create a free M0 cluster at [mongodb.com/atlas](https://www.mongodb.com/atlas).
+2. Create a database user with read and write access.
+3. Network Access: allow `0.0.0.0/0` (Render's free plan has no fixed outbound IPs).
+4. Copy the connection string and add a database name, e.g. `.../hopr?retryWrites=true&w=majority`.
 
-## License
+### 2. API: Render web service (free)
 
-MIT License - see LICENSE file for details.
+1. New → Web Service → connect the GitHub repository.
+2. Root directory `backend`, build command `npm install`, start command `npm start`.
+3. Environment variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL` (the Vercel URL, set after step 3) and, optionally, `MAPBOX_TOKEN`. Do not set `PORT`.
+4. Health check path: `/api/health`.
 
-## Support
+The free plan sleeps after 15 minutes without traffic, and the next request takes up to about a minute; the app shows a "server is waking up" message while it waits. A free uptime monitor requesting `/api/health` every 10 minutes keeps it awake.
 
-For issues and feature requests, please use the GitHub issue tracker.
+### 3. App: Vercel (free)
+
+1. Add New → Project → import the repository.
+2. Root directory `frontend`; framework preset Vite (build `npm run build`, output `dist`).
+3. Environment variables: `VITE_API_URL=https://<your-api>.onrender.com/api` and, optionally, `VITE_MAPBOX_TOKEN`.
+4. Deploy, then set `FRONTEND_URL` on Render to the Vercel URL and redeploy the API.
+
+`frontend/vercel.json` rewrites every path to the app, so shared links such as `/track/<token>` open directly.
+
+### 4. Demo data
+
+Seed the production database from your machine, pointing at Atlas:
+
+```bash
+MONGODB_URI="<your Atlas connection string>" npm run seed --workspace=backend
+```
+
+Then sign in as the fleet manager. **Load Ranchi demo** (Routes, or Admin) creates a fresh demo route whenever you need one.
+
+## Project structure
+
+```
+hopr/
+├── backend/        Express API: routes/, services/ (routing engine, traffic, fuel, dispatch,
+│                   tracking, analytics), models/, middleware/, tests/
+├── frontend/       React app: pages/, components/, hooks/, utils/, public/ (icons, manifest)
+└── docs/           TECHNICAL.md and PRD.md
+```
+
+## Security
+
+Passwords are hashed with bcrypt. JWT sessions are revoked on password change, and accounts lock for 15 minutes after five failed logins. Every endpoint checks its role and validates and sanitises its input. Rate limits are layered by traffic type, helmet sets security headers, and production errors carry no internals. `npm audit` reports 0 vulnerabilities.
+
+These limits are deliberate and documented in [TECHNICAL.md §8](docs/TECHNICAL.md#8-authentication-roles-and-security):
+- sessions are stored in `localStorage`
+- tokens expire after 7 days
+- a route holds at most 30 stops
