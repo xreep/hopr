@@ -149,9 +149,9 @@ export default function Track() {
             <span>away. {eta.stopsBefore ? `${eta.stopsBefore} stop${eta.stopsBefore > 1 ? 's' : ''} before yours.` : 'You\'re next.'}</span>
           </p>
         )}
-        {status === 'arriving' && <p className="track-eta"><strong>Less than {data.arrivingRadiusM} m away</strong>. Please be ready.</p>}
-        {status === 'packed' && <p className="track-eta">Expected around <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></p>}
-        {status === 'delivered' && <p className="track-eta">Delivered at <strong>{formatClock(delivery.completedAt)}</strong>. Thank you!</p>}
+        {status === 'arriving' && <p className="track-eta"><span><strong>Less than {data.arrivingRadiusM} m away</strong>. Please be ready.</span></p>}
+        {status === 'packed' && <p className="track-eta"><span>Expected around <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></span></p>}
+        {status === 'delivered' && <p className="track-eta"><span>Delivered at <strong>{formatClock(delivery.completedAt)}</strong>. Thank you!</span></p>}
         {status === 'failed' && <p className="track-eta">{delivery.failureReason}. We&apos;ll contact you to reschedule.</p>}
 
         <ol className="track-timeline" aria-label="Delivery progress">
@@ -182,7 +182,7 @@ function TrackHeader({ deliveryId }) {
     <header className="track-header">
       <span className="brand"><HopMark size={26} />Hopr</span>
       <span className="flex items-center gap-2">
-        {deliveryId && <span className="text-micro text-ink-400">Order {deliveryId}</span>}
+        {deliveryId && <span className="text-micro text-ink-400 whitespace-nowrap">Order {deliveryId}</span>}
         <MuteToggle />
       </span>
     </header>
