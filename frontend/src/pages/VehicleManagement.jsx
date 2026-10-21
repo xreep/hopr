@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { Modal, StatusBadge, EmptyState, PageLoader, StatCard } from '../components/ui'
 import { VEHICLE_TYPES, FUEL_UNITS, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
 import Icon from '../components/icons'
+import { useConfirm } from '../components/ConfirmDialog'
 import { formatDate } from '../utils/time'
 
 const FUEL_TYPES = ['diesel', 'petrol', 'cng', 'electric', 'hybrid']
@@ -47,6 +48,7 @@ function formFromVehicle(v) {
 export default function VehicleManagement() {
   const { isAdmin } = useAuth()
   const [vehicles, setVehicles] = useState(null)
+  const confirm = useConfirm()
   const [drivers, setDrivers] = useState([])
   const [editing, setEditing] = useState(null) // null | 'new' | vehicle
   const [form, setForm] = useState(emptyForm)
@@ -111,7 +113,13 @@ export default function VehicleManagement() {
   }
 
   const remove = async vehicle => {
-    if (!window.confirm(`Delete ${vehicle.name} (${vehicle.licensePlate})?`)) return
+    const ok = await confirm({
+      title: `Delete ${vehicle.name}?`,
+      message: [`${vehicle.licensePlate} will be removed from the fleet${vehicle.driver ? ` and ${vehicle.driver.name} will no longer have a vehicle` : ''}.`, 'Past routes keep their records.'],
+      confirmLabel: 'Delete vehicle',
+      tone: 'danger'
+    })
+    if (!ok) return
     try {
       await api.delete(`/vehicles/${vehicle._id}`)
       toast.success('Vehicle deleted')

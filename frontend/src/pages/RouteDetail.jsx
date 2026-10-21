@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 import usePolling from '../hooks/usePolling'
+import usePageTitle from '../hooks/usePageTitle'
 import MapView from '../components/MapView'
 import { StatusBadge, PageLoader, EmptyState } from '../components/ui'
 import AuthImage from '../components/AuthImage'
@@ -20,6 +21,7 @@ export default function RouteDetail() {
   const [error, setError] = useState('')
   const [incidents, setIncidents] = useState([])
   const [drivers, setDrivers] = useState([])
+  usePageTitle(route?.name || 'Route')
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {

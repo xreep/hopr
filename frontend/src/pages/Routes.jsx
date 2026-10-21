@@ -8,6 +8,7 @@ import DemoSeedButton from '../components/DemoSeedButton'
 import DispatchPreviewDialog from '../components/DispatchPreviewDialog'
 import { speak } from '../utils/speak'
 import Icon from '../components/icons'
+import { useConfirm } from '../components/ConfirmDialog'
 import { formatKm, formatDuration, formatINR } from '../utils/format'
 import { formatDateTime } from '../utils/time'
 
@@ -28,6 +29,7 @@ export default function RoutesPage() {
   const [drivers, setDrivers] = useState([])
   const [busy, setBusy] = useState(null)
   const [dispatching, setDispatching] = useState(false)
+  const confirm = useConfirm()
   const closeDispatch = useCallback(() => setDispatching(false), [])
 
   const load = useCallback(async () => {
@@ -68,7 +70,13 @@ export default function RoutesPage() {
   }
 
   const remove = async route => {
-    if (!window.confirm(`Delete ${route.name} (${route.routeId})?`)) return
+    const ok = await confirm({
+      title: `Delete ${route.name}?`,
+      message: [`${route.routeId} and its ${route.stops?.length ?? 0} stops will be removed, along with any delivery photos and signatures.`, 'This cannot be undone.'],
+      confirmLabel: 'Delete route',
+      tone: 'danger'
+    })
+    if (!ok) return
     setBusy(route._id)
     try {
       await api.delete(`/routes/${route._id}`)

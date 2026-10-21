@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { AuthProvider } from './context/AuthContext'
+import { ConfirmProvider } from './components/ConfirmDialog'
+import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
 import { primeSpeechOnFirstGesture } from './utils/speak'
 
@@ -13,7 +15,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <ConfirmProvider>
+          <ErrorBoundary variant="page">
+            <App />
+          </ErrorBoundary>
+        </ConfirmProvider>
         <Toaster
           position="top-right"
           toastOptions={{

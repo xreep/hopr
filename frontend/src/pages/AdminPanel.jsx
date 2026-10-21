@@ -7,6 +7,7 @@ import { formatDate } from '../utils/time'
 import { MAPBOX_TOKEN } from '../config'
 import DemoSeedButton from '../components/DemoSeedButton'
 import Icon from '../components/icons'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const ROLES = ['admin', 'fleet_manager', 'driver']
 const roleLabel = r => r.replace('_', ' ')
@@ -21,6 +22,7 @@ export default function AdminPanel() {
   const [submitting, setSubmitting] = useState(false)
   const [roleFilter, setRoleFilter] = useState('')
   const [search, setSearch] = useState('')
+  const confirm = useConfirm()
 
   const load = useCallback(async () => {
     try {
@@ -82,7 +84,13 @@ export default function AdminPanel() {
   }
 
   const remove = async user => {
-    if (!window.confirm(`Delete ${user.name} (${user.email})? This cannot be undone.`)) return
+    const ok = await confirm({
+      title: `Delete ${user.name}?`,
+      message: [`${user.email} will no longer be able to sign in.`, 'This cannot be undone. To keep their history, deactivate the account instead.'],
+      confirmLabel: 'Delete user',
+      tone: 'danger'
+    })
+    if (!ok) return
     try {
       await api.delete(`/admin/users/${user._id}`)
       toast.success('User deleted')

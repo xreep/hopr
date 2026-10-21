@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { initials } from '../utils/format'
 import MuteToggle from './MuteToggle'
 import Icon, { HopMark } from './icons'
+import ErrorBoundary from './ErrorBoundary'
+import usePageTitle from '../hooks/usePageTitle'
 
 const MANAGERS = ['admin', 'fleet_manager']
 const navigation = [
@@ -19,6 +21,8 @@ const navigation = [
   { name: 'Profile', href: '/profile', icon: 'user', roles: ['admin', 'fleet_manager', 'driver'] }
 ]
 
+const PAGE_TITLES = Object.fromEntries(navigation.map(item => [item.href, item.name]))
+
 const todayIST = () => new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long' })
 const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'Driver' }
 
@@ -29,6 +33,8 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
+  // Route detail pages name themselves after the route
+  usePageTitle(location.pathname.startsWith('/routes/') ? null : PAGE_TITLES[location.pathname] || 'Page not found')
 
   const filteredNav = navigation.filter(item => item.roles.includes(user?.role))
 
@@ -88,7 +94,9 @@ export default function Layout() {
           <MuteToggle />
         </header>
         <main id="main" className="page-content">
-          <Outlet />
+          <ErrorBoundary resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../utils/api'
 import { HopMark } from '../components/icons'
+import usePageTitle from '../hooks/usePageTitle'
 
 const DEMO_USERS = {
   admin: { email: 'admin@hopr.com', password: 'admin123', label: 'Admin' },
@@ -95,6 +96,7 @@ export default function Login() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('login')
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '' })
+  usePageTitle(mode === 'login' ? 'Sign in' : 'Create account')
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
 

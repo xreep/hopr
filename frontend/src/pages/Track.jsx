@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import MapView from '../components/MapView'
 import usePolling from '../hooks/usePolling'
+import usePageTitle from '../hooks/usePageTitle'
 import { planMove, positionAt, remainingFrom } from '../utils/tracking'
 import { formatClock } from '../utils/time'
 import { speak } from '../utils/speak'
@@ -26,6 +27,7 @@ export default function Track() {
   const { token } = useParams()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  usePageTitle('Track your delivery')
   const [display, setDisplay] = useState(null) // { position, path }
   const [now, setNow] = useState(Date.now())
   const lastOk = useRef(0)
