@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
@@ -7,7 +8,8 @@ import MapView from '../components/MapView'
 import { Modal, StatusBadge, EmptyState, PageLoader } from '../components/ui'
 import ProofOfDeliveryDialog from '../components/ProofOfDeliveryDialog'
 import { formatKm, formatDuration, initials } from '../utils/format'
-import { formatClock, minutesUntil } from '../utils/time'
+import { formatClock } from '../utils/time'
+import { stopTiming } from '../utils/stopTiming'
 import { stopVariant, isStale } from '../utils/routeView'
 import { useAuth } from '../context/AuthContext'
 import useDriverLocation from '../hooks/useDriverLocation'
@@ -16,6 +18,8 @@ import { speak } from '../utils/speak'
 import Icon from '../components/icons'
 
 const FAILURE_REASONS = ['Customer not available', 'Address not found', 'Customer refused delivery', 'Access restricted / gate locked', 'Package damaged']
+
+const directionsUrl = stop => `https://www.google.com/maps/dir/?api=1&destination=${stop.coordinates[1]},${stop.coordinates[0]}&travelmode=driving`
 
 export default function DriverPanel() {
   const { user } = useAuth()
@@ -49,6 +53,7 @@ export default function DriverPanel() {
   const [picking, setPicking] = useState(false)
   const currentIndex = route ? route.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress') : -1
   const currentStop = currentIndex >= 0 ? route.stops[currentIndex] : null
+  const timing = currentStop ? stopTiming(currentStop) : null
 
   const applyRoute = updated => {
     setRoutes(prev => {
@@ -101,7 +106,7 @@ export default function DriverPanel() {
   if (!routes) return <PageLoader />
 
   return (
-    <div>
+    <div className="driver-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">My deliveries</h1>
@@ -160,26 +165,36 @@ export default function DriverPanel() {
                     <div>
                       <p className="text-lg font-semibold">{currentStop.customerName || 'Customer'}</p>
                       <p className="text-secondary">{currentStop.address}</p>
-                      <p className="text-sm mt-1">
-                        ETA <strong>{formatClock(currentStop.estimatedArrival)}</strong>
-                        {minutesUntil(currentStop.estimatedArrival) !== null && ` (${minutesUntil(currentStop.estimatedArrival) >= 0 ? 'in ' : ''}${Math.abs(minutesUntil(currentStop.estimatedArrival))} min${minutesUntil(currentStop.estimatedArrival) < 0 ? ' ago' : ''})`}
-                        {(currentStop.windowStart || currentStop.windowEnd) && <>. Window {currentStop.windowStart || '…'} to {currentStop.windowEnd || '…'}</>}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
+                        <p className="text-sm">
+                          {timing.late ? 'Planned for' : 'ETA'} <strong>{timing.eta}</strong>
+                          {timing.relative && <span className={timing.late ? 'text-signal-amber' : 'text-ink-300'}>, {timing.relative}</span>}
+                        </p>
+                        {timing.window && <span className={`window-chip is-${timing.windowState}`}><Icon name="clock" size={14} />{timing.window}</span>}
+                      </div>
                       {currentStop.notes && <p className="alert alert-info mt-2 text-sm">{currentStop.notes}</p>}
                       {currentStop.packageWeightKg > 0 && <p className="text-micro text-ink-400 mt-1">{currentStop.deliveryId}, {currentStop.packageWeightKg} kg {currentStop.packageSize} parcel</p>}
                     </div>
                     <div className="driver-actions">
-                      <a className="btn btn-secondary" target="_blank" rel="noopener noreferrer"
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${currentStop.coordinates[1]},${currentStop.coordinates[0]}&travelmode=driving`}>
+                      <a className="btn btn-secondary dock-duplicate" target="_blank" rel="noopener noreferrer" href={directionsUrl(currentStop)}>
                         <Icon name="navigation" />Navigate
                       </a>
                       {currentStop.customerPhone && <a className="btn btn-outline" href={`tel:${currentStop.customerPhone}`}><Icon name="phone" />Call</a>}
                       {currentStop.trackingToken && <ShareTrackingButton token={currentStop.trackingToken} name={currentStop.customerName} />}
-                      <button type="button" className="btn btn-success" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}><Icon name="check" />Mark delivered</button>
-                      <button type="button" className="btn btn-danger" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}><Icon name="x" />Couldn&apos;t deliver</button>
+                      <button type="button" className="btn btn-success dock-duplicate" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}><Icon name="check" />Mark delivered</button>
+                      <button type="button" className="btn btn-danger dock-duplicate" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}><Icon name="x" />Couldn&apos;t deliver</button>
                       <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDialog({ kind: 'issue', stop: currentStop })}><Icon name="flag" />Report a problem</button>
                     </div>
                   </div>
+                  {/* Phones: the three actions a driver needs at the door stay under the thumb.
+                      Portalled to <body>: the glass card's backdrop-filter would otherwise trap position: fixed */}
+                  {createPortal(<div className="driver-dock" role="toolbar" aria-label={`Actions for stop ${currentStop.sequence}`}>
+                    <a className="btn btn-secondary btn-icon" target="_blank" rel="noopener noreferrer" href={directionsUrl(currentStop)} aria-label="Navigate to this stop">
+                      <Icon name="navigation" size={20} />
+                    </a>
+                    <button type="button" className="btn btn-danger" disabled={busy} onClick={() => setDialog({ kind: 'fail', stop: currentStop })}><Icon name="x" />Couldn&apos;t deliver</button>
+                    <button type="button" className="btn btn-success" disabled={busy} onClick={() => setDialog({ kind: 'pod', stop: currentStop })}><Icon name="check" />Delivered</button>
+                  </div>, document.body)}
                 </div>
               ) : (
                 <div className="card"><EmptyState title="All stops on this route are done" /></div>

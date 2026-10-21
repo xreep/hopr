@@ -494,6 +494,29 @@
   .current-stop::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--nd-volt); box-shadow: 0 0 14px var(--nd-volt-glow); }
   .driver-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 0.5rem; }
   .driver-actions .btn { min-height: 2.9rem; }
+  .window-chip {
+    display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.78rem;
+    border: 1px solid var(--nd-hair); color: var(--nd-ink-2); background: rgb(255 255 255 / 0.03);
+  }
+  .window-chip.is-open { color: var(--nd-ink); border-color: rgb(212 255 63 / 0.35); }
+  .window-chip.is-open svg { color: var(--nd-volt); }
+  .window-chip.is-closed { color: #FFB86B; border-color: rgb(245 181 68 / 0.4); background: rgb(245 181 68 / 0.08); }
+
+  /* Phone dock for the current stop. On larger screens the card's own buttons are used. */
+  .driver-dock { display: none; }
+  @media (max-width: 767px) {
+    .driver-actions .dock-duplicate { display: none; }
+    .driver-dock {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+      padding: 0.65rem 0.75rem calc(0.65rem + env(safe-area-inset-bottom)); background: rgb(7 11 20 / 0.92);
+      border-top: 1px solid var(--nd-hair); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    }
+    .driver-dock .btn { min-height: 3.1rem; font-size: 0.95rem; padding-inline: 0.6rem; min-width: 0; }
+    .driver-dock .btn-icon { width: 3.1rem; }
+    .driver-dock .btn:not(.btn-icon) { gap: 0.35rem; white-space: nowrap; }
+    .current-stop { margin-bottom: 0; }
+    .driver-page { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  }
 
   /* ---------- Live location (driver) ---------- */
   .location-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.8rem 1.25rem; border-top: 1px solid var(--nd-hair); background: rgb(11 18 32 / 0.5); }
