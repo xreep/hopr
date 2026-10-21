@@ -5,6 +5,8 @@ import { initials } from '../utils/format'
 import MuteToggle from './MuteToggle'
 import Icon, { HopMark } from './icons'
 import ErrorBoundary from './ErrorBoundary'
+import CommandPalette from './CommandPalette'
+import { isMac } from '../utils/platform'
 import usePageTitle from '../hooks/usePageTitle'
 
 const MANAGERS = ['admin', 'fleet_manager']
@@ -31,6 +33,23 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Cmd/Ctrl+K anywhere, or "/" when not typing, opens search
+  useEffect(() => {
+    const onKey = e => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(open => !open)
+      } else if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        setPaletteOpen(true)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
   // Route detail pages name themselves after the route
@@ -91,7 +110,14 @@ export default function Layout() {
             <NavLink to="/dashboard" className="brand lg:hidden" aria-label="Hopr dashboard"><HopMark size={24} /></NavLink>
             <span className="text-small text-ink-400 hidden md:block">{todayIST()}, Ranchi</span>
           </div>
-          <MuteToggle />
+          <div className="flex items-center gap-1">
+            <button type="button" className="btn btn-ghost btn-sm palette-trigger" onClick={() => setPaletteOpen(true)} aria-label="Search and run commands" aria-keyshortcuts={isMac() ? 'Meta+K' : 'Control+K'}>
+              <Icon name="search" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="hidden md:inline-flex">{isMac() ? '⌘K' : 'Ctrl K'}</kbd>
+            </button>
+            <MuteToggle />
+          </div>
         </header>
         <main id="main" className="page-content">
           <ErrorBoundary resetKey={location.pathname}>
@@ -100,6 +126,7 @@ export default function Layout() {
         </main>
       </div>
 
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={filteredNav} />
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden="true" />}
     </div>
   )

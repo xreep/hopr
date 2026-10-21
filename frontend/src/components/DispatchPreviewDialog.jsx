@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Modal, EmptyState } from './ui'
 import api, { errorMessage } from '../utils/api'
@@ -35,26 +36,38 @@ export default function DispatchPreviewDialog({ onClose, onApplied }) {
 
   return (
     <Modal title="Auto-dispatch" onClose={busy ? () => {} : onClose} size="lg"
-      footer={preview && (
+      footer={preview && (preview.assignments.length === 0 ? (
+        <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+      ) : (
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="button" className="btn btn-primary" onClick={confirm} disabled={busy || !preview.assignments.length}>
             {busy ? <><span className="spinner spinner-sm" /> Assigning</> : <><Icon name="check" />Assign {preview.assignments.length} route{preview.assignments.length === 1 ? '' : 's'}</>}
           </button>
         </>
-      )}>
+      ))}>
       {!preview ? <div className="page-loader"><span className="spinner" /></div> : (
         <>
-          <p className="text-body text-ink-300 mb-4">
+          {preview.unassignedRoutes > 0 && <p className="text-body text-ink-300 mb-4">
             {preview.unassignedRoutes} route{preview.unassignedRoutes === 1 ? ' is' : 's are'} waiting and {preview.availableDrivers} driver{preview.availableDrivers === 1 ? ' is' : 's are'} free.
             Hopr pairs them by how close each driver is (live GPS, or the depot) and how well their vehicle fits the load. Nothing changes until you confirm.
-          </p>
+          </p>}
           {preview.assignments.length === 0 ? (
-            <EmptyState title="Nothing can be assigned right now" />
+            preview.unassignedRoutes === 0 ? (
+              <EmptyState title="Every route has a driver" action={<Link to="/route-planner" className="btn btn-secondary" onClick={onClose}><Icon name="plus" />Plan new routes</Link>}>
+                New routes you save without a driver will be waiting here.
+              </EmptyState>
+            ) : preview.availableDrivers === 0 ? (
+              <EmptyState title="No drivers are free">
+                Drivers become free when they finish their current route. Active drivers with a vehicle are offered automatically.
+              </EmptyState>
+            ) : (
+              <EmptyState title="Nothing can be assigned right now">The reasons for each route are listed below.</EmptyState>
+            )
           ) : (
             <ul className="dispatch-list">
-              {preview.assignments.map(a => (
-                <li key={a.route._id} className="dispatch-item hop-seq" style={{ '--i': 0 }}>
+              {preview.assignments.map((a, i) => (
+                <li key={a.route._id} className="dispatch-item hop-seq" style={{ '--i': i }}>
                   <div className="dispatch-pair">
                     <div className="min-w-0">
                       <p className="font-medium truncate">{a.route.name}</p>

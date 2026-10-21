@@ -32,6 +32,15 @@ export default function RoutesPage() {
   const confirm = useConfirm()
   const closeDispatch = useCallback(() => setDispatching(false), [])
 
+  // Opened from the command palette: /routes?dispatch=1
+  useEffect(() => {
+    if (params.get('dispatch') !== '1') return
+    setDispatching(true)
+    const next = new URLSearchParams(params)
+    next.delete('dispatch')
+    setParams(next, { replace: true })
+  }, [params, setParams])
+
   const load = useCallback(async () => {
     try {
       const res = await api.get('/routes', {

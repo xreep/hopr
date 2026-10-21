@@ -297,6 +297,37 @@
   .modal-lg { max-width: 760px; }
   .modal-sm { max-width: 440px; }
 
+  /* ---------- Command palette ---------- */
+  .palette-overlay { align-items: flex-start; padding-top: min(14vh, 120px); }
+  .palette {
+    width: 100%; max-width: 620px; display: flex; flex-direction: column; max-height: min(70vh, 560px);
+    background: rgb(14 22 38 / 0.97); border: 1px solid var(--nd-glass-border); border-radius: 18px; overflow: hidden;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 40px 90px -30px rgb(0 0 0 / 0.95);
+    animation: nd-rise-in 0.2s var(--nd-ease-out);
+  }
+  .palette-input { display: flex; align-items: center; gap: 0.75rem; padding: 0.95rem 1.1rem; border-bottom: 1px solid var(--nd-hair); color: var(--nd-ink-3); }
+  .palette-input input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--nd-ink); font-size: 1rem; }
+  .palette-input input::placeholder { color: var(--nd-ink-3); }
+  .palette-list { list-style: none; margin: 0; padding: 0.4rem; overflow-y: auto; flex: 1; }
+  .palette-group { padding: 0.7rem 0.75rem 0.3rem; font-size: 0.75rem; font-weight: 500; color: var(--nd-ink-3); }
+  .palette-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.75rem; border-radius: 10px; cursor: pointer; color: var(--nd-ink-2); font-size: 0.9rem; }
+  .palette-item.is-active { background: rgb(255 255 255 / 0.06); color: var(--nd-ink); }
+  .palette-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: rgb(255 255 255 / 0.04); border: 1px solid var(--nd-hair); flex-shrink: 0; }
+  .palette-item.is-active .palette-icon { color: var(--nd-volt); border-color: rgb(212 255 63 / 0.35); }
+  .palette-enter { color: var(--nd-ink-3); flex-shrink: 0; }
+  .palette-empty { padding: 1.5rem 1rem; text-align: center; color: var(--nd-ink-3); font-size: 0.875rem; }
+  .palette-footer { display: flex; gap: 1rem; padding: 0.6rem 1.1rem; border-top: 1px solid var(--nd-hair); }
+  .palette kbd, .palette-trigger kbd {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 1.4rem; height: 1.3rem; padding: 0 0.35rem; margin-right: 0.2rem;
+    border-radius: 6px; border: 1px solid var(--nd-hair); background: rgb(255 255 255 / 0.04); font: 500 0.7rem/1 Inter, sans-serif; color: var(--nd-ink-3);
+  }
+  .palette-trigger kbd { margin-left: 0.35rem; }
+  @media (max-width: 640px) {
+    .palette-overlay { padding: 0.75rem; padding-top: 0.75rem; }
+    .palette { max-height: 80vh; }
+    .palette-footer { display: none; }
+  }
+
   /* ---------- Crash screen (error boundary) ---------- */
   .crash-screen {
     display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
