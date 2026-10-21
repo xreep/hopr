@@ -465,6 +465,24 @@
   .live-item:first-child { padding-top: 0; }
   .live-item:last-child { border-bottom: none; padding-bottom: 0; }
   .live-item.selected { background: rgb(169 180 200 / 0.05); border-radius: 12px; padding: 0.6rem; }
+  .live-item { transition: background-color 0.15s ease; border-radius: 12px; }
+  .live-item.is-focused { background: rgb(255 255 255 / 0.04); }
+
+  /* Dashboard: fleet map beside the list of drivers on the road */
+  .fleet-card { display: grid; grid-template-columns: minmax(0, 1fr) 380px; overflow: hidden; }
+  .fleet-map { position: relative; border-right: 1px solid var(--nd-hair); min-width: 0; }
+  .fleet-map .map-container { border-radius: 0; border: 0; }
+  .fleet-empty {
+    position: absolute; top: 1rem; left: 50%; transform: translateX(-50%); padding: 0.4rem 0.85rem; border-radius: 999px;
+    background: rgb(7 11 20 / 0.82); border: 1px solid var(--nd-hair); color: var(--nd-ink-2); font-size: 0.8rem;
+  }
+  .fleet-side { display: flex; flex-direction: column; min-width: 0; max-height: 460px; }
+  .fleet-side .card-body { overflow-y: auto; flex: 1; }
+  @media (max-width: 1100px) {
+    .fleet-card { grid-template-columns: 1fr; }
+    .fleet-map { border-right: 0; border-bottom: 1px solid var(--nd-hair); }
+    .fleet-side { max-height: none; }
+  }
   .route-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: middle; margin-right: 0.35rem; }
   .driver-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
   @media (max-width: 1100px) { .driver-grid { grid-template-columns: minmax(0, 1fr); } }

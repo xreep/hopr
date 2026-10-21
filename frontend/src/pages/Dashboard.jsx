@@ -1,10 +1,13 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 import usePolling from '../hooks/usePolling'
 import { StatCard, StatusBadge, EmptyState, PageLoader } from '../components/ui'
 import Icon from '../components/icons'
+import MapView from '../components/MapView'
+import useMediaQuery from '../hooks/useMediaQuery'
+import { buildFleetMap } from '../utils/fleetMap'
 import { formatKm, formatDuration, initials } from '../utils/format'
 import { formatClock, relativeTime, formatDateTime } from '../utils/time'
 
@@ -73,7 +76,7 @@ function DriverDashboard({ data }) {
 
 function ManagerDashboard({ data }) {
   const alerts = [
-    data.unassignedRoutes > 0 && { icon: 'users', text: `${data.unassignedRoutes} route${data.unassignedRoutes > 1 ? 's are' : ' is'} waiting for a driver`, to: '/routes?unassigned=true', action: 'Auto-dispatch' },
+    data.unassignedRoutes > 0 && { icon: 'users', text: `${data.unassignedRoutes} route${data.unassignedRoutes > 1 ? 's are' : ' is'} waiting for a driver`, to: '/routes?dispatch=1', action: 'Auto-dispatch' },
     data.routesNeedingRecalculation > 0 && { icon: 'refresh', text: `${data.routesNeedingRecalculation} route${data.routesNeedingRecalculation > 1 ? 's are' : ' is'} affected by new traffic`, to: '/monitor', action: 'Review' },
     data.activeIncidents > 0 && { icon: 'alert', text: `${data.activeIncidents} active traffic incident${data.activeIncidents > 1 ? 's' : ''}`, to: '/monitor', action: 'View on map' }
   ].filter(Boolean)
@@ -99,53 +102,80 @@ function ManagerDashboard({ data }) {
         </ul>
       )}
 
-      <div className="grid grid-2 gap-6">
-        <div className="card">
-          <div className="card-header flex-between">
-            <h3>Live routes</h3>
-            <Link to="/monitor" className="btn btn-ghost btn-sm">Live monitor<Icon name="arrowRight" /></Link>
-          </div>
-          <div className="card-body">
-            {data.liveRoutes.length === 0
-              ? <EmptyState title="Nothing on the road right now">Routes appear here as soon as a driver starts one.</EmptyState>
-              : <LiveRoutes routes={data.liveRoutes} />}
-          </div>
+      <FleetCard liveRoutes={data.liveRoutes} />
+
+      <div className="card">
+        <div className="card-header flex-between">
+          <h3>Recent routes</h3>
+          <Link to="/routes" className="btn btn-ghost btn-sm">All routes<Icon name="arrowRight" /></Link>
         </div>
-        <div className="card">
-          <div className="card-header flex-between">
-            <h3>Recent routes</h3>
-            <Link to="/routes" className="btn btn-ghost btn-sm">All routes<Icon name="arrowRight" /></Link>
-          </div>
-          {data.recentRoutes.length === 0 ? (
-            <EmptyState title="No routes yet" action={<Link to="/route-planner" className="btn btn-secondary btn-sm">Plan your first route</Link>} />
-          ) : (
-            <ul className="divide-y divide-white/5">
-              {data.recentRoutes.map(r => (
-                <li key={r._id} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1">
-                    <Link to={`/routes/${r._id}`} className="font-medium no-underline hover:underline">{r.name}</Link>
-                    <p className="text-micro text-ink-400 truncate">
-                      {r.driver?.name || 'No driver yet'}, {formatKm(r.totalDistance)}, planned {formatDateTime(r.plannedStart)}
-                    </p>
-                  </div>
-                  <StatusBadge status={r.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {data.recentRoutes.length === 0 ? (
+          <EmptyState title="No routes yet" action={<Link to="/route-planner" className="btn btn-secondary btn-sm">Plan your first route</Link>} />
+        ) : (
+          <ul className="divide-y divide-white/5">
+            {data.recentRoutes.map(r => (
+              <li key={r._id} className="flex items-center gap-3 px-5 py-3">
+                <div className="min-w-0 flex-1">
+                  <Link to={`/routes/${r._id}`} className="font-medium no-underline hover:underline">{r.name}</Link>
+                  <p className="text-micro text-ink-400 truncate">
+                    {r.driver?.name || 'No driver yet'}, {formatKm(r.totalDistance)}, planned {formatDateTime(r.plannedStart)}
+                  </p>
+                </div>
+                <StatusBadge status={r.status} />
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </>
   )
 }
 
-function LiveRoutes({ routes }) {
+// The fleet right now: every route on the road on one map, next to the list of drivers.
+// Pointing at a driver highlights their route; the rest stay muted.
+function FleetCard({ liveRoutes }) {
+  const [routes, setRoutes] = useState([])
+  const [focus, setFocus] = useState(null)
+  const narrow = useMediaQuery('(max-width: 1100px)')
+  const loadFleet = useCallback(async () => {
+    try {
+      const res = await api.get('/routes', { params: { status: 'active', withGeometry: true, limit: 50 } })
+      setRoutes(res.data.routes)
+    } catch { /* the list beside the map still shows progress */ }
+  }, [])
+  usePolling(loadFleet, 15000)
+  const map = useMemo(() => buildFleetMap(routes, focus, { focusOnly: false }), [routes, focus])
+
+  return (
+    <section className="card fleet-card mb-6" aria-label="Fleet on the road">
+      <div className="fleet-map">
+        <MapView lines={map.lines} points={map.points} drivers={map.drivers} fitKey={`fleet-${routes.map(r => r._id).join()}`} height={narrow ? 300 : 460} />
+        {liveRoutes.length === 0 && <p className="fleet-empty">No drivers on the road</p>}
+      </div>
+      <div className="fleet-side">
+        <div className="card-header flex-between">
+          <h3>On the road</h3>
+          <Link to="/monitor" className="btn btn-ghost btn-sm">Live monitor<Icon name="arrowRight" /></Link>
+        </div>
+        <div className="card-body">
+          {liveRoutes.length === 0
+            ? <EmptyState title="Nothing on the road right now">Routes appear here as soon as a driver starts one.</EmptyState>
+            : <LiveRoutes routes={liveRoutes} focus={focus} onFocus={setFocus} />}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function LiveRoutes({ routes, focus, onFocus }) {
   return (
     <ul className="live-list">
       {routes.map(r => {
         const pct = (r.progress.done / Math.max(1, r.progress.total)) * 100
         return (
-          <li key={r._id} className="live-item">
+          <li key={r._id} className={`live-item ${focus === r._id ? 'is-focused' : ''}`}
+            onMouseEnter={onFocus && (() => onFocus(r._id))} onMouseLeave={onFocus && (() => onFocus(null))}
+            onFocus={onFocus && (() => onFocus(r._id))} onBlur={onFocus && (() => onFocus(null))}>
             <div className="flex items-start gap-3">
               <span className="avatar avatar-sm" aria-hidden="true">{initials(r.driver?.name || r.name)}</span>
               <div className="min-w-0 flex-1">

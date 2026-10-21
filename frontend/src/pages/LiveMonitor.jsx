@@ -7,9 +7,8 @@ import MapView from '../components/MapView'
 import AddressAutocomplete from '../components/AddressAutocomplete'
 import { StatusBadge, EmptyState } from '../components/ui'
 import { ROUTE_COLORS, VOLT } from '../config'
-import { initials } from '../utils/format'
 import { formatClock, relativeTime } from '../utils/time'
-import { stopVariant, isStale } from '../utils/routeView'
+import { buildFleetMap } from '../utils/fleetMap'
 import Icon from '../components/icons'
 
 const blankIncident = { type: 'congestion', label: '', coordinates: null, place: '', radiusKm: 0.6, severity: 1.8, durationMinutes: 120 }
@@ -39,29 +38,7 @@ export default function LiveMonitor() {
   const [plannedAffected, setPlannedAffected] = useState([])
   usePolling(async () => setPlannedAffected(await planned()), 30000)
 
-  const mapData = useMemo(() => {
-    const shown = focus ? routes.filter(r => r._id === focus) : routes
-    return {
-      // The focused route (or a lone route) is volt; others use muted hues
-      lines: shown.map(r => ({ id: r._id, coordinates: r.geometry?.coordinates || [], color: focus === r._id || shown.length === 1 ? VOLT : ROUTE_COLORS[routes.indexOf(r) % ROUTE_COLORS.length], width: focus === r._id ? 4.5 : 3.5 })),
-      points: [
-        // One marker per distinct depot
-        ...[...new Map(shown.filter(r => r.depot?.coordinates?.length === 2).map(r => [r.depot.coordinates.join(), r.depot])).values()]
-          .map(d => ({ id: `depot-${d.coordinates.join()}`, coordinates: d.coordinates, label: 'H', variant: 'depot', title: d.name })),
-        ...shown.flatMap(r => {
-          const current = r.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress')
-          return r.stops.map((s, i) => ({ id: `${r._id}-${s._id}`, coordinates: s.coordinates, label: s.sequence, variant: stopVariant(s, i === current), title: `${r.name}: ${s.sequence}. ${s.address}` }))
-        })
-      ],
-      drivers: shown.filter(r => r.driverLocation?.coordinates?.length === 2).map(r => ({
-        id: r._id,
-        coordinates: r.driverLocation.coordinates,
-        initials: initials(r.driver?.name),
-        stale: isStale(r.driverLocation.updatedAt),
-        title: `${r.driver?.name} · ${r.name} · GPS ${relativeTime(r.driverLocation.updatedAt)}`
-      }))
-    }
-  }, [routes, focus])
+  const mapData = useMemo(() => buildFleetMap(routes, focus), [routes, focus])
 
   const incidentShapes = useMemo(() => [
     ...incidents.map(i => ({ id: i._id, coordinates: i.coordinates, radiusKm: i.radiusKm, type: i.type, label: i.label })),
