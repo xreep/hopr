@@ -11,7 +11,8 @@ if (!process.env.JWT_SECRET) {
   console.warn('WARNING: JWT_SECRET not set, using development fallback. Set JWT_SECRET in production!')
 }
 
-const PORT = process.env.PORT || 5000
+// Render sets PORT. Locally 5001, because macOS AirPlay Receiver occupies 5000.
+const PORT = process.env.PORT || 5001
 
 const connectDB = async () => {
   try {
