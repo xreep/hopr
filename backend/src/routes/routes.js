@@ -7,7 +7,7 @@ import { proofUpload, sniffImageType } from '../middleware/upload.js'
 import { authenticate, authorize, isManager } from '../middleware/auth.js'
 import { validateRequest, pick, objectIdParam } from '../middleware/validate.js'
 import {
-  planFromRequest, routeDocsFromPlan, assertAssignableDriver, recalculateRoute, applyVehicle
+  planFromRequest, routeDocsFromPlan, assertAssignableDriver, recalculateRoute, applyVehicle, forecastFromStart
 } from '../services/routePlanning.js'
 import { OptimizationError } from '../services/routeOptimizer.js'
 import { VEHICLE_TYPES, PRIORITIES, MAX_STOPS_PER_BATCH, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
@@ -262,15 +262,9 @@ router.patch('/:id/start', authenticate, async (req, res) => {
     if (route.status !== 'planned') return res.status(409).json({ message: `Route is already ${route.status}` })
 
     const now = new Date()
-    const delay = route.plannedStart ? Math.round((now - route.plannedStart) / 60000) : 0
     route.status = 'active'
     route.startedAt = now
-    // Shift forecast ETAs by the actual start time (planned ETAs are kept for planned-vs-actual)
-    if (delay) {
-      for (const stop of route.stops) {
-        if (stop.estimatedArrival) stop.estimatedArrival = addMinutes(stop.estimatedArrival, delay)
-      }
-    }
+    await forecastFromStart(route, now)
     const first = route.stops.find(s => s.status === 'pending')
     if (first) first.status = 'in_progress'
     route.refreshProgress()

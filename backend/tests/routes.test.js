@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { api, createUser, planBody, createRoute, completeStop } from './helpers.js'
 import { useTestDb } from './db.js'
 import Route from '../src/models/Route.js'
@@ -136,6 +136,40 @@ describe('route assignment and driver workflow', () => {
     const route = await createRoute(manager.auth)
     const res = await api().patch(`/api/routes/${route._id}`).set(driver.auth).send({ driver: driver.user._id })
     expect(res.status).toBe(403)
+  })
+
+  it('forecasts ETAs from the real start time, respecting delivery windows', async () => {
+    // 07:00 IST, three hours before the planned 10:00 departure
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-15T01:30:00.000Z'))
+    try {
+      const manager = await createUser('fleet_manager')
+      const driver = await createUser('driver')
+      // Morabadi must be served 10:30-11:00, then Lalpur from 11:00: the van waits at Morabadi
+      const route = await createRoute(manager.auth, {
+        assignments: [{ driver: driver.user._id }],
+        stops: [
+          { ...L.morabadiMaidan, customerName: 'A', packageWeightKg: 1, windowStart: '10:30', windowEnd: '11:00' },
+          { ...L.lalpurChowk, customerName: 'B', packageWeightKg: 1, windowStart: '11:00', windowEnd: '13:00' }
+        ]
+      })
+      const planned = new Map(route.stops.map(s => [s._id, new Date(s.estimatedArrival).getTime()]))
+
+      const res = await api().patch(`/api/routes/${route._id}/start`).set(driver.auth)
+      expect(res.status).toBe(200)
+      const [first, second] = [...res.body.route.stops].sort((a, b) => a.sequence - b.sequence)
+      expect(first.customerName).toBe('A')
+      const opens = new Date('2026-10-15T05:00:00.000Z').getTime() // 10:30 IST
+      // Starting three hours early gets the van to Morabadi sooner, but it still waits for
+      // the window, so Lalpur cannot be reached before 10:30 (a flat 3 h shift would say ~07:45)
+      expect(new Date(first.estimatedArrival).getTime()).toBeLessThan(planned.get(first._id))
+      expect(new Date(second.estimatedArrival).getTime()).toBeGreaterThan(opens)
+      const stops = [first, second]
+      // The plan itself is kept for planned-vs-actual reporting
+      for (const s of stops) expect(new Date(s.plannedArrival).getTime()).toBe(planned.get(s._id))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('runs a route end to end: start, complete, fail with reason, auto-complete route', async () => {

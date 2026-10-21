@@ -144,6 +144,38 @@ export async function routeDocsFromPlan(plan, { name, createdBy, assignments = [
   return { batchId, docs }
 }
 
+// Re-times a route's stops in their current order for a vehicle and departure time,
+// with today's traffic and active incidents. Returns [stopDoc, timedStop] pairs.
+async function retimeStops(route, vehicle, departureTime) {
+  const ordered = [...route.stops].sort((a, b) => a.sequence - b.sequence)
+  const result = retimeSequence({
+    depot: route.depot,
+    stops: ordered.map(s => ({ ...pickStop(s.toObject ? s.toObject() : s), _stopId: s._id.toString() })),
+    vehicle: vehicle?.toObject ? vehicle.toObject() : (vehicle || { type: route.vehicleType }),
+    departureTime,
+    trafficEnabled: route.trafficEnabled !== false,
+    returnToDepot: Boolean(route.returnToDepot),
+    incidents: incidentsForOptimizer(await TrafficIncident.findActive())
+  })
+  const byId = new Map(ordered.map(s => [s._id.toString(), s]))
+  return { result, pairs: result.stops.map(r => [byId.get(r._stopId), r]) }
+}
+
+// When a driver starts a route, forecast every stop from the depot at the real start
+// time. Starting early helps stops without a window but never lands a stop before its
+// window opens; starting late pushes everything back. Planned ETAs are left as planned.
+export async function forecastFromStart(route, now = new Date()) {
+  if (!route.stops?.length) return route
+  const vehicle = route.vehicle?._id ? route.vehicle : (route.vehicle ? await Vehicle.findById(route.vehicle) : null)
+  const { pairs } = await retimeStops(route, vehicle, now)
+  for (const [stop, r] of pairs) {
+    stop.estimatedArrival = r.estimatedArrival
+    stop.windowStatus = r.windowStatus
+    stop.lateByMin = r.lateByMin
+  }
+  return route
+}
+
 // Puts a route on a vehicle. A route that is still planned keeps its stop order and
 // distance but is re-timed for that vehicle: its speed and time at the door move the
 // ETAs and window checks, its fuel type and mileage move fuel cost and CO2. Routes
@@ -153,19 +185,8 @@ export async function applyVehicle(route, vehicle) {
   route.vehicleType = vehicle.type
   if (route.status !== 'planned' || !route.stops?.length) return route
 
-  const ordered = [...route.stops].sort((a, b) => a.sequence - b.sequence)
-  const result = retimeSequence({
-    depot: route.depot,
-    stops: ordered.map(s => ({ ...pickStop(s.toObject ? s.toObject() : s), _stopId: s._id.toString() })),
-    vehicle: vehicle.toObject ? vehicle.toObject() : vehicle,
-    departureTime: route.plannedStart || new Date(),
-    trafficEnabled: route.trafficEnabled !== false,
-    returnToDepot: Boolean(route.returnToDepot),
-    incidents: incidentsForOptimizer(await TrafficIncident.findActive())
-  })
-  const byId = new Map(ordered.map(s => [s._id.toString(), s]))
-  for (const r of result.stops) {
-    const stop = byId.get(r._stopId)
+  const { result, pairs } = await retimeStops(route, vehicle, route.plannedStart || new Date())
+  for (const [stop, r] of pairs) {
     stop.estimatedArrival = r.estimatedArrival
     stop.plannedArrival = r.estimatedArrival
     stop.windowStatus = r.windowStatus
