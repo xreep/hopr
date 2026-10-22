@@ -19,15 +19,18 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
 - Analyse: the six KPIs from the spec over 7, 30 or 90 days or a year, compared with the previous period, plus a CSV export
 - Manage vehicles, drivers and, as admin, users and roles
 - Press ⌘K or Ctrl+K anywhere to jump to a page or route and run actions
+- Run a demo morning from the dashboard: the demo vans in all five cities are dispatched and drive their roads at 20 times real time
 
 **Drivers**
 - Today's route, the next stop with plain-language timing, and one-tap navigation
 - Delivered with photo and/or signature; Couldn't deliver with a reason; report a problem or a delay
 - Location shared every 5 seconds while a route is active; spoken announcements
 - Built for phones, with an action dock at the bottom of the screen; installable to the home screen
+- Works without signal: deliveries, photos and signatures are saved on the phone and sent when the connection returns, recorded at the time they happened
+- English or Hindi, including spoken announcements
 
 **Customers**
-- A tracking link per delivery, no login needed: the driver moving smoothly along the road, a live "N min away" ETA, and an Arriving alert within 500 m
+- A tracking link per delivery, no login needed: the driver moving smoothly along the road, a live "N min away" ETA, and an Arriving alert within 500 m, in English or Hindi
 
 ## Demo accounts
 
@@ -120,8 +123,8 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 113 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics
-npm test --workspace=frontend   # 37 tests: tracking animation, timing, session handling, dialogs, command palette
+npm test --workspace=backend    # 120 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates
+npm test --workspace=frontend   # 50 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 ```
 
 Backend tests run against an in-memory MongoDB, so no database setup is needed. [docs/TECHNICAL.md](docs/TECHNICAL.md#13-testing) has the full breakdown and the end-to-end smoke test results.

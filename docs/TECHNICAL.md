@@ -98,18 +98,22 @@ hopr/
 │   │   ├── models/             User, Vehicle, Route (stops embedded), TrafficIncident, Upload
 │   │   ├── routes/             One router per resource (see section 9)
 │   │   ├── services/           routeOptimizer, routePlanning, traffic, fuel, dispatch,
-│   │   │                       tracking, analytics, metrics, geometry, geocoding, demo
+│   │   │                       tracking, analytics, metrics, geometry, geocoding, demo,
+│   │                       simulation (demo morning)
 │   │   └── utils/              geo and IST time helpers
 │   └── tests/                  API and unit tests against an in-memory MongoDB
 ├── frontend/
-│   ├── public/                 Icons and web manifest
+│   ├── public/                 Icons, web manifest and the offline service worker
 │   ├── src/
 │   │   ├── pages/              One component per screen
 │   │   ├── components/         Map, dialogs, command palette, UI kit
-│   │   ├── hooks/              Polling, driver location, media query, page title
+│   │   ├── hooks/              Polling, driver location, offline sync, media query, page title
+│   │   ├── i18n/               English and Hindi strings for drivers and customers
+│   │   ├── offline/            Driver outbox, on-device storage, updates applied locally
+│   │   ├── data/               The homepage's demo route
 │   │   ├── context/            Auth session
 │   │   └── utils/              API client, IST time, geo, tracking animation, speech, CSV
-│   └── vercel.json             Rewrites client routes to index.html
+│   └── vercel.json             Rewrites client routes to index.html; no-cache for sw.js
 └── docs/                       This document and the PRD
 ```
 
@@ -365,7 +369,7 @@ Starting a route forecasts the ETAs (4.6). The driver panel shows:
 - call and share-tracking buttons
 - on phones, a dock with Navigate, Couldn't deliver and Delivered
 
-The panel also announces assignments and outcomes aloud.
+The panel also announces assignments and outcomes aloud. It keeps working without signal (7.8) and can be read in Hindi (7.9).
 
 ### 7.3 Proof of delivery (F1)
 
@@ -392,7 +396,23 @@ Optional `windowStart` and `windowEnd` per stop. The objective penalises latenes
 ### 7.6 Address autocomplete (F5) and spoken notifications (F6)
 
 - **Autocomplete**: search as you type (debounced, keyboard accessible); see 2.4 for the providers. Choosing a result fills the address and coordinates.
-- **Spoken notifications**: a dependency-free `speak()` using the Web Speech API (English voice, rate 1, cancels speech in progress, silent where unsupported). It speaks when a route is assigned, a delivery is completed or failed, auto-dispatch finishes, and the customer's driver is arriving or has delivered. Mute is a header toggle persisted in `localStorage`; visual toasts always appear too.
+- **Spoken notifications**: a dependency-free `speak()` using the Web Speech API (English voice, or a Hindi voice for drivers and customers reading in Hindi; rate 1, cancels speech in progress, silent where unsupported). It speaks when a route is assigned, a delivery is completed or failed, auto-dispatch finishes, and the customer's driver is arriving or has delivered. Mute is a header toggle persisted in `localStorage`; visual toasts always appear too.
+
+### 7.7 Demo morning
+
+The dashboard can drive the demo routes so the product can be watched working without anyone holding a phone. `POST /api/demo/simulate` auto-dispatches the waiting demo routes (the same matching as 7.1), then starts every planned demo route as a simulated drive at 20 times real time. A server ticker (every 2 s) moves each van along its road geometry at the vehicle's speed, adjusted for the traffic profile, waits the service time at each stop, and completes stops with a "Demo delivery (simulated)" note. The position is derived from the start time, so a restarted server resumes at the right place. ETAs and the customer's countdown follow the simulated clock, and the tracking page says it is a demo. Only routes flagged `isDemo` are ever simulated. Before anyone is on the road, the dashboard map shows the day's planned routes and the hubs; the zoom button beside each driver follows one route.
+
+### 7.8 Working offline (driver app)
+
+Drivers lose signal often, so the driver app does not depend on it:
+- **Outbox**: starting a route, Delivered (with the photo and signature), Couldn't deliver and reports are sent at once when possible. With no connection, or a gateway answering 502–504 for a sleeping server, they are saved in IndexedDB on the phone and applied to the screen straight away, marked "Waiting to send". They are sent in order when the phone comes back online, every 20 s while any are waiting, or with "Send now".
+- **Time it happened**: each update carries `at`. The server uses it for `startedAt`, `completedAt` and `failedAt` when it is within the last 24 hours and not in the future; otherwise it uses the time received. A repeat of an update the server already applied is refused with 409 and dropped from the outbox, so nothing is counted twice.
+- **Opening offline**: the driver's last-loaded routes and their name and role are kept on the device, and a service worker (production builds) caches the app, the typeface and recently viewed map tiles (up to 600). API responses are never cached by the service worker.
+- **Privacy**: cached routes and the remembered driver are cleared on sign-out. Unsent updates are kept for that driver, and signing out with updates waiting asks for confirmation first.
+
+### 7.9 Hindi for drivers and customers
+
+The driver's screens (dashboard, My deliveries, dialogs, sidebar and header) and the customer tracking page can be switched between English and Hindi. The choice is remembered on the device, and Hindi is the default when the browser prefers it. Strings live in `frontend/src/i18n/strings.js`; a test checks that every English string has a Hindi version with the same placeholders. Values the server stores in English, such as failure reasons and vehicle types, are translated for display only, so managers still read them in English. Manager screens are English only.
 
 ---
 
@@ -479,9 +499,9 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | GET | `/driver/assigned` | driver | The driver's planned and active routes |
 | GET | `/:id` | manager or the route's driver | Full route with stops, proof, geometry |
 | PATCH | `/:id` | manager | Rename, assign or unassign `driver` and `vehicle` (a planned route is re-timed for a new vehicle), cancel or restore (`status`) |
-| PATCH | `/:id/start` | the route's driver or a manager | Start: status `active`, ETAs forecast from now |
-| PATCH | `/:id/stops/:stopId/status` | the route's driver or a manager | `in_progress`, `completed` (managers only without proof) or `failed` with `reason` |
-| POST | `/:id/stops/:stopId/complete` | the route's driver or a manager | Proof of delivery, `multipart/form-data`: `photo?`, `signature?`, `note?`; at least one image |
+| PATCH | `/:id/start` | the route's driver or a manager | Start: status `active`, ETAs forecast from now. `at?` for a start made offline (7.8) |
+| PATCH | `/:id/stops/:stopId/status` | the route's driver or a manager | `in_progress`, `completed` (managers only without proof) or `failed` with `reason`; `at?` as above |
+| POST | `/:id/stops/:stopId/complete` | the route's driver or a manager | Proof of delivery, `multipart/form-data`: `photo?`, `signature?`, `note?`, `at?`; at least one image |
 | POST | `/:id/stops/:stopId/issues` | the route's driver or a manager | Body: `type` (`issue` or `delay`), `description`, `delayMinutes?` (a delay shifts remaining ETAs) |
 | PATCH | `/:id/location` | the route's driver | GPS ping: `coordinates`, `accuracy?`, `heading?`, `speed?` |
 | POST | `/:id/recalculate` | the route's driver or a manager | Re-optimise remaining stops from the current position |
@@ -519,11 +539,11 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| GET | `/api/dashboard` | signed in | Role-specific summary: today's KPIs, live routes, counts behind the attention alerts (waiting routes, traffic changes, incidents), recent routes |
+| GET | `/api/dashboard` | signed in | Role-specific summary: today's KPIs, live routes, counts behind the attention alerts (waiting routes, traffic changes, incidents), recent routes, and for managers `demo` (waiting and running demo drives) |
 | GET | `/api/incidents` | signed in | Active incidents |
 | POST | `/api/incidents` | manager | Report `congestion` or `closure` with `coordinates`, `radiusKm`, `severity`, `durationMinutes`; flags affected routes |
 | PATCH | `/api/incidents/:id/resolve` | manager | Resolve an incident |
-| GET | `/api/track/:token` | public | Customer tracking: status, timeline, delivery, driver initials and first name, vehicle type, location, remaining path, ETA |
+| GET | `/api/track/:token` | public | Customer tracking: status, timeline, delivery, driver initials and first name, vehicle type, location, remaining path, ETA, and `demo` during a demo drive |
 | GET | `/api/uploads/:id` | manager or the route's driver | A proof photo or signature |
 
 ### Analytics and admin
@@ -537,6 +557,8 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | GET / PUT / DELETE | `/api/admin/users/:id` | admin | Read, update (a password reset signs the user out), delete |
 | PATCH | `/api/admin/users/:id/status` | admin | Activate or deactivate |
 | POST | `/api/demo/seed` | manager | Idempotent demo data: accounts, a driver and vehicle based at a hub in each of five cities, and a fresh five-stop route with windows in each city (Ranchi assigned to the demo driver, the rest waiting for auto-dispatch) |
+| POST | `/api/demo/simulate` | manager | Demo morning (7.7): dispatch and drive the planned demo routes at 20 times real time. 409 when none are waiting |
+| DELETE | `/api/demo/simulate` | manager | Stop the demo drives where they are |
 
 ### Maps (`/api/map`, signed in)
 
@@ -589,6 +611,7 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 
 | Screen | Path | Roles |
 |---|---|---|
+| Homepage | `/` | public (signed-in users go to their dashboard) |
 | Login and registration | `/login` | public |
 | Dashboard | `/dashboard` | all (role-specific content) |
 | Route planner | `/route-planner` | manager |
@@ -608,7 +631,9 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 - **Design system, "road signage"**: a light, plain interface. White panels on a light grey canvas, ink text, and colour used only for meaning: highway-sign green (#0B6B3A) for routes, the main action and the active page; city-sign blue for links and live drivers; road-marking yellow for warnings; red for failures. Overpass type throughout (from the highway sign alphabet's lineage). The one distinctive element is the road sign itself: route IDs and stop numbers drawn as route plates, a direction sign on the sign-in page, and the logo. No glow, glass, gradients or entrance animation. Tokens live in `tailwind.config.js` and `index.css`; a living style guide is at `/design-system` in development builds.
 - **MapView**: MapLibre GL with OpenFreeMap street tiles (no key), routes drawn with a white casing like a road map, English place names, and an all-India starting view. If WebGL or the tiles are unavailable it falls back to a simplified SVG map with the same API (lines, markers, drivers, incidents, map clicks).
 - **Command palette** (⌘K / Ctrl K, or `/`): jump to any page or route and run actions such as auto-dispatch.
-- **Polling** (`usePolling`): pauses or slows in background tabs. Dashboard every 30 s, routes 20 s, live monitor 10 s, tracking page 5 s.
+- **Homepage**: the New Delhi demo route on its real roads, driven by a van beside a route sheet that keeps time (still under reduced motion), how it works, the three people who use it, coverage, and a one-click demo sign-in.
+- **Polling** (`usePolling`): pauses or slows in background tabs. Dashboard every 30 s (4 s during a demo morning), fleet map 15 s (3 s while anyone is on the road), routes 20 s, live monitor 10 s, tracking page 5 s.
+- **Languages and offline**: see 7.8 and 7.9.
 - **Resilience**: error boundaries with a recovery screen, a session-retry screen on 429 or network failure, skeleton loaders with a "server waking up" notice, and proof photos cached for the session.
 - **IST everywhere**: all operational times are shown in Indian Standard Time regardless of the viewer's device.
 - **Installable**: web manifest and icons, so drivers can add Hopr to their home screen.
@@ -618,8 +643,8 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 113 tests, in-memory MongoDB
-npm test --workspace=frontend   # 37 tests, jsdom
+npm test --workspace=backend    # 120 tests, in-memory MongoDB
+npm test --workspace=frontend   # 50 tests, jsdom
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
 ```
@@ -635,7 +660,9 @@ npm run build --workspace=frontend
 | Tracking | 10 | GPS pings and odometer filtering, dedicated rate limit, public page states, privacy |
 | Analytics | 8 | Every KPI formula, empty data, period comparison, CSV safety |
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
-| Frontend | 37 | Tracking animation never teleports, geo helpers, CSV import, speech, stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache |
+| Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
+| Offline updates | 3 | Time it happened trusted only within a day and never in the future, start, failure and delivery recorded at those times, repeat refused |
+| Frontend | 50 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order and retry rules, updates applied on the phone |
 
 An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.
 
@@ -650,6 +677,8 @@ An end-to-end smoke test on the development servers passed every step: register,
 - One depot per batch. Routes do not chain several trips per vehicle in a day.
 - Free hosting sleeps when idle (section 11).
 - Notifications are in-app and spoken. Email and SMS preferences are stored but not sent (no free provider is wired in).
+- Hindi covers the driver and customer screens; manager screens are English only.
+- Offline, a driver can work through routes already on the phone; new assignments and live GPS need signal. Photos waiting to send take space on the phone until they are sent.
 
 **Future enhancements** (from the spec)
 
