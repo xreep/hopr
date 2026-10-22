@@ -56,6 +56,10 @@ export function eventTime(at, now = new Date()) {
   if (!when || Number.isNaN(when.getTime()) || when > now || now - when > OFFLINE_WINDOW_MS) return now
   return when
 }
+// An update that arrives more than two minutes after it happened was recorded offline:
+// keep when it arrived too, so managers can see which times came from the phone
+export const sentLate = (at, now = new Date()) => now - at > 2 * 60000
+
 const atValidator = body('at').optional({ values: 'falsy' }).isISO8601().withMessage('at must be an ISO date')
 
 function sendError(res, error, fallback) {
@@ -321,8 +325,10 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
     stop.status = status
     if (status === 'completed') {
       stop.completedAt = at
+      if (sentLate(at)) stop.receivedAt = new Date()
     } else if (status === 'failed') {
       stop.failedAt = at
+      if (sentLate(at)) stop.receivedAt = new Date()
       stop.failureReason = req.body.reason.trim()
     }
 
@@ -391,6 +397,7 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
     const wasCompleted = route.status === 'completed'
     stop.status = 'completed'
     stop.completedAt = now
+    if (sentLate(now)) stop.receivedAt = new Date()
     stop.proof = {
       photo: saved.photo,
       signature: saved.signature,

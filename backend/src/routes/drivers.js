@@ -4,6 +4,7 @@ import User from '../models/User.js'
 import Route from '../models/Route.js'
 import Vehicle from '../models/Vehicle.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { protectDemoAccount } from '../middleware/demo.js'
 import { validateRequest, escapeRegex, objectIdParam } from '../middleware/validate.js'
 import { driverPerformance } from '../services/metrics.js'
 
@@ -119,7 +120,7 @@ router.get('/:id', authenticate, authorize('admin', 'fleet_manager'), async (req
   }
 })
 
-router.patch('/:id/status', authenticate, authorize('admin', 'fleet_manager'), [
+router.patch('/:id/status', authenticate, authorize('admin', 'fleet_manager'), protectDemoAccount(), [
   body('isActive').isBoolean().withMessage('isActive must be boolean'),
   validateRequest
 ], async (req, res) => {

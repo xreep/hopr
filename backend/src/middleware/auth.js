@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
-import { jwtSecret } from '../services/token.js'
+import { jwtSecret, JWT_ALGORITHM } from '../services/token.js'
 
 export const authenticate = async (req, res, next) => {
   try {
@@ -10,7 +10,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = jwt.verify(token, jwtSecret())
+    const decoded = jwt.verify(token, jwtSecret(), { algorithms: [JWT_ALGORITHM] })
 
     const user = await User.findById(decoded.id)
     if (!user || !user.isActive) {

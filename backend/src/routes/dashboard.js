@@ -7,6 +7,7 @@ import { authenticate } from '../middleware/auth.js'
 import { isOnTime, driverPerformance, pct } from '../services/metrics.js'
 import { istMinutesOfDay } from '../utils/time.js'
 import { simulatingFilter, SIM_SPEEDUP } from '../services/simulation.js'
+import { demoMode } from '../services/demo.js'
 
 const router = express.Router()
 
@@ -107,7 +108,7 @@ router.get('/', authenticate, async (req, res) => {
       users: users ? Object.fromEntries(users.map(u => [u._id, u.count])) : undefined,
       liveRoutes: activeRoutes.map(liveSummary),
       // Demo morning: planned demo routes that can be driven, and drives running now
-      demo: { waiting: demoWaiting, running: demoRunning, speedup: SIM_SPEEDUP },
+      demo: demoMode() ? { waiting: demoWaiting, running: demoRunning, speedup: SIM_SPEEDUP } : null,
       recentRoutes: recent
     })
   } catch (error) {

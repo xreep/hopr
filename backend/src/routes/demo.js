@@ -1,13 +1,19 @@
 import express from 'express'
 import { authenticate, authorize } from '../middleware/auth.js'
-import { seedDemo } from '../services/demo.js'
+import { seedDemo, demoMode } from '../services/demo.js'
 import Route from '../models/Route.js'
 import { planDispatch } from '../services/dispatch.js'
 import { applyVehicle } from '../services/routePlanning.js'
 import { startSimulatedRoute, simulatingFilter, SIM_SPEEDUP } from '../services/simulation.js'
 import { availableCandidates } from './dispatch.js'
+import { requireDemoMode } from '../middleware/demo.js'
 
 const router = express.Router()
+
+// Public: lets the web app show or hide its demo buttons
+router.get('/status', (req, res) => res.json({ enabled: demoMode() }))
+
+router.use(requireDemoMode)
 
 // One-click demo data for admins / fleet managers
 router.post('/seed', authenticate, authorize('admin', 'fleet_manager'), async (req, res) => {

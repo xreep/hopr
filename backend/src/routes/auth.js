@@ -4,6 +4,8 @@ import User from '../models/User.js'
 import { authenticate } from '../middleware/auth.js'
 import { validateRequest, pick } from '../middleware/validate.js'
 import { generateToken } from '../services/token.js'
+import { protectDemoAccount } from '../middleware/demo.js'
+import { demoMode, isDemoEmail } from '../services/demo.js'
 
 const router = express.Router()
 
@@ -70,8 +72,12 @@ router.post('/login', [
       return res.status(401).json({ message: 'Account is deactivated' })
     }
 
+    // Shared demo accounts have published passwords: locking them would only let one
+    // visitor shut everyone else out
+    const lockable = !(demoMode() && isDemoEmail(user.email))
+
     // H10: Check if account is locked
-    if (user.isLocked()) {
+    if (lockable && user.isLocked()) {
       console.warn(`[${new Date().toISOString()}] SECURITY ACCOUNT_LOCKED - Email: ${email} - IP: ${req.ip}`)
       return res.status(429).json({ message: 'Too many failed attempts. Please try again later.' })
     }
@@ -79,7 +85,7 @@ router.post('/login', [
     const isMatch = await user.comparePassword(password)
     if (!isMatch) {
       // H10: Increment failed attempts
-      await user.incrementFailedAttempts()
+      if (lockable) await user.incrementFailedAttempts()
       console.warn(`[${new Date().toISOString()}] SECURITY LOGIN_FAILED - Email: ${email} - IP: ${req.ip}`)
       return res.status(401).json({ message: 'Invalid credentials' })
     }
@@ -127,7 +133,9 @@ router.get('/me', authenticate, async (req, res) => {
   }
 })
 
-router.put('/profile', authenticate, [
+const ownAccount = protectDemoAccount(req => req.user.id)
+
+router.put('/profile', authenticate, ownAccount, [
   body('name').optional().trim().notEmpty().isLength({ max: 100 }),
   body('email').optional().isEmail().normalizeEmail(),
   body('phone').optional().trim().isLength({ max: 20 }),
@@ -160,7 +168,7 @@ router.put('/profile', authenticate, [
   }
 })
 
-router.put('/password', authenticate, [
+router.put('/password', authenticate, ownAccount, [
   body('currentPassword').notEmpty().withMessage('Current password is required'),
   body('newPassword').isLength({ min: 6, max: 128 }).withMessage('New password must be 6-128 characters'),
   validateRequest

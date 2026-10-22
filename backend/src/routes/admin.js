@@ -2,6 +2,7 @@ import express from 'express'
 import { body, query } from 'express-validator'
 import User from '../models/User.js'
 import { authenticate, authorize } from '../middleware/auth.js'
+import { protectDemoAccount } from '../middleware/demo.js'
 import { validateRequest, pick, escapeRegex, objectIdParam } from '../middleware/validate.js'
 
 const router = express.Router()
@@ -88,7 +89,7 @@ router.get('/users/:id', authenticate, authorize('admin'), async (req, res) => {
   }
 })
 
-router.put('/users/:id', authenticate, authorize('admin'), [
+router.put('/users/:id', authenticate, authorize('admin'), protectDemoAccount(), [
   body('name').optional().trim().notEmpty().isLength({ max: 100 }),
   body('email').optional().isEmail().normalizeEmail(),
   body('role').optional().isIn(ROLES),
@@ -131,7 +132,7 @@ router.put('/users/:id', authenticate, authorize('admin'), [
   }
 })
 
-router.patch('/users/:id/status', authenticate, authorize('admin'), [
+router.patch('/users/:id/status', authenticate, authorize('admin'), protectDemoAccount(), [
   body('isActive').isBoolean().withMessage('isActive must be boolean'),
   validateRequest
 ], async (req, res) => {
@@ -156,7 +157,7 @@ router.patch('/users/:id/status', authenticate, authorize('admin'), [
   }
 })
 
-router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
+router.delete('/users/:id', authenticate, authorize('admin'), protectDemoAccount(), async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ message: 'Cannot delete yourself' })

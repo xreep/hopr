@@ -64,6 +64,8 @@ const stopSchema = new mongoose.Schema({
   failedAt: Date,
   failureReason: { type: String, trim: true, maxlength: 300 },
   proof: proofSchema,
+  // Set when the driver app sent this update late (recorded offline): when it arrived
+  receivedAt: Date,
   issues: [issueSchema],
   // Unguessable capability for the public customer tracking page
   trackingToken: { type: String, index: true }
