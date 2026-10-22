@@ -108,7 +108,7 @@ export default function Layout() {
               <Icon name="menu" size={20} />
             </button>
             <NavLink to="/dashboard" className="brand lg:hidden" aria-label="Hopr dashboard"><HopMark size={24} /></NavLink>
-            <span className="text-small text-ink-400 hidden md:block">{todayIST()}, Ranchi</span>
+            <span className="text-small text-ink-400 hidden md:block">{todayIST()}</span>
           </div>
           <div className="flex items-center gap-1">
             <button type="button" className="btn btn-ghost btn-sm palette-trigger" onClick={() => setPaletteOpen(true)} aria-label="Search and run commands" aria-keyshortcuts={isMac() ? 'Meta+K' : 'Control+K'}>

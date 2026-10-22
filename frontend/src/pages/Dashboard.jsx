@@ -41,7 +41,7 @@ export default function Dashboard() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{greeting()}, {user?.name?.split(' ')[0]}</h1>
-          <p className="page-subtitle">{isDriver ? 'Your deliveries for today.' : 'Here is how today’s deliveries are going across Ranchi.'}</p>
+          <p className="page-subtitle">{isDriver ? 'Your deliveries for today.' : 'How today’s deliveries are going across your hubs.'}</p>
         </div>
         {isDriver
           ? <Link to="/driver-panel" className="btn btn-primary"><Icon name="navigation" />Open my deliveries</Link>
@@ -56,7 +56,7 @@ export default function Dashboard() {
 function DriverDashboard({ data }) {
   return (
     <>
-      <div className="grid grid-4 mb-6">
+      <div className="stats-strip mb-6">
         <StatCard label="Delivered today" value={data.completedToday} isKey />
         <StatCard label="Assigned routes" value={data.assignedRoutes} />
         <StatCard label="On-time rate" value={data.onTimeRate} suffix="%" hint="Last 30 days" />
@@ -83,7 +83,7 @@ function ManagerDashboard({ data }) {
 
   return (
     <>
-      <div className="grid grid-4 mb-6">
+      <div className="stats-strip mb-6">
         <StatCard label="Delivered today" value={data.deliveriesToday} isKey hint={`${data.failedToday} failed, ${data.pendingToday} still to go`} />
         <StatCard label="On-time today" value={data.onTimeRateToday} suffix="%" hint="Within the window, or ETA + 15 min" />
         <StatCard label="Routes on the road" value={data.activeRoutes} hint={`${data.drivers.onRoute} of ${data.drivers.active} drivers driving`} />

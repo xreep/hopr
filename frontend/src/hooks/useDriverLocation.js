@@ -3,7 +3,7 @@ import api, { errorMessage } from '../utils/api'
 import { pointAlong, projectOnPolyline, polylineLengthKm, stopsAlongKm } from '../utils/geo'
 
 export const PING_INTERVAL_MS = 5000
-const SIM_SPEED_KMH = 24 // demo drive: typical Ranchi city speed
+const SIM_SPEED_KMH = 24 // demo drive: typical Indian city speed
 
 // Shares the driver's position for an active route:
 //  - gps:      navigator.geolocation.watchPosition, sent every 5 s

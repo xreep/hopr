@@ -6,7 +6,7 @@ import usePolling from '../hooks/usePolling'
 import MapView from '../components/MapView'
 import AddressAutocomplete from '../components/AddressAutocomplete'
 import { StatusBadge, EmptyState } from '../components/ui'
-import { ROUTE_COLORS, VOLT } from '../config'
+import { ROUTE_COLORS, ROUTE_GREEN } from '../config'
 import { formatClock, relativeTime } from '../utils/time'
 import { buildFleetMap } from '../utils/fleetMap'
 import Icon from '../components/icons'
@@ -126,7 +126,7 @@ export default function LiveMonitor() {
                     return (
                       <li key={r._id} className={`live-item ${focus === r._id ? 'selected' : ''}`}>
                         <button type="button" className="w-full text-left" onClick={() => setFocus(r._id)}>
-                          <span className="route-swatch" style={{ background: focus === r._id || routes.length === 1 ? VOLT : ROUTE_COLORS[idx % ROUTE_COLORS.length] }} aria-hidden="true" />
+                          <span className="route-swatch" style={{ background: focus === r._id || routes.length === 1 ? ROUTE_GREEN : ROUTE_COLORS[idx % ROUTE_COLORS.length] }} aria-hidden="true" />
                           <span className="font-medium">{r.driver?.name || 'No driver'}</span> <span className="text-small text-ink-400">on {r.name}</span>
                           <span className="block text-micro text-ink-300 mt-0.5">
                             {done} of {r.stops.length} stops done{next ? `, next due ${formatClock(next.estimatedArrival)}` : ''}. GPS {relativeTime(r.driverLocation?.updatedAt)}

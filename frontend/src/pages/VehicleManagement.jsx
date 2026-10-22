@@ -7,6 +7,7 @@ import { VEHICLE_TYPES, FUEL_UNITS, VEHICLE_ICONS, vehicleTypeLabel } from '../c
 import Icon from '../components/icons'
 import { useConfirm } from '../components/ConfirmDialog'
 import { formatDate } from '../utils/time'
+import AddressAutocomplete from '../components/AddressAutocomplete'
 
 const FUEL_TYPES = ['diesel', 'petrol', 'cng', 'electric', 'hybrid']
 const VEHICLE_STATUSES = ['active', 'maintenance', 'inactive']
@@ -23,7 +24,9 @@ const emptyForm = () => ({
   status: 'active',
   purchaseDate: '',
   lastMaintenance: '',
-  nextMaintenance: ''
+  nextMaintenance: '',
+  base: null,
+  baseText: ''
 })
 
 const toDateInput = d => (d ? new Date(d).toISOString().slice(0, 10) : '')
@@ -41,7 +44,9 @@ function formFromVehicle(v) {
     status: v.status,
     purchaseDate: toDateInput(v.purchaseDate),
     lastMaintenance: toDateInput(v.lastMaintenance),
-    nextMaintenance: toDateInput(v.nextMaintenance)
+    nextMaintenance: toDateInput(v.nextMaintenance),
+    base: v.base?.coordinates?.length === 2 ? v.base : null,
+    baseText: v.base?.address || ''
   }
 }
 
@@ -50,6 +55,7 @@ export default function VehicleManagement() {
   const [vehicles, setVehicles] = useState(null)
   const confirm = useConfirm()
   const [drivers, setDrivers] = useState([])
+  const [hubs, setHubs] = useState([])
   const [editing, setEditing] = useState(null) // null | 'new' | vehicle
   const [form, setForm] = useState(emptyForm)
   const [submitting, setSubmitting] = useState(false)
@@ -73,6 +79,7 @@ export default function VehicleManagement() {
 
   useEffect(() => {
     api.get('/drivers/available').then(res => setDrivers(res.data.drivers)).catch(() => {})
+    api.get('/map/config').then(res => setHubs(res.data.hubs || [])).catch(() => {})
   }, [])
 
   const open = (vehicle = null) => {
@@ -94,7 +101,14 @@ export default function VehicleManagement() {
   const submit = async e => {
     e.preventDefault()
     setSubmitting(true)
-    const payload = { ...form, mileage: form.mileage === '' ? '' : Number(form.mileage), capacity: Number(form.capacity), driver: form.driver || null }
+    const { baseText, ...fields } = form
+    const payload = {
+      ...fields,
+      mileage: form.mileage === '' ? '' : Number(form.mileage),
+      capacity: Number(form.capacity),
+      driver: form.driver || null,
+      base: form.base && baseText ? { name: form.base.name, address: form.base.address, coordinates: form.base.coordinates } : null
+    }
     try {
       if (editing === 'new') {
         await api.post('/vehicles', payload)
@@ -147,7 +161,7 @@ export default function VehicleManagement() {
         <button className="btn btn-primary" onClick={() => open()}><Icon name="plus" />Add vehicle</button>
       </div>
 
-      <div className="grid grid-4 mb-6">
+      <div className="stats-strip mb-6">
         <StatCard label="Vehicles" value={stats.total} />
         <StatCard label="In service" value={stats.active} isKey />
         <StatCard label="In maintenance" value={stats.maintenance} />
@@ -182,7 +196,7 @@ export default function VehicleManagement() {
                     <td>
                       <div className="flex items-center gap-3">
                         <span className="icon-tile"><Icon name={VEHICLE_ICONS[v.type]} /></span>
-                        <div><span className="font-medium">{v.name}</span><div className="text-micro text-ink-400">{v.vehicleId}</div></div>
+                        <div><span className="font-medium">{v.name}</span><div className="text-micro text-ink-400">{v.vehicleId}{v.base?.name ? `, ${v.base.name}` : ''}</div></div>
                       </div>
                     </td>
                     <td>{vehicleTypeLabel(v.type)}</td>
@@ -224,7 +238,7 @@ export default function VehicleManagement() {
               </div>
               <Input label={`Efficiency (${FUEL_UNITS[form.fuelType]})`} id="mileage" type="number" step="0.1" min="0" value={form.mileage} onChange={v => set('mileage', v)} />
               <Input label="Payload capacity (kg)" id="capacity" type="number" min="1" value={form.capacity} onChange={v => set('capacity', v)} required />
-              <Input label="License plate" id="plate" value={form.licensePlate} onChange={v => set('licensePlate', v)} required placeholder="JH01 AB 1234" maxLength={20} />
+              <Input label="License plate" id="plate" value={form.licensePlate} onChange={v => set('licensePlate', v)} required placeholder="e.g. MH02 AB 1234" maxLength={20} />
               <div>
                 <label htmlFor="vstatus" className="form-label">Status</label>
                 <select id="vstatus" className="form-input form-select" value={form.status} onChange={e => set('status', e.target.value)}>
@@ -238,6 +252,24 @@ export default function VehicleManagement() {
                   {drivers.map(d => <option key={d._id} value={d._id}>{d.name}{d.vehicle && d.vehicle._id !== editing?._id ? ` (moves from ${d.vehicle.name})` : ''}</option>)}
                 </select>
               </div>
+            </div>
+            <div>
+              <label htmlFor="vbase" className="form-label">Home hub</label>
+              <AddressAutocomplete id="vbase" value={form.baseText} coordinates={form.base?.coordinates} placeholder="Where the vehicle starts its day"
+                onChange={text => setForm(prev => ({ ...prev, baseText: text, base: null }))}
+                onSelect={({ address, coordinates }) => setForm(prev => ({ ...prev, baseText: address, base: { name: address.split(',')[0], address, coordinates } }))} />
+              {hubs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2" role="group" aria-label="Existing hubs">
+                  {hubs.map(h => (
+                    <button key={h.coordinates.join()} type="button" title={h.address} aria-label={`${h.name || h.address.split(',')[0]}, ${h.address}`}
+                      className={`btn btn-sm ${form.base?.coordinates?.join() === h.coordinates.join() ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setForm(prev => ({ ...prev, baseText: h.address, base: { name: h.name, address: h.address, coordinates: h.coordinates } }))}>
+                      {h.name || h.address.split(',')[0]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-micro text-ink-400 mt-1">Auto-dispatch only offers this vehicle&apos;s driver routes in the same city.</p>
             </div>
             <div className="grid grid-3 gap-4">
               <Input label="Purchased" id="purchaseDate" type="date" value={form.purchaseDate} onChange={v => set('purchaseDate', v)} />

@@ -6,12 +6,13 @@ import MapView from '../components/MapView'
 import AddressAutocomplete from '../components/AddressAutocomplete'
 import { fetchSuggestions } from '../utils/geocoding'
 import { StatusBadge } from '../components/ui'
-import { DEFAULT_DEPOT, VEHICLE_TYPES, PRIORITY_OPTIONS, MAX_STOPS_PER_ROUTE, ROUTE_COLORS, VOLT, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
+import { VEHICLE_TYPES, PRIORITY_OPTIONS, MAX_STOPS_PER_ROUTE, ROUTE_COLORS, ROUTE_GREEN, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
 import Icon from '../components/icons'
 import useMediaQuery from '../hooks/useMediaQuery'
 import { csvToStops, SAMPLE_CSV } from '../utils/csv'
 import { formatDuration, formatINR, formatKm } from '../utils/format'
 import { formatClock, toISTInputValue, fromISTInputValue } from '../utils/time'
+import { haversineKm } from '../utils/geo'
 
 let keySeq = 0
 const newStop = (data = {}) => ({
@@ -47,13 +48,30 @@ function stopPayload(s) {
   return out
 }
 
+// The last hub used on this device, so a dispatcher in one city starts where they left off
+const LAST_HUB_KEY = 'hopr.lastHub'
+function loadLastHub() {
+  try {
+    const hub = JSON.parse(localStorage.getItem(LAST_HUB_KEY))
+    return hub?.coordinates?.length === 2 ? hub : null
+  } catch {
+    return null
+  }
+}
+function saveLastHub(hub) {
+  try { localStorage.setItem(LAST_HUB_KEY, JSON.stringify(hub)) } catch { /* private mode */ }
+}
+const NO_HUB = { name: '', address: '', coordinates: null }
+const OTHER_CITY_KM = 75
+
 export default function RoutePlanner() {
   const navigate = useNavigate()
   const fileInput = useRef(null)
   const [name, setName] = useState('')
   const [departure, setDeparture] = useState(() => toISTInputValue(nextQuarterHour()))
-  const [depot, setDepot] = useState(DEFAULT_DEPOT)
-  const [depotText, setDepotText] = useState(DEFAULT_DEPOT.address)
+  const [depot, setDepot] = useState(() => loadLastHub() || NO_HUB)
+  const [depotText, setDepotText] = useState(() => loadLastHub()?.address || '')
+  const [hubs, setHubs] = useState([])
   const [stops, setStops] = useState([newStop(), newStop()])
   const [vehicleMode, setVehicleMode] = useState('fleet')
   const [fleet, setFleet] = useState([])
@@ -78,7 +96,19 @@ export default function RoutePlanner() {
       })
       .catch(() => setVehicleMode('type'))
     api.get('/drivers/available').then(res => setDrivers(res.data.drivers)).catch(() => {})
+    api.get('/map/config').then(res => setHubs(res.data.hubs || [])).catch(() => {})
   }, [])
+
+  const chooseHub = hub => {
+    setDepot({ name: hub.name || hub.address.split(',')[0], address: hub.address, coordinates: hub.coordinates })
+    setDepotText(hub.address)
+    touch()
+  }
+
+  // Vehicles nearest the hub first; ones based in another city are labelled
+  const fleetByDistance = useMemo(() => fleet
+    .map(v => ({ ...v, hubKm: depot.coordinates && v.base?.coordinates ? haversineKm(depot.coordinates, v.base.coordinates) : null }))
+    .sort((a, b) => (a.hubKm ?? Infinity) - (b.hubKm ?? Infinity)), [fleet, depot.coordinates])
 
   // Any edit invalidates the previous optimization
   const touch = () => setPlan(null)
@@ -112,7 +142,7 @@ export default function RoutePlanner() {
     setLocating(missing.length)
     for (const s of missing) {
       try {
-        const [hit] = await fetchSuggestions(s.address, { limit: 1 })
+        const [hit] = await fetchSuggestions(s.address, { limit: 1, near: depot.coordinates })
         if (hit) setStops(prev => prev.map(p => (p.key === s.key ? { ...p, coordinates: hit.coordinates } : p)))
       } catch { /* left unlocated; the user can pick a suggestion */ }
       setLocating(n => n - 1)
@@ -151,6 +181,7 @@ export default function RoutePlanner() {
   })
 
   const optimize = async () => {
+    if (!depot.coordinates) return toast.error('Choose the hub the route starts from')
     if (filledStops.length < 1) return toast.error('Add at least one delivery address')
     if (unlocated.length) return toast.error(`Pick a suggestion for ${unlocated.length} address(es) so they can be located`)
     if (windowErrors.length) return toast.error('A delivery window ends before it starts')
@@ -159,6 +190,7 @@ export default function RoutePlanner() {
     setOptimizing(true)
     try {
       const res = await api.post('/routes/optimize', buildPayload())
+      saveLastHub(depot)
       setPlan(res.data)
       setActiveRoute(0)
       setAssignments({})
@@ -189,6 +221,24 @@ export default function RoutePlanner() {
     }
   }
 
+  // Road-following lines for the plan (straight legs until they arrive, or if routing is unavailable)
+  const [roadLines, setRoadLines] = useState({})
+  useEffect(() => {
+    setRoadLines({})
+    if (!plan) return undefined
+    let cancelled = false
+    plan.routes.forEach((r, i) => {
+      const points = [r.depot.coordinates, ...r.stops.map(s => s.coordinates), ...(r.returnToDepot ? [r.depot.coordinates] : [])]
+      if (points.length < 2 || points.length > 31) return
+      api.get('/map/directions', { params: { coordinates: points.map(p => p.map(n => n.toFixed(6)).join(',')).join(';') } })
+        .then(res => {
+          if (!cancelled && res.data.source !== 'estimated') setRoadLines(prev => ({ ...prev, [i]: res.data.geometry.coordinates }))
+        })
+        .catch(() => { /* keep the straight legs */ })
+    })
+    return () => { cancelled = true }
+  }, [plan])
+
   const mapData = useMemo(() => {
     const depotPoint = { id: 'depot', coordinates: depot.coordinates, label: 'H', variant: 'depot', title: depot.name || 'Depot' }
     if (!plan) {
@@ -200,8 +250,9 @@ export default function RoutePlanner() {
     return {
       lines: plan.routes.map((r, i) => ({
         id: `r${i}`,
-        coordinates: [r.depot.coordinates, ...r.stops.map(s => s.coordinates), ...(r.returnToDepot ? [r.depot.coordinates] : [])],
-        color: i === activeRoute ? VOLT : ROUTE_COLORS[i % ROUTE_COLORS.length],
+        coordinates: roadLines[i] || [r.depot.coordinates, ...r.stops.map(s => s.coordinates), ...(r.returnToDepot ? [r.depot.coordinates] : [])],
+        dashed: !roadLines[i],
+        color: i === activeRoute ? ROUTE_GREEN : ROUTE_COLORS[i % ROUTE_COLORS.length],
         width: i === activeRoute ? 4.5 : 3,
         opacity: i === activeRoute ? 1 : 0.45
       })),
@@ -213,7 +264,7 @@ export default function RoutePlanner() {
         title: `${s.sequence}. ${s.address}, ETA ${s.etaLabel}`
       })))]
     }
-  }, [plan, stops, depot, activeRoute])
+  }, [plan, stops, depot, activeRoute, roadLines])
 
   const fitKey = plan ? `plan-${plan.computeMs}-${plan.routes.length}-${activeRoute}` : stops.filter(s => s.coordinates).map(s => s.coordinates.join()).join('|')
   const shownRoute = plan?.routes[activeRoute]
@@ -253,21 +304,30 @@ export default function RoutePlanner() {
             <div className="card-body grid grid-2 gap-3">
               <div>
                 <label className="form-label" htmlFor="batch-name">Batch name</label>
-                <input id="batch-name" className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning run, Lalpur area" maxLength={100} />
+                <input id="batch-name" className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning run, Okhla" maxLength={100} />
               </div>
               <div>
                 <label className="form-label" htmlFor="departure">Departure (IST)</label>
                 <input id="departure" type="datetime-local" className="form-input" value={departure} onChange={e => { setDeparture(e.target.value); touch() }} />
               </div>
               <div className="sm:col-span-2">
-                <label className="form-label" htmlFor="depot">Start depot</label>
-                <AddressAutocomplete id="depot" value={depotText} coordinates={depot.coordinates}
+                <label className="form-label" htmlFor="depot">Start hub</label>
+                <AddressAutocomplete id="depot" value={depotText} coordinates={depot.coordinates} placeholder="Search for the warehouse or hub the route starts from"
                   onChange={text => { setDepotText(text); setDepot(d => ({ ...d, coordinates: null })) }}
-                  onSelect={({ address, coordinates }) => { setDepotText(address); setDepot({ name: address.split(',')[0], address, coordinates }); touch() }} />
-                {!depot.coordinates && (
-                  <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={() => { setDepot(DEFAULT_DEPOT); setDepotText(DEFAULT_DEPOT.address) }}>
-                    Use Hopr Hub, Kokar
-                  </button>
+                  onSelect={({ address, coordinates }) => chooseHub({ address, coordinates })} />
+                {hubs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2" role="group" aria-label="Your hubs">
+                    {hubs.map(h => {
+                      const active = depot.coordinates && h.coordinates.join() === depot.coordinates.join()
+                      const label = h.name || h.address.split(',')[0]
+                      return (
+                        <button key={h.coordinates.join()} type="button" className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+                          aria-pressed={Boolean(active)} onClick={() => chooseHub(h)} title={h.address} aria-label={`${label}, ${h.address}`}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             </div>
@@ -292,7 +352,7 @@ export default function RoutePlanner() {
             <div className="card-body stop-list">
               {locating > 0 && <p className="alert alert-info mb-3">Locating {locating} address(es)…</p>}
               {stops.map((stop, index) => (
-                <StopEditor key={stop.key} index={index} stop={stop} onChange={patch => updateStop(stop.key, patch)}
+                <StopEditor key={stop.key} index={index} stop={stop} near={depot.coordinates} onChange={patch => updateStop(stop.key, patch)}
                   onRemove={stops.length > 1 ? () => removeStop(stop.key) : null} />
               ))}
               <button type="button" className="btn btn-secondary w-full" onClick={addStop} disabled={stops.length >= maxStops}><Icon name="plus" />Add stop</button>
@@ -311,8 +371,9 @@ export default function RoutePlanner() {
 
               {vehicleMode === 'fleet' ? (
                 <div className="vehicle-pick-list">
-                  {fleet.map(v => {
+                  {fleetByDistance.map(v => {
                     const checked = selectedVehicles.includes(v._id)
+                    const elsewhere = v.hubKm !== null && v.hubKm > OTHER_CITY_KM
                     return (
                       <label key={v._id} className={`vehicle-pick ${checked ? 'selected' : ''}`}>
                         <input type="checkbox" checked={checked} onChange={() => {
@@ -320,7 +381,10 @@ export default function RoutePlanner() {
                           touch()
                         }} />
                         <span className="font-medium">{v.name}</span>
-                        <span className="text-xs text-muted">{vehicleTypeLabel(v.type)}, {v.capacity} kg, {v.mileage} {v.fuelType === 'electric' ? 'km/kWh' : 'km/L'}{v.driver ? `, driven by ${v.driver.name}` : ''}</span>
+                        <span className="text-xs text-muted">
+                          {vehicleTypeLabel(v.type)}, {v.capacity} kg, {v.mileage} {v.fuelType === 'electric' ? 'km/kWh' : 'km/L'}{v.driver ? `, driven by ${v.driver.name}` : ''}
+                          {v.base?.name && <>. {elsewhere ? <span className="text-signal-amber font-semibold">Based in another city ({v.base.name}, {Math.round(v.hubKm).toLocaleString('en-IN')} km)</span> : `Based at ${v.base.name}`}</>}
+                        </span>
                       </label>
                     )
                   })}
@@ -351,7 +415,7 @@ export default function RoutePlanner() {
                 <input type="checkbox" checked={trafficEnabled} onChange={e => { setTrafficEnabled(e.target.checked); touch() }} />
                 <span>
                   <span className="font-medium">Traffic-aware routing</span>
-                  <span className="block text-xs text-muted">Uses Ranchi&apos;s rush-hour pattern and any congestion or closures you&apos;ve reported</span>
+                  <span className="block text-xs text-muted">Uses the city&apos;s rush-hour pattern and any congestion or closures you&apos;ve reported</span>
                 </span>
               </label>
               <label className="toggle-row">
@@ -378,7 +442,7 @@ export default function RoutePlanner() {
   )
 }
 
-function StopEditor({ index, stop, onChange, onRemove }) {
+function StopEditor({ index, stop, near, onChange, onRemove }) {
   const invalidWindow = stop.windowStart && stop.windowEnd && stop.windowEnd <= stop.windowStart
   return (
     <div className={`stop-editor ${stop.coordinates ? 'is-located' : ''}`}>
@@ -387,6 +451,7 @@ function StopEditor({ index, stop, onChange, onRemove }) {
         <AddressAutocomplete
           className="flex-1"
           ariaLabel={`Stop ${index + 1} address`}
+          near={near}
           value={stop.address}
           coordinates={stop.coordinates}
           onChange={address => onChange({ address, coordinates: null })}
@@ -461,7 +526,7 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
         <div className="route-tabs" role="tablist" aria-label="Routes in this batch">
           {plan.routes.map((r, i) => (
             <button key={i} type="button" role="tab" aria-selected={i === activeRoute} className={`route-tab ${i === activeRoute ? 'active' : ''}`} onClick={() => setActiveRoute(i)}>
-              <span className="route-swatch" style={{ background: i === activeRoute ? VOLT : ROUTE_COLORS[i % ROUTE_COLORS.length] }} aria-hidden="true" />
+              <span className="route-swatch" style={{ background: i === activeRoute ? ROUTE_GREEN : ROUTE_COLORS[i % ROUTE_COLORS.length] }} aria-hidden="true" />
               Route {i + 1}<span className="text-micro block text-ink-400">{r.vehicle.name}</span>
             </button>
           ))}

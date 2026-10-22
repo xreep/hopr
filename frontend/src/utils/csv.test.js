@@ -11,10 +11,10 @@ describe('csv', () => {
     expect(errors).toEqual([])
     expect(stops).toHaveLength(2)
     expect(stops[1]).toMatchObject({
-      customerName: 'Neha Kumari', priority: 'urgent', windowStart: '10:30', windowEnd: '11:30',
-      packageWeightKg: 6, coordinates: [85.3278, 23.3909]
+      customerName: 'Rahul Khanna', priority: 'urgent', windowStart: '10:30', windowEnd: '11:30',
+      packageWeightKg: 6, coordinates: [77.2263, 28.5991]
     })
-    expect(stops[0].address).toContain('Main Road, Ranchi')
+    expect(stops[0].address).toContain('Connaught Place, New Delhi')
   })
 
   it('accepts a combined "time window" column and requires an address column', () => {

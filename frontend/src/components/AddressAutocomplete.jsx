@@ -11,7 +11,8 @@ export default function AddressAutocomplete({
   coordinates,
   onChange,
   onSelect,
-  placeholder = 'Search an address in Ranchi',
+  placeholder = 'Search an address',
+  near,
   ariaLabel,
   disabled = false,
   className = ''
@@ -26,6 +27,9 @@ export default function AddressAutocomplete({
   const [error, setError] = useState('')
   const typedRef = useRef(false)
   const wrapRef = useRef(null)
+  // Read at search time: moving the hub should not trigger a new search by itself
+  const nearRef = useRef(near)
+  nearRef.current = near
 
   useEffect(() => {
     if (!typedRef.current) return undefined
@@ -40,7 +44,7 @@ export default function AddressAutocomplete({
       setLoading(true)
       setError('')
       try {
-        const results = await fetchSuggestions(q, { signal: controller.signal })
+        const results = await fetchSuggestions(q, { signal: controller.signal, near: nearRef.current })
         setSuggestions(results)
         setOpen(true)
         setActive(results.length ? 0 : -1)

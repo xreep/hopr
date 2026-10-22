@@ -1,4 +1,4 @@
-import { ROUTE_COLORS, VOLT } from '../config'
+import { ROUTE_COLORS, ROUTE_GREEN } from '../config'
 import { initials } from './format'
 import { relativeTime } from './time'
 import { stopVariant, isStale } from './routeView'
@@ -12,7 +12,7 @@ export function buildFleetMap(routes, focus = null, { focusOnly = true } = {}) {
     lines: shown.map(r => ({
       id: r._id,
       coordinates: r.geometry?.coordinates || [],
-      color: highlighted(r) ? VOLT : ROUTE_COLORS[routes.indexOf(r) % ROUTE_COLORS.length],
+      color: highlighted(r) ? ROUTE_GREEN : ROUTE_COLORS[routes.indexOf(r) % ROUTE_COLORS.length],
       width: focus === r._id ? 4.5 : 3.5
     })),
     points: [

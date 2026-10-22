@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import Icon from './icons'
 
-// One click: demo accounts + Ranchi fleet + a fresh 5-stop route assigned to the demo driver
+// One click: demo accounts, a fleet in five cities and a fresh five-stop route in each
 export default function DemoSeedButton({ className = 'btn btn-outline' }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
@@ -12,7 +12,7 @@ export default function DemoSeedButton({ className = 'btn btn-outline' }) {
     setBusy(true)
     try {
       const res = await api.post('/demo/seed')
-      toast.success(`Demo route ${res.data.route} is ready and assigned to driver@hopr.com`)
+      toast.success(`Demo data ready: ${res.data.routes} routes across five cities. Ranchi is assigned to driver@hopr.com.`)
       navigate(`/routes/${res.data.routeId}`)
     } catch (err) {
       toast.error(errorMessage(err, 'Failed to create demo data'))
@@ -22,7 +22,7 @@ export default function DemoSeedButton({ className = 'btn btn-outline' }) {
   }
   return (
     <button type="button" className={className} onClick={run} disabled={busy}>
-      {busy ? <><span className="spinner spinner-sm" /> Preparing demo</> : <><Icon name="sparkle" />Load Ranchi demo</>}
+      {busy ? <><span className="spinner spinner-sm" /> Preparing demo</> : <><Icon name="sparkle" />Load demo data</>}
     </button>
   )
 }

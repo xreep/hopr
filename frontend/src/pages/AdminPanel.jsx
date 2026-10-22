@@ -4,7 +4,6 @@ import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
 import { formatDate } from '../utils/time'
-import { MAPBOX_TOKEN } from '../config'
 import DemoSeedButton from '../components/DemoSeedButton'
 import Icon from '../components/icons'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -114,7 +113,7 @@ export default function AdminPanel() {
         <button className="btn btn-primary" onClick={() => open()}><Icon name="plus" />Add user</button>
       </div>
 
-      <div className="grid grid-4 mb-6">
+      <div className="stats-strip mb-6">
         <StatCard label="Users" value={list.length} />
         <StatCard label="Admins" value={list.filter(u => u.role === 'admin').length} />
         <StatCard label="Fleet managers" value={list.filter(u => u.role === 'fleet_manager').length} />
@@ -124,8 +123,8 @@ export default function AdminPanel() {
       <div className="card mb-6">
         <div className="card-body flex-between flex-wrap gap-3">
           <div>
-            <p className="font-display text-h3 font-medium">Demo data</p>
-            <p className="text-small text-ink-400 mt-1 max-w-[60ch]">Adds the demo accounts and fleet if they&apos;re missing, plus a fresh five-stop Ranchi route with delivery windows, assigned to driver@hopr.com.</p>
+            <p className="text-h3 font-bold">Demo data</p>
+            <p className="text-small text-ink-400 mt-1 max-w-[60ch]">Adds the demo accounts and a fleet in Delhi, Mumbai, Bengaluru, Kolkata and Ranchi if they&apos;re missing, plus a fresh five-stop route with delivery windows in each city. The Ranchi route is assigned to driver@hopr.com; the others wait for auto-dispatch.</p>
           </div>
           <DemoSeedButton className="btn btn-secondary" />
         </div>
@@ -173,10 +172,10 @@ export default function AdminPanel() {
         <div className="card-header"><h3>System configuration</h3></div>
         <div className="card-body">
           <dl className="detail-list">
-            <dt>Map tiles (browser)</dt><dd>{MAPBOX_TOKEN ? 'Mapbox GL (token configured)' : 'Schematic fallback. Set VITE_MAPBOX_TOKEN on Vercel.'}</dd>
+            <dt>Street maps</dt><dd>OpenFreeMap (OpenStreetMap data), no key needed</dd>
             <dt>Geocoding (server)</dt><dd>{config ? (config.geocoder === 'mapbox' ? 'Mapbox Geocoding API' : 'OpenStreetMap Photon (set MAPBOX_TOKEN on Render for Mapbox)') : '…'}</dd>
-            <dt>Default depot</dt><dd>{config?.depot?.address || '…'}</dd>
-            <dt>Fuel prices</dt><dd>Ranchi retail defaults, overridable with FUEL_PRICE_* environment variables on the server</dd>
+            <dt>Hubs</dt><dd>{config ? (config.hubs?.length ? config.hubs.map(h => h.name || h.address).join(', ') : 'None yet. Set a home hub on each vehicle.') : '…'}</dd>
+            <dt>Fuel prices</dt><dd>Indian retail defaults; set FUEL_PRICE_* on the server for your state</dd>
           </dl>
           <p className="text-xs text-muted mt-3">Secrets are managed as environment variables on the hosting platforms and are never shown in the app.</p>
         </div>

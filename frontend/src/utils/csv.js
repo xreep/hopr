@@ -89,6 +89,6 @@ export function csvToStops(text) {
 }
 
 export const SAMPLE_CSV = `address,customer,phone,priority,window start,window end,weight kg,notes,lat,lng
-"Albert Ekka Chowk (Firayalal), Main Road, Ranchi, Jharkhand 834001",Amit Mahto,+91 98350 11223,standard,10:00,12:00,3,Shop counter,23.3702,85.3249
-"Morabadi Maidan, Morabadi, Ranchi, Jharkhand 834008",Neha Kumari,+91 94311 22334,urgent,10:30,11:30,6,Call on arrival,23.3909,85.3278
+"Connaught Place, New Delhi, Delhi 110001",Aditi Malhotra,+91 98100 11223,standard,10:00,12:00,3,Office reception,28.6318,77.2194
+"Khan Market, New Delhi, Delhi 110003",Rahul Khanna,+91 98110 22334,urgent,10:30,11:30,6,Call on arrival,28.5991,77.2263
 `
