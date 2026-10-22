@@ -448,7 +448,7 @@ Drivers can read only their own routes and proof images. Managers can complete a
 
 | Control | Implementation |
 |---|---|
-| HTTP headers | helmet |
+| HTTP headers | helmet on the API; on the website (`vercel.json`, also applied by `vite preview`) a Content Security Policy allowing only the site, the API (`*.onrender.com`), OpenFreeMap tiles and Google Fonts, plus `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy (tracking tokens never leave in a Referer), a permissions policy and HSTS. If the API is hosted elsewhere, add its origin to `connect-src` |
 | CORS | only `FRONTEND_URL` |
 | Body size | 100 kB JSON / form; images 5 MB |
 | NoSQL injection | express-mongo-sanitize; search text is regex-escaped |
@@ -458,6 +458,11 @@ Drivers can read only their own routes and proof images. Managers can complete a
 | Errors | no stack traces or internals in production responses |
 | Security logging | 401 and 429 responses, account lockouts and admin changes are logged |
 | Uploads | file type from magic bytes, size and count limits, private by default |
+| Sign-in tokens | HS256 only, pinned when signing and verifying |
+| Demo mode | the demo endpoints exist only with `DEMO_MODE=true`, so without it no one can create the demo accounts (whose passwords are published) through the API. In demo mode the demo accounts cannot be edited, deactivated, deleted or locked out, even by the demo admin |
+| Planning tools | address search, geocoding and road routing (`/api/map`) are for managers only, so a self-registered account cannot use the server as a free proxy |
+| Tracking links | stop working 48 hours after the delivery is finished (410) |
+| Offline updates | a time sent by the driver app is trusted only within 24 hours and never in the future; updates that arrive more than 2 minutes late also keep `receivedAt`, shown on the route as recorded without signal. Updates unsent after 7 days are dropped from the phone |
 | Dependencies | `npm audit` reports 0 vulnerabilities in both workspaces |
 
 Rate limits (per signed-in user, or per IP when anonymous):
@@ -543,7 +548,7 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | GET | `/api/incidents` | signed in | Active incidents |
 | POST | `/api/incidents` | manager | Report `congestion` or `closure` with `coordinates`, `radiusKm`, `severity`, `durationMinutes`; flags affected routes |
 | PATCH | `/api/incidents/:id/resolve` | manager | Resolve an incident |
-| GET | `/api/track/:token` | public | Customer tracking: status, timeline, delivery, driver initials and first name, vehicle type, location, remaining path, ETA, and `demo` during a demo drive |
+| GET | `/api/track/:token` | public | Customer tracking: status, timeline, delivery, driver initials and first name, vehicle type, location, remaining path, ETA, and `demo` during a demo drive. 410 two days after the delivery is finished |
 | GET | `/api/uploads/:id` | manager or the route's driver | A proof photo or signature |
 
 ### Analytics and admin
@@ -556,11 +561,12 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | POST | `/api/admin/users` | admin | Create a user with any role |
 | GET / PUT / DELETE | `/api/admin/users/:id` | admin | Read, update (a password reset signs the user out), delete |
 | PATCH | `/api/admin/users/:id/status` | admin | Activate or deactivate |
-| POST | `/api/demo/seed` | manager | Idempotent demo data: accounts, a driver and vehicle based at a hub in each of five cities, and a fresh five-stop route with windows in each city (Ranchi assigned to the demo driver, the rest waiting for auto-dispatch) |
-| POST | `/api/demo/simulate` | manager | Demo morning (7.7): dispatch and drive the planned demo routes at 20 times real time. 409 when none are waiting |
-| DELETE | `/api/demo/simulate` | manager | Stop the demo drives where they are |
+| GET | `/api/demo/status` | public | `{ enabled }`: whether the server runs in demo mode (the web app shows its demo buttons only then) |
+| POST | `/api/demo/seed` | manager, demo mode | Idempotent demo data: accounts, a driver and vehicle based at a hub in each of five cities, and a fresh five-stop route with windows in each city (Ranchi assigned to the demo driver, the rest waiting for auto-dispatch) |
+| POST | `/api/demo/simulate` | manager, demo mode | Demo morning (7.7): dispatch and drive the planned demo routes at 20 times real time. 409 when none are waiting |
+| DELETE | `/api/demo/simulate` | manager, demo mode | Stop the demo drives where they are |
 
-### Maps (`/api/map`, signed in)
+### Maps (`/api/map`, managers)
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -643,8 +649,8 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 120 tests, in-memory MongoDB
-npm test --workspace=frontend   # 50 tests, jsdom
+npm test --workspace=backend    # 129 tests, in-memory MongoDB
+npm test --workspace=frontend   # 51 tests, jsdom
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
 ```
@@ -661,8 +667,9 @@ npm run build --workspace=frontend
 | Analytics | 8 | Every KPI formula, empty data, period comparison, CSV safety |
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
+| Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
 | Offline updates | 3 | Time it happened trusted only within a day and never in the future, start, failure and delivery recorded at those times, repeat refused |
-| Frontend | 50 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order and retry rules, updates applied on the phone |
+| Frontend | 51 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order, retry rules and week-old updates dropped, updates applied on the phone |
 
 An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.
 

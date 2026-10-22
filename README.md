@@ -96,6 +96,7 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | `FRONTEND_URL` | yes in production | The frontend origin allowed by CORS, e.g. `https://your-app.vercel.app` (no trailing slash) |
 | `PORT` | no | Defaults to 5001 locally; Render sets it automatically |
 | `TRUST_PROXY` | no | Proxy hops to trust for client IPs; defaults to `1` in production |
+| `DEMO_MODE` | no | `true` for a public demo: turns on Load demo data, the demo morning and the demo sign-in buttons, and protects the demo accounts from being changed or locked out. Leave it unset for real use: the demo endpoints then do not exist |
 | `MAPBOX_TOKEN` | no | Server-side Mapbox token; when set, Mapbox is tried first for geocoding and road directions, with OpenStreetMap as the fallback |
 | `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: typical Indian retail 97.90, 92.60, 91.50 and ₹10/kWh; set your state's prices) |
 
@@ -123,8 +124,8 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 120 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates
-npm test --workspace=frontend   # 50 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
+npm test --workspace=backend    # 129 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security
+npm test --workspace=frontend   # 51 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 ```
 
 Backend tests run against an in-memory MongoDB, so no database setup is needed. [docs/TECHNICAL.md](docs/TECHNICAL.md#13-testing) has the full breakdown and the end-to-end smoke test results.
@@ -142,7 +143,7 @@ Backend tests run against an in-memory MongoDB, so no database setup is needed. 
 
 1. New → Web Service → connect the GitHub repository.
 2. Root directory `backend`, build command `npm install`, start command `npm start`.
-3. Environment variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL` (the Vercel URL, set after step 3) and, optionally, `MAPBOX_TOKEN`. Do not set `PORT`.
+3. Environment variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL` (the Vercel URL, set after step 3), `DEMO_MODE=true` if this is a public demo, and, optionally, `MAPBOX_TOKEN`. Do not set `PORT`.
 4. Health check path: `/api/health`.
 
 The free plan sleeps after 15 minutes without traffic, and the next request takes up to about a minute; the app shows a "server is waking up" message while it waits. A free uptime monitor requesting `/api/health` every 10 minutes keeps it awake.
@@ -164,7 +165,9 @@ Seed the production database from your machine, pointing at Atlas:
 MONGODB_URI="<your Atlas connection string>" npm run seed --workspace=backend
 ```
 
-Then sign in as the fleet manager. **Load demo data** (Routes, or Admin) creates fresh demo routes in all five cities whenever you need them.
+Then sign in as the fleet manager. With `DEMO_MODE=true`, **Load demo data** (Routes, or Admin) creates fresh demo routes in all five cities whenever you need them. Never seed the demo into a database with real customers: its passwords are public.
+
+The website's security headers, including the Content Security Policy, are in `frontend/vercel.json`. It allows API calls to `*.onrender.com`; if the API lives elsewhere, add its origin to `connect-src`.
 
 ## Project structure
 
