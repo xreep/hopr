@@ -11,6 +11,8 @@ import usePageTitle from '../hooks/usePageTitle'
 import { useT } from '../i18n/language'
 import { translateKnown } from '../i18n/strings'
 import { LanguageProvider } from './LanguageProvider'
+import { useConfirm } from './ConfirmDialog'
+import { outboxList } from '../offline/store'
 
 const MANAGERS = ['admin', 'fleet_manager']
 const navigation = [
@@ -41,6 +43,7 @@ function Shell() {
   const { user, logout } = useAuth()
   const { t, lang } = useT()
   const nav = name => translateKnown(lang, 'nav', name)
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -68,7 +71,9 @@ function Shell() {
 
   const filteredNav = navigation.filter(item => item.roles.includes(user?.role))
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const unsent = user?.role === 'driver' ? (await outboxList(user._id).catch(() => [])).length : 0
+    if (unsent && !(await confirm({ title: t('offline.logoutTitle'), message: t('offline.logoutMessage'), confirmLabel: t('offline.logoutConfirm'), cancelLabel: t('common.cancel') }))) return
     logout()
     navigate('/login')
   }

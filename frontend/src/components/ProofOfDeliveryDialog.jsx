@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Modal } from './ui'
 import SignaturePad from './SignaturePad'
-import api, { errorMessage } from '../utils/api'
 import { compressImage } from '../utils/image'
 import Icon from './icons'
 import { useT } from '../i18n/language'
 
-// Completing a stop: delivery photo (camera or file), customer signature, optional note
-export default function ProofOfDeliveryDialog({ route, stop, onClose, onCompleted }) {
+// Completing a stop: delivery photo (camera or file), customer signature, optional note.
+// onSubmit({ photo, signature, note }) sends it, or keeps it on the phone while offline,
+// and resolves to true once it is done.
+export default function ProofOfDeliveryDialog({ stop, onClose, onSubmit }) {
   const { t } = useT()
   const fileRef = useRef(null)
   const padRef = useRef(null)
@@ -37,17 +38,14 @@ export default function ProofOfDeliveryDialog({ route, stop, onClose, onComplete
     if (!photo && !signed) return toast.error(t('pod.needProof'))
     setBusy(true)
     try {
-      const form = new FormData()
-      if (photo) form.append('photo', photo, 'delivery.jpg')
-      if (signed) form.append('signature', await padRef.current.toBlob(), 'signature.png')
-      if (note.trim()) form.append('note', note.trim())
-      const res = await api.post(`/routes/${route._id}/stops/${stop._id}/complete`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const ok = await onSubmit({
+        photo,
+        signature: signed ? await padRef.current.toBlob() : null,
+        note: note.trim() || undefined
       })
-      onCompleted(res.data.route)
-    } catch (err) {
-      toast.error(errorMessage(err, t('pod.failed')))
-    } finally {
+      if (!ok) setBusy(false)
+    } catch {
+      toast.error(t('pod.failed'))
       setBusy(false)
     }
   }

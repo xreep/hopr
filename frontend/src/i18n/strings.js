@@ -227,7 +227,10 @@ const en = {
   'offline.saved': 'Saved on this phone. It will be sent when you’re back online.',
   'offline.synced': 'All saved deliveries have been sent',
   'offline.waiting': 'Waiting to send',
-  'offline.cachedRoutes': 'Showing your routes as they were when you last had signal.'
+  'offline.cachedRoutes': 'Showing your routes as they were when you last had signal.',
+  'offline.logoutTitle': 'Sign out with updates still to send?',
+  'offline.logoutMessage': 'They stay on this phone and are sent the next time you sign in here.',
+  'offline.logoutConfirm': 'Sign out'
 }
 
 const hi = {
@@ -455,7 +458,10 @@ const hi = {
   'offline.saved': 'इस फ़ोन में सेव हो गया। नेटवर्क आते ही भेज दिया जाएगा।',
   'offline.synced': 'सेव की गई सभी डिलीवरी भेज दी गईं',
   'offline.waiting': 'भेजना बाकी',
-  'offline.cachedRoutes': 'आपके रूट वैसे दिख रहे हैं जैसे पिछली बार नेटवर्क रहते थे।'
+  'offline.cachedRoutes': 'आपके रूट वैसे दिख रहे हैं जैसे पिछली बार नेटवर्क रहते थे।',
+  'offline.logoutTitle': 'कुछ अपडेट भेजने बाकी हैं, फिर भी लॉग आउट करें?',
+  'offline.logoutMessage': 'वे इस फ़ोन में रहेंगे और अगली बार यहाँ लॉग इन करने पर भेज दिए जाएँगे।',
+  'offline.logoutConfirm': 'लॉग आउट करें'
 }
 
 export const STRINGS = { en, hi }

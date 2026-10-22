@@ -18,6 +18,10 @@ import Icon from '../components/icons'
 import { useT } from '../i18n/language'
 import { translateKnown, durationIn } from '../i18n/strings'
 import { LanguageProvider, LanguageToggle } from '../components/LanguageProvider'
+import useOfflineSync from '../hooks/useOfflineSync'
+import { sendUpdate, queueUpdate, isNetworkError, outboxList } from '../offline/outbox'
+import { saveRoutes, loadRoutes } from '../offline/store'
+import { applyLocal, applyPending } from '../offline/applyLocal'
 
 const FAILURE_REASONS = ['Customer not available', 'Address not found', 'Customer refused delivery', 'Access restricted / gate locked', 'Package damaged']
 
@@ -36,10 +40,26 @@ function DriverDeliveries() {
   const [busy, setBusy] = useState(false)
   const [dialog, setDialog] = useState(null) // { kind: 'pod' | 'fail' | 'issue', stop }
   const knownIds = useRef(null)
+  const [fromCache, setFromCache] = useState(false)
+  const userId = user?._id
 
+  // Routes from the server (kept on the phone for offline use), or the copy on the phone
+  // when there's no signal, with any updates still waiting to send laid over them
   const load = useCallback(async () => {
-    const res = await api.get('/routes/driver/assigned')
-    const list = res.data.routes
+    let list
+    try {
+      const res = await api.get('/routes/driver/assigned')
+      list = res.data.routes
+      setFromCache(false)
+      saveRoutes(userId, list).catch(() => {})
+    } catch (err) {
+      if (!isNetworkError(err)) throw err
+      const saved = await loadRoutes(userId).catch(() => null)
+      list = saved?.routes || []
+      setFromCache(true)
+    }
+    const waiting = await outboxList(userId).catch(() => [])
+    list = applyPending(list, waiting).filter(r => r.status === 'planned' || r.status === 'active')
     // Announce routes that appeared since the last poll
     if (knownIds.current) {
       const fresh = list.filter(r => !knownIds.current.has(r._id))
@@ -53,8 +73,12 @@ function DriverDeliveries() {
     knownIds.current = new Set(list.map(r => r._id))
     setRoutes(list)
     setSelectedId(prev => (prev && list.some(r => r._id === prev) ? prev : (list.find(r => r.status === 'active') || list[0])?._id || null))
-  }, [t, lang])
+  }, [t, lang, userId])
   usePolling(load, 15000)
+  const sync = useOfflineSync(userId, useCallback(result => {
+    if (result.sent && !result.remaining) toast.success(t('offline.synced'))
+    load()
+  }, [t, load]))
 
   const route = routes?.find(r => r._id === selectedId) || null
   const gps = useDriverLocation(route)
@@ -71,24 +95,35 @@ function DriverDeliveries() {
     })
   }
 
-  const call = async (request, success) => {
+  // Send an update now, or keep it on the phone when there's no signal. Either way the
+  // screen moves on, and success() announces what happened.
+  const act = async (update, success) => {
+    const item = { ...update, routeId: route._id, at: new Date().toISOString() }
     setBusy(true)
     try {
-      const res = await request()
-      if (res.data.route) applyRoute(res.data.route)
-      if (success) toast.success(success(res.data.route))
-      return res
+      let updated
+      try {
+        const res = await sendUpdate(item)
+        updated = res.data.route
+      } catch (err) {
+        if (!isNetworkError(err)) throw err
+        await queueUpdate(userId, item)
+        updated = applyLocal(route, item)
+      }
+      if (updated) applyRoute(updated)
+      if (success) toast.success(success(updated || route))
+      return true
     } catch (err) {
       toast.error(errorMessage(err, t('driver.toast.updateFailed')))
-      return null
+      return false
     } finally {
       setBusy(false)
     }
   }
 
-  const startRoute = () => call(() => api.patch(`/routes/${route._id}/start`), () => t('driver.toast.started'))
-  const setStatus = (stop, status, reason) => call(
-    () => api.patch(`/routes/${route._id}/stops/${stop._id}/status`, { status, ...(reason && { reason }) }),
+  const startRoute = () => act({ kind: 'start' }, () => t('driver.toast.started'))
+  const setStatus = (stop, status, reason) => act(
+    { kind: 'status', stopId: stop._id, body: { status, ...(reason && { reason }) } },
     updated => {
       say(`${t('driver.say.failed')} ${updated.status === 'completed' ? t('driver.say.allDone') : nextStopPhrase(updated, t)}`)
       return updated.status === 'completed' ? t('driver.toast.routeDone') : t('driver.toast.failed')
@@ -122,6 +157,20 @@ function DriverDeliveries() {
         </div>
         <LanguageToggle />
       </div>
+
+      {(!sync.online || sync.pending > 0 || fromCache) && (
+        <div className="offline-bar" role="status">
+          <p className="text-small">
+            {!sync.online ? t('offline.banner') : fromCache ? t('offline.cachedRoutes') : null}
+            {sync.pending > 0 && <strong className="block">{sync.pending === 1 ? t('offline.pendingOne') : t('offline.pendingMany', { n: sync.pending })}</strong>}
+          </p>
+          {sync.pending > 0 && sync.online && (
+            <button type="button" className="btn btn-outline btn-sm" onClick={sync.flush} disabled={sync.syncing}>
+              {sync.syncing ? t('offline.sending') : t('offline.sendNow')}
+            </button>
+          )}
+        </div>
+      )}
 
       {routes.length === 0 ? (
         <div className="card"><EmptyState title={t('driver.noRoutes')}>{t('driver.noRoutesHint')}</EmptyState></div>
@@ -218,7 +267,10 @@ function DriverDeliveries() {
                       <div className="min-w-0 flex-1">
                         <div className="flex-between gap-2">
                           <p className="font-medium truncate">{s.customerName || s.address.split(',')[0]}</p>
-                          <StatusBadge status={s.status} />
+                          <span className="flex items-center gap-1.5">
+                            {s.pendingSync && <span className="badge badge-warning">{t('offline.waiting')}</span>}
+                            <StatusBadge status={s.status} />
+                          </span>
                         </div>
                         <p className="text-xs text-muted truncate">{s.address}</p>
                         <p className="text-xs">{s.status === 'completed' ? t('driver.deliveredAt', { time: formatClock(s.completedAt) }) : s.status === 'failed' ? t('driver.failedBecause', { reason: translateKnown(lang, 'fail', s.failureReason) }) : t('driver.etaAt', { time: formatClock(s.estimatedArrival) })}</p>
@@ -233,11 +285,13 @@ function DriverDeliveries() {
       )}
 
       {dialog?.kind === 'pod' && (
-        <ProofOfDeliveryDialog route={route} stop={dialog.stop} onClose={() => setDialog(null)} onCompleted={updated => {
-          applyRoute(updated)
-          setDialog(null)
-          toast.success(updated.status === 'completed' ? t('driver.toast.routeDone') : t('driver.toast.delivered'))
-          say(`${t('driver.say.delivered')} ${updated.status === 'completed' ? t('driver.say.routeDone') : nextStopPhrase(updated, t)}`)
+        <ProofOfDeliveryDialog stop={dialog.stop} onClose={() => setDialog(null)} onSubmit={async proof => {
+          const ok = await act({ kind: 'complete', stopId: dialog.stop._id, body: proof }, updated => {
+            say(`${t('driver.say.delivered')} ${updated.status === 'completed' ? t('driver.say.routeDone') : nextStopPhrase(updated, t)}`)
+            return updated.status === 'completed' ? t('driver.toast.routeDone') : t('driver.toast.delivered')
+          })
+          if (ok) setDialog(null)
+          return ok
         }} />
       )}
       {dialog?.kind === 'fail' && (
@@ -248,7 +302,7 @@ function DriverDeliveries() {
       )}
       {dialog?.kind === 'issue' && (
         <IssueDialog stop={dialog.stop} onClose={() => setDialog(null)} onSubmit={async body => {
-          const res = await call(() => api.post(`/routes/${route._id}/stops/${dialog.stop._id}/issues`, body), () => (body.type === 'delay' ? t('driver.toast.delay') : t('driver.toast.issue')))
+          const res = await act({ kind: 'issue', stopId: dialog.stop._id, body }, () => (body.type === 'delay' ? t('driver.toast.delay') : t('driver.toast.issue')))
           if (res) setDialog(null)
         }} />
       )}

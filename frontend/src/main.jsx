@@ -11,6 +11,11 @@ import { primeSpeechOnFirstGesture } from './utils/speak'
 
 primeSpeechOnFirstGesture()
 
+// Offline support for the driver app (production builds only, so development reloads stay fresh)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

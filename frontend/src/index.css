@@ -705,3 +705,7 @@
     .landing-stats > .stats-card + .stats-card { border-top: 1px solid var(--h-line); }
   }
 }
+
+@layer components {
+  .offline-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: #FFF8E1; border: 1px solid #F0DFA6; border-left: 4px solid var(--h-yellow); }
+}
