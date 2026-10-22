@@ -1,5 +1,16 @@
 import mongoose from 'mongoose'
 import { VEHICLE_TYPES, FUEL_TYPES } from '../config/fleet.js'
+import { isValidCoordinate } from '../utils/geo.js'
+
+const baseSchema = new mongoose.Schema({
+  name: { type: String, trim: true, maxlength: 120 },
+  address: { type: String, trim: true, maxlength: 300 },
+  coordinates: {
+    type: [Number],
+    required: true,
+    validate: { validator: isValidCoordinate, message: 'Invalid hub coordinates' }
+  }
+}, { _id: false })
 
 const vehicleSchema = new mongoose.Schema({
   vehicleId: {
@@ -48,6 +59,8 @@ const vehicleSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  // Home hub: where the vehicle starts its day. Auto-dispatch keeps it in its own city.
+  base: { type: baseSchema, default: null },
   status: {
     type: String,
     enum: ['active', 'maintenance', 'inactive'],

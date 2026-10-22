@@ -47,6 +47,23 @@ describe('auto-dispatch scoring', () => {
     expect(ace.score - truck.score).toBeCloseTo(WEIGHTS.fit * (400 / 750 - 400 / 2500) + WEIGHTS.typeMatch, 4)
   })
 
+  it('uses the vehicle\'s home hub when there is no fresh GPS, and never sends a driver to another city', () => {
+    const r = route('A', 10) // starts at the Ranchi hub
+    const ranchiVan = { ...van('r'), base: { name: 'Hopr Hub, Kokar', coordinates: L.lalpurChowk.coordinates } }
+    const delhiVan = { ...van('d'), base: { name: 'Hopr Hub, Okhla', coordinates: [77.2811, 28.5349] } }
+    const local = scoreCandidate({ route: r, driver: { name: 'Ravi' }, vehicle: ranchiVan, now: NOW })
+    expect(local.feasible).toBe(true)
+    expect(local.origin).toBe('hub')
+    expect(local.reasons[0]).toMatch(/^based at Hopr Hub, Kokar, \d/)
+    const away = scoreCandidate({ route: r, driver: { name: 'Pooja' }, vehicle: delhiVan, now: NOW })
+    expect(away.feasible).toBe(false)
+    expect(away.reason).toMatch(/^Pooja is 9\d\d km away \(based at Hopr Hub, Okhla\)$/) // Ranchi to Delhi, straight line
+    // Fresh GPS wins over the home hub: a Delhi-based driver who is in Ranchi today is offered the route
+    const visiting = scoreCandidate({ route: r, driver: { name: 'Pooja', lastLocation: fresh(L.harmuChowk.coordinates) }, vehicle: delhiVan, now: NOW })
+    expect(visiting.feasible).toBe(true)
+    expect(visiting.origin).toBe('gps')
+  })
+
   it('matches routes to drivers globally, one route per driver and vehicle', () => {
     const routes = [route('heavy', 600), route('light', 5)]
     const candidates = [

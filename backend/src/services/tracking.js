@@ -3,6 +3,7 @@
 import { haversineKm, pointToSegment } from '../utils/geo.js'
 import { timeOfDayFactor } from './traffic.js'
 import { VEHICLE_PROFILES, ARRIVING_RADIUS_M, STALE_LOCATION_SEC, ROAD_CIRCUITY } from '../config/fleet.js'
+import { isRoadGeometry } from './geometry.js'
 
 const OFF_ROUTE_KM = 0.35
 
@@ -67,7 +68,7 @@ export function remainingPath(route, target, driverPos) {
 
 export function etaMinutes({ route, target, path, now = new Date() }) {
   const profile = VEHICLE_PROFILES[route.vehicleType] || VEHICLE_PROFILES.van
-  const km = lengthKm(path) * (route.geometrySource === 'mapbox' ? 1 : ROAD_CIRCUITY)
+  const km = lengthKm(path) * (isRoadGeometry(route.geometrySource) ? 1 : ROAD_CIRCUITY)
   const traffic = route.trafficEnabled === false ? 1 : timeOfDayFactor(now)
   const stopsBefore = route.stops.filter(s => (s.status === 'pending' || s.status === 'in_progress') && s.sequence < target.sequence).length
   const minutes = (km / profile.speedKmh) * 60 * traffic + stopsBefore * profile.serviceMin

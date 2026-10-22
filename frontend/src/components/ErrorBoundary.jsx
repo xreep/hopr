@@ -27,7 +27,7 @@ export default class ErrorBoundary extends Component {
     return (
       <div className={`crash-screen ${fullPage ? 'crash-screen-full' : ''}`} role="alert">
         <HopMark size={40} />
-        <h1 className="font-display text-h2 mt-5">This page stopped working</h1>
+        <h1 className="text-h2 font-extrabold mt-5">This page stopped working</h1>
         <p className="text-small text-ink-300 mt-2 max-w-[44ch]">
           Your routes and deliveries are saved on the server. Reload to pick up where you left off.
         </p>

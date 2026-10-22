@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from './icons'
 import HopLine from './HopLine'
-import useCountUp from '../hooks/useCountUp'
 
 export function Spinner({ label = 'Loading' }) {
   return <span className="spinner" role="status" aria-label={label} />
@@ -59,9 +58,9 @@ export function PageSkeleton({ label = 'Loading' }) {
   const slow = useSlowNotice()
   return (
     <div role="status" aria-label={label}>
-      <div className="grid grid-4 mb-6">
+      <div className="stats-strip mb-6">
         {[0, 1, 2, 3].map(i => (
-          <div key={i} className="card card-body space-y-3">
+          <div key={i} className="stats-card space-y-3">
             <span className="skeleton block" style={{ width: '45%' }} />
             <span className="skeleton skeleton-lg block" style={{ width: '30%' }} />
             <span className="skeleton block" style={{ width: '65%' }} />
@@ -155,13 +154,11 @@ export function EmptyState({ title, children, action }) {
   )
 }
 
-function CountValue({ value, decimals, format }) {
-  const animated = useCountUp(value, { decimals })
-  return format ? format(animated) : animated.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
-}
+const formatValue = (value, decimals, format) =>
+  (format ? format(value) : value.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }))
 
-// KPI tile. Numbers count up; null renders an em dash (no data) rather than a misleading zero.
-// `isKey` lights the number in volt: use for at most one tile per row.
+// KPI cell (sits in a .stats-strip). Null renders an em dash (no data) rather than a misleading zero.
+// `isKey` shows the number in route green: use for at most one cell per strip.
 export function StatCard({ label, value, suffix = '', hint, trend, trendGoodWhen = 'up', trendUnit = '', decimals, format, isKey = false, spark, sparkLabel }) {
   const hasValue = value !== null && value !== undefined
   const numeric = typeof value === 'number' && Number.isFinite(value)
@@ -175,7 +172,7 @@ export function StatCard({ label, value, suffix = '', hint, trend, trendGoodWhen
     <div className="card stats-card">
       <p className="stats-label">{label}</p>
       <p className={`stats-value ${isKey && hasValue ? 'is-key' : ''}`}>
-        {!hasValue ? '—' : numeric ? <CountValue value={value} decimals={places} format={format} /> : value}
+        {!hasValue ? '—' : numeric ? formatValue(value, places, format) : value}
         {hasValue && suffix ? <span className="stats-suffix">{suffix}</span> : null}
       </p>
       {hint && <p className="stats-hint">{hint}</p>}

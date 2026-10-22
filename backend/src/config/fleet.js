@@ -1,11 +1,11 @@
-// Operating assumptions for Ranchi, Jharkhand. Every number here is a documented,
-// realistic default; deployments can override prices via environment variables.
+// Operating assumptions for last-mile delivery in Indian cities. Every number here is a
+// documented, realistic default; deployments can override prices via environment variables.
 
 export const MAX_STOPS_PER_ROUTE = 30 // nearest-neighbour + 2-opt is tuned for <= 30 stops
 export const MAX_VEHICLES_PER_BATCH = 10
 export const MAX_STOPS_PER_BATCH = MAX_STOPS_PER_ROUTE * MAX_VEHICLES_PER_BATCH
 
-// Hopr's hub (warehouse) in Kokar, Ranchi
+// Fallback start point for a plan that names no hub (the planner always sends one)
 export { RANCHI_HUB as DEFAULT_DEPOT } from '../data/ranchiLocations.js'
 
 // Straight-line km x circuity = road km when no road network (Mapbox) is available.
@@ -26,7 +26,8 @@ export const FUEL_TYPES = ['diesel', 'petrol', 'electric', 'cng', 'hybrid']
 
 export const ENERGY_UNITS = Object.freeze({ petrol: 'L', diesel: 'L', hybrid: 'L', cng: 'kg', electric: 'kWh' })
 
-// Approximate Ranchi retail prices (INR). Electricity is the depot charging tariff.
+// Approximate Indian retail prices (INR); set FUEL_PRICE_* for your state. Electricity is
+// the depot charging tariff.
 export function defaultFuelPrices() {
   const num = (key, fallback) => {
     const v = Number(process.env[key])

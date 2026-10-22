@@ -89,7 +89,7 @@ export default function RouteDetail() {
         <div>
           <Link to={isManager ? '/routes' : '/driver-panel'} className="btn btn-ghost btn-sm -ml-2 mb-1"><Icon name="arrowRight" className="rotate-180" />{isManager ? 'All routes' : 'My deliveries'}</Link>
           <h1 className="page-title flex flex-wrap items-center gap-3">{route.name} <StatusBadge status={route.status} /></h1>
-          <p className="page-subtitle">{route.routeId} in batch {route.batchId}, planned for {formatDateTime(route.plannedStart)}</p>
+          <p className="page-subtitle flex flex-wrap items-center gap-x-2 gap-y-1"><span className="route-plate">{route.routeId}</span>Batch {route.batchId}, planned for {formatDateTime(route.plannedStart)}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {canRecalculate && <button type="button" className="btn btn-secondary" onClick={recalculate} disabled={busy}><Icon name="refresh" />Recalculate remaining stops</button>}
@@ -117,7 +117,7 @@ export default function RouteDetail() {
           <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver}
             incidents={incidents.map(i => ({ id: i._id, coordinates: i.coordinates, radiusKm: i.radiusKm, type: i.type, label: i.label }))}
             fitKey={route._id + route.stops.map(s => s.sequence).join()} height={380} />
-          {route.geometrySource === 'estimated' && <p className="text-xs text-muted px-4 py-2">Path shown as straight legs (road geometry needs a Mapbox token on the server).</p>}
+          {route.geometrySource === 'estimated' && <p className="text-xs text-muted px-4 py-2">Path shown as straight legs: road routing was unavailable when this route was planned. Recalculating the remaining stops tries again.</p>}
         </div>
 
         <div className="card">

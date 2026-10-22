@@ -12,6 +12,7 @@ router.post('/seed', authenticate, authorize('admin', 'fleet_manager'), async (r
       message: 'Demo data ready',
       routeId: result.route._id,
       route: result.route.routeId,
+      routes: result.routes.length,
       accounts: result.accounts,
       vehicles: result.vehicles
     })

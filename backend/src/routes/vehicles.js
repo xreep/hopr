@@ -13,7 +13,7 @@ router.param('id', objectIdParam)
 // H4: Whitelist allowed fields for vehicle creation/update
 const vehicleFields = [
   'vehicleId', 'name', 'type', 'fuelType', 'mileage', 'capacity',
-  'licensePlate', 'status', 'purchaseDate', 'lastMaintenance', 'nextMaintenance'
+  'licensePlate', 'status', 'purchaseDate', 'lastMaintenance', 'nextMaintenance', 'base'
 ]
 
 const isObjectIdOrNull = v => v === null || v === '' || /^[a-f\d]{24}$/i.test(v)
@@ -34,6 +34,11 @@ const vehicleValidators = (optional) => {
     body('purchaseDate').optional({ values: 'falsy' }).isISO8601(),
     body('lastMaintenance').optional({ values: 'falsy' }).isISO8601(),
     body('nextMaintenance').optional({ values: 'falsy' }).isISO8601(),
+    body('base').optional({ nullable: true }).isObject().withMessage('Invalid home hub'),
+    body('base.name').optional().isString().isLength({ max: 120 }),
+    body('base.address').optional().isString().isLength({ max: 300 }),
+    body('base.coordinates').optional().isArray({ min: 2, max: 2 }).withMessage('Home hub needs [lng, lat]'),
+    body('base.coordinates.*').optional().isFloat({ min: -180, max: 180 }),
     validateRequest
   ]
 }
@@ -43,6 +48,12 @@ function cleanVehicleData(source, { fallbackType } = {}) {
   const data = pick(source, vehicleFields)
   for (const key of ['purchaseDate', 'lastMaintenance', 'nextMaintenance']) {
     if (data[key] === '') data[key] = null
+  }
+  if (Object.hasOwn(data, 'base')) {
+    const b = data.base
+    data.base = b && b.coordinates?.length === 2
+      ? { name: b.name || undefined, address: b.address || undefined, coordinates: b.coordinates.map(Number) }
+      : null
   }
   if (data.vehicleId) data.vehicleId = data.vehicleId.toUpperCase()
   if (data.licensePlate) data.licensePlate = data.licensePlate.toUpperCase().replace(/\s+/g, '')

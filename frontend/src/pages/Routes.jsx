@@ -164,7 +164,7 @@ export default function RoutesPage() {
                     <tr key={r._id}>
                       <td>
                         <Link to={`/routes/${r._id}`} className="font-medium no-underline hover:underline">{r.name}</Link>
-                        <div className="text-micro text-ink-400 whitespace-nowrap">{r.routeId}, {r.batchId}</div>
+                        <div className="flex items-center gap-1.5 mt-1 text-micro text-ink-400 whitespace-nowrap"><span className="route-plate">{r.routeId}</span>{r.batchId}</div>
                         {r.violations?.length > 0 && <div className="text-micro text-signal-amber">{r.violations.length} window{r.violations.length > 1 ? 's' : ''} at risk</div>}
                         {r.needsRecalculation && <div className="text-micro text-signal-amber">Traffic changed, recalculate</div>}
                       </td>

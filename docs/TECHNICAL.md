@@ -1,6 +1,6 @@
 # Hopr technical documentation
 
-Hopr is a route optimization system for last-mile delivery in Ranchi, Jharkhand. Fleet managers plan multi-stop, multi-vehicle batches, dispatch them to drivers, and watch them live. Drivers follow the route, collect proof of delivery and report problems. Customers follow their parcel on a public tracking page.
+Hopr is a route optimization system for last-mile delivery anywhere in India. Fleet managers plan multi-stop, multi-vehicle batches, dispatch them to drivers, and watch them live. Drivers follow the route, collect proof of delivery and report problems. Customers follow their parcel on a public tracking page.
 
 This document maps the implementation to the project specification (*Smart Route Optimization System for Last-Mile Delivery*). Section numbers in the traceability table point to the parts of this document that cover each requirement.
 
@@ -29,8 +29,8 @@ This document maps the implementation to the project specification (*Smart Route
 | Selection of number and type of vehicles | Planner: pick fleet vehicles, or a vehicle type and count (1–10) | [4.5](#45-multi-vehicle-batches) |
 | Delivery priority (urgent/standard) | `priority: urgent \| standard \| low` per stop, weighted in the objective | [4.2](#42-objective-operating-cost-in-inr) |
 | Optimized sequence and ETA calculation | `services/routeOptimizer.js` | [4](#4-routing-algorithm) |
-| Map API integration (Google Maps / Mapbox) | Mapbox GL in the browser; Mapbox Geocoding and Directions on the server. Without a token: OpenStreetMap Photon geocoding and a schematic map | [2.4](#24-map-integration) |
-| Traffic-aware suggestions, dynamic recalculation, closures and congestion | Simulated Ranchi traffic profile, manager-reported incidents, recalculation from the driver's position | [5](#5-traffic-handling) |
+| Map API integration (Google Maps / Mapbox) | Street maps with MapLibre GL and OpenFreeMap tiles (no key); geocoding and road directions from Mapbox when a token is set, otherwise from OpenStreetMap services | [2.4](#24-map-integration) |
+| Traffic-aware suggestions, dynamic recalculation, closures and congestion | Simulated Indian-city traffic profile, manager-reported incidents, recalculation from the driver's position | [5](#5-traffic-handling) |
 | Fuel per route, compare options, vehicle type, distance vs cost | `services/fuel.js`, route alternatives, per-type comparison | [6](#6-fuel-estimation) |
 | Driver: view route, map navigation, mark Pending / Completed / Failed, report issues or delays | Driver panel, Google Maps hand-off, proof-of-delivery dialog, issue and delay reports | [7](#7-dispatch-tracking-and-delivery-features) |
 | Manager: batches, assign vehicles and drivers, track deliveries, planned vs actual, reports | Routes and dispatch, auto-dispatch, live monitor, route detail, analytics with CSV export | [7](#7-dispatch-tracking-and-delivery-features), [10](#10-kpi-definitions) |
@@ -38,7 +38,7 @@ This document maps the implementation to the project specification (*Smart Route
 | KPIs (6) | `services/analytics.js`, `services/metrics.js` | [10](#10-kpi-definitions) |
 | NFRs: under 10 s planning, secure auth, availability, scalability, responsive UI | Measured and documented | [11](#11-non-functional-requirements) |
 | 6–8 interconnected pages, role-based auth | 12 authenticated pages plus login and public tracking; 3 roles | [8](#8-authentication-roles-and-security), [12](#12-frontend) |
-| Realistic data, not dummy data | Geocoded Ranchi landmarks, Ranchi fuel prices, Indian grid emission factor | [3.6](#36-reference-data), [6](#6-fuel-estimation) |
+| Realistic data, not dummy data | Hubs and delivery points in five cities geocoded from OpenStreetMap, Indian fuel prices, Indian grid emission factor | [3.6](#36-reference-data), [6](#6-fuel-estimation) |
 
 ---
 
@@ -58,25 +58,27 @@ flowchart LR
     O[Routing engine<br/>pure functions]
   end
   DB[(MongoDB Atlas M0)]
-  MB[Mapbox<br/>tiles, geocoding, directions]
-  PH[OpenStreetMap Photon<br/>geocoding fallback]
+  T[OpenFreeMap<br/>street map tiles]
+  OSM[OpenStreetMap services<br/>Photon geocoding, OSRM routing]
+  MB[Mapbox<br/>optional geocoding, directions]
 
   M -- HTTPS JSON, JWT --> A
   C -- HTTPS JSON, token in URL --> A
   S --> M
   S --> C
+  M --> T
+  C --> T
   A --> O
   A --> DB
-  A -. optional .-> MB
-  A -. fallback .-> PH
-  M -. optional map tiles .-> MB
+  A --> OSM
+  A -. if MAPBOX_TOKEN .-> MB
 ```
 
 ### 2.1 Stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 18, Vite, React Router 7, Tailwind CSS 4, Chart.js, Mapbox GL JS, react-hot-toast |
+| Frontend | React 18, Vite, React Router 7, Tailwind CSS 4, Chart.js, MapLibre GL JS, react-hot-toast |
 | Backend | Node.js, Express, Mongoose, express-validator, multer, helmet, express-rate-limit, express-mongo-sanitize, bcryptjs, jsonwebtoken |
 | Database | MongoDB (Atlas M0 in production; a local `mongod` in development and `mongodb-memory-server` in tests) |
 | Tests | Vitest, Supertest, Testing Library, jsdom |
@@ -91,7 +93,7 @@ hopr/
 │   │   ├── app.js              Express app: security middleware, rate limits, routers
 │   │   ├── index.js            Startup: env checks, MongoDB connection, listen
 │   │   ├── config/fleet.js     Vehicle profiles, fuel prices, emission factors, cost model
-│   │   ├── data/               Geocoded Ranchi landmarks and the Kokar hub
+│   │   ├── data/               Geocoded hubs and places in five Indian cities
 │   │   ├── middleware/         auth (JWT + roles), validation, uploads
 │   │   ├── models/             User, Vehicle, Route (stops embedded), TrafficIncident, Upload
 │   │   ├── routes/             One router per resource (see section 9)
@@ -104,7 +106,7 @@ hopr/
 │   ├── src/
 │   │   ├── pages/              One component per screen
 │   │   ├── components/         Map, dialogs, command palette, UI kit
-│   │   ├── hooks/              Polling, driver location, count-up, media query, page title
+│   │   ├── hooks/              Polling, driver location, media query, page title
 │   │   ├── context/            Auth session
 │   │   └── utils/              API client, IST time, geo, tracking animation, speech, CSV
 │   └── vercel.json             Rewrites client routes to index.html
@@ -121,13 +123,16 @@ hopr/
 
 ### 2.4 Map integration
 
-| Capability | With `MAPBOX_TOKEN` / `VITE_MAPBOX_TOKEN` | Without a token |
-|---|---|---|
-| Map in the browser | Mapbox GL `dark-v11` with live traffic tiles and glowing route lines | Schematic SVG map: same markers, lines and driver animation, no street tiles |
-| Address search | Mapbox Geocoding, limited to the Ranchi service area | OpenStreetMap Photon, limited to the same area |
-| Road geometry | Mapbox Directions, in chunks of 25 waypoints | Straight legs × 1.35 circuity factor (typical for Indian city grids) |
+Hopr works across India with no paid key. Mapbox is optional and only used on the server.
 
-Address suggestions always lead with Hopr's curated Ranchi landmarks when they match what was typed. Provider results are searched inside a box of about 45 km around Ranchi, widened to all of India only when nothing local matches, and de-duplicated (same label, or within 30 m). Geocoding results are cached in memory for 24 hours.
+| Capability | Default (free, no key) | With `MAPBOX_TOKEN` on the server |
+|---|---|---|
+| Map in the browser | MapLibre GL with OpenFreeMap tiles (OpenStreetMap data), English place names; a simplified SVG map if WebGL or the tiles are unavailable | Same |
+| Address search | OpenStreetMap Photon, limited to India | Mapbox Geocoding, limited to India, falling back to Photon |
+| Road geometry | OSRM, the public routing service FOSSGIS runs for openstreetmap.org | Mapbox Directions, falling back to OSRM |
+| Neither available | Straight legs × 1.35 circuity factor (typical for Indian city grids), drawn dashed | |
+
+Address searches pass the batch's hub (`near=lng,lat`), so nearby places rank first while results can still come from anywhere in India. Curated places (the demo hubs and delivery points in Delhi, Mumbai, Bengaluru, Kolkata and Ranchi) lead when they match every word typed; a bare city or state name is left to the geocoder. Results are de-duplicated (same label, or within 30 m) and cached in memory for 24 hours; road geometry is cached too. Requests to the public OpenStreetMap services carry an identifying User-Agent and stay well within their fair-use policies.
 
 ---
 
@@ -161,6 +166,7 @@ All models are Mongoose schemas in `backend/src/models`. Each one is listed next
 | Mileage (km/l) | `mileage`: km per litre, kg of CNG, or kWh |
 | Capacity | `capacity` (kg) |
 | Assigned driver | `driver` (User ref). Assigning moves the driver off any other vehicle |
+| | `base`: the home hub (`name`, `address`, `coordinates`) where the vehicle starts its day; used by auto-dispatch and the planner |
 | | `type` (`bike`, `van`, `truck`, `ev_van`), `status` (`active`, `maintenance`, `inactive`), maintenance dates, totals |
 
 ### 3.3 Route
@@ -195,7 +201,7 @@ Indexes: `{driver, status}`, `{vehicle}`, `{status}`, `{createdAt: -1}`, `batchI
 
 ### 3.6 Reference data
 
-`backend/src/data/ranchiLocations.js` holds 16 real Ranchi locations (Lalpur Chowk, Morabadi Maidan, Ranchi Junction, Birsa Munda Airport and others), geocoded with OpenStreetMap Nominatim, plus the Hopr hub in Kokar. The demo seeder and the tests use them, so every distance and ETA is a real Ranchi distance.
+`backend/src/data/indiaCities.js` holds a hub and five real delivery points in each of five cities: New Delhi (Okhla), Mumbai (MIDC Andheri), Bengaluru (Bommanahalli), Kolkata (Kasba) and Ranchi (Kokar). `ranchiLocations.js` adds 16 Ranchi landmarks used by the tests. All coordinates were geocoded with OpenStreetMap (Photon and Nominatim), so every demo distance and ETA is a real city distance. The demo seeder builds one route per city from this data.
 
 ---
 
@@ -205,7 +211,7 @@ Indexes: `{driver, status}`, `{vehicle}`, `{status}`, `{createdAt: -1}`, `batchI
 
 ### 4.1 Travel model
 
-- **Distance** between two points: great-circle distance × 1.35 road circuity, or real road distance from Mapbox Directions for the drawn geometry.
+- **Distance** between two points: great-circle distance × 1.35 road circuity for planning; the drawn route and its road distance come from OSRM or Mapbox Directions (section 2.4).
 - **Free-flow time**: distance ÷ the vehicle's city speed (bike 28, van 24, truck 20, electric van 24 km/h).
 - **Traffic**: free-flow time × the time-of-day factor at the moment the leg starts × any incident on the leg (section 5).
 - **Service time** at each stop: bike 4, van 6, truck 10, electric van 6 minutes.
@@ -242,7 +248,7 @@ The search is deterministic: the same input gives the same route. That makes it 
 This is a deliberate trade-off, documented rather than "fixed":
 
 - Each 2-opt or relocate pass tries O(n²) moves, and every move re-simulates the route (traffic depends on arrival time), so a pass costs O(n³). Up to 30 stops this converges well inside the time budget (30 stops: about 50 ms).
-- Past about 30 stops, a single route stops being realistic for one vehicle on a working day in Ranchi traffic (service time alone is 2–5 hours).
+- Past about 30 stops, a single route stops being realistic for one vehicle on a working day in Indian city traffic (service time alone is 2–5 hours).
 - Larger jobs are batches: split across vehicles first (4.5), so each route stays within the limit. One batch accepts up to 300 stops (30 × 10 vehicles).
 
 ### 4.5 Multi-vehicle batches
@@ -265,16 +271,16 @@ This is a deliberate trade-off, documented rather than "fixed":
 
 The spec suggests shortest-path algorithms (Dijkstra / A*) and multi-stop sequencing logic. Hopr splits the problem the same way:
 
-- **Shortest path between two points** is a road-network problem. Mapbox Directions solves it on the real road graph when a token is set; otherwise Hopr uses the circuity estimate.
+- **Shortest path between two points** is a road-network problem. OSRM (or Mapbox Directions when configured) solves it on the real OpenStreetMap road graph; when neither answers, Hopr uses the circuity estimate.
 - **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr uses the nearest-neighbour-style construction plus 2-opt / Or-opt improvement described above, the standard practical approach at this size.
 
 ---
 
 ## 5. Traffic handling
 
-The spec allows API-based or simulated traffic. Hopr simulates it, which makes ETAs deterministic and testable and costs nothing. When a Mapbox token is set, live traffic is also drawn on the map.
+The spec allows API-based or simulated traffic. Hopr simulates it, which makes ETAs deterministic and testable and costs nothing.
 
-### 5.1 Ranchi weekday profile
+### 5.1 Indian city weekday profile
 
 Travel-time multiplier by hour (IST), from `services/traffic.js`:
 
@@ -282,7 +288,7 @@ Travel-time multiplier by hour (IST), from `services/traffic.js`:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Factor | 1.00–1.05 | 1.15 | 1.30 | 1.55 | 1.60 | 1.45 | 1.30 | 1.25 | 1.30 | 1.40 | 1.60 | 1.65 | 1.50 | 1.35 | 1.20 | 1.10 | 1.05 |
 
-The morning peak (school and office) and the evening peak (Main Road, Lalpur, Kanke Road) are the heaviest. Sundays get 15% relief, but never below free-flow. Each leg uses the factor at the moment it starts, so a route that runs into the evening peak slows down part-way. Levels: light (below 1.25), moderate (1.25 to 1.5), heavy (1.5 and above).
+The morning peak (school and office traffic) and the evening peak are the heaviest, a pattern shared by most Indian cities. The profile is one model for every city; managers report local congestion and closures as incidents (5.2). Sundays get 15% relief, but never below free-flow. Each leg uses the factor at the moment it starts, so a route that runs into the evening peak slows down part-way. Levels: light (below 1.25), moderate (1.25 to 1.5), heavy (1.5 and above).
 
 ### 5.2 Incidents: congestion and closures
 
@@ -327,7 +333,7 @@ A vehicle record's own mileage and capacity override the type defaults.
 | CNG | 91.50 / kg | 2.75 |
 | Electricity | 10.00 / kWh (depot tariff) | 0.71 (India grid, CEA) |
 
-Prices are Ranchi retail defaults and can be overridden with `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG` and `FUEL_PRICE_ELECTRICITY`.
+Prices are approximate Indian retail defaults (they vary by state) and can be overridden per deployment with `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG` and `FUEL_PRICE_ELECTRICITY`.
 
 **Comparing options** (spec: "compare route options based on fuel efficiency", "distance vs estimated fuel cost"):
 
@@ -349,7 +355,7 @@ proximity    = 1 / (1 + km from the driver to the route start ÷ 3)
 capacity fit = load ÷ capacity (vehicles that are too small are excluded)
 ```
 
-The driver's position is their last GPS fix if it is under 12 hours old, else the depot. Matching is greedy best-pair: one route per driver and per vehicle, with deterministic tie-breaks. The manager sees a preview ("Route A → Driver X", score and reasons) and confirms. On confirm every pair is re-validated, so a stale preview cannot double-book anyone.
+The driver's position is their last GPS fix if it is under 12 hours old, else their vehicle's home hub, else (unknown) the route's own hub. A driver more than 75 km from the route's start is in another city and is never offered the route; the preview says why (for example "Pooja Kumari is 990 km away (based at Hopr Hub, Okhla)"). Matching is greedy best-pair: one route per driver and per vehicle, with deterministic tie-breaks. The manager sees a preview ("Route A → Driver X", score and reasons) and confirms. On confirm every pair is re-validated, so a stale preview cannot double-book anyone.
 
 ### 7.2 Driver workflow
 
@@ -495,7 +501,7 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | GET | `/` | manager | List. Query: `status`, `fuelType`, `search`, `page`, `limit` |
 | GET | `/available` | manager | Active vehicles without a driver |
 | GET | `/:id` | manager | One vehicle |
-| POST | `/` | manager | Create (`vehicleId`, `name`, `type`, `fuelType`, `mileage`, `capacity`, `licensePlate`, `status`, `driver?`, dates). 409 on a duplicate plate or ID |
+| POST | `/` | manager | Create (`vehicleId`, `name`, `type`, `fuelType`, `mileage`, `capacity`, `licensePlate`, `status`, `driver?`, `base?` home hub, dates). 409 on a duplicate plate or ID |
 | PUT | `/:id` | manager | Update |
 | PATCH | `/:id/assign-driver` | manager | Body: `driverId` or `null` |
 | DELETE | `/:id` | admin | Refused (409) while the vehicle is on a planned or active route |
@@ -530,17 +536,17 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | POST | `/api/admin/users` | admin | Create a user with any role |
 | GET / PUT / DELETE | `/api/admin/users/:id` | admin | Read, update (a password reset signs the user out), delete |
 | PATCH | `/api/admin/users/:id/status` | admin | Activate or deactivate |
-| POST | `/api/demo/seed` | manager | Idempotent demo data: accounts, fleet and a five-stop Ranchi route with windows assigned to the demo driver |
+| POST | `/api/demo/seed` | manager | Idempotent demo data: accounts, a driver and vehicle based at a hub in each of five cities, and a fresh five-stop route with windows in each city (Ranchi assigned to the demo driver, the rest waiting for auto-dispatch) |
 
 ### Maps (`/api/map`, signed in)
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/config` | Depot, map centre, which geocoder is active |
-| GET | `/suggest?q=&limit=` | Address suggestions (section 2.4) |
+| GET | `/config` | Map centre, the hubs the fleet is based at (planner quick picks), which geocoder is active |
+| GET | `/suggest?q=&limit=&near=lng,lat` | Address suggestions across India, ranked near `near` (section 2.4) |
 | GET | `/geocode?address=` | First match for an address |
 | GET | `/reverse-geocode?lng=&lat=` | Address for a point |
-| GET | `/directions?coordinates=` | Road geometry and distance (Mapbox), or an estimate |
+| GET | `/directions?coordinates=` | Road geometry and distance from OSRM or Mapbox (`source`: `osm`, `mapbox` or `estimated`) |
 
 `GET /api/health` returns `{ status: "ok" }` for uptime checks.
 
@@ -599,8 +605,8 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 
 ### 12.2 Building blocks
 
-- **Design system "Night Dispatch"**: a deep night-blue background, white and grey text, and a single volt-lime accent (#D4FF3F), kept for route lines, primary actions, active states and key numbers (under 10% of any screen). Space Grotesk for display, Inter for text. The signature motion is the *hop*: routes draw themselves, stops pop in sequence, numbers count up. Tokens live in `tailwind.config.js` and `index.css`; a living style guide is at `/design-system` in development builds.
-- **MapView**: Mapbox GL when a token is set, otherwise an SVG schematic map with the same API (lines, markers, drivers, incidents, map clicks).
+- **Design system, "road signage"**: a light, plain interface. White panels on a light grey canvas, ink text, and colour used only for meaning: highway-sign green (#0B6B3A) for routes, the main action and the active page; city-sign blue for links and live drivers; road-marking yellow for warnings; red for failures. Overpass type throughout (from the highway sign alphabet's lineage). The one distinctive element is the road sign itself: route IDs and stop numbers drawn as route plates, a direction sign on the sign-in page, and the logo. No glow, glass, gradients or entrance animation. Tokens live in `tailwind.config.js` and `index.css`; a living style guide is at `/design-system` in development builds.
+- **MapView**: MapLibre GL with OpenFreeMap street tiles (no key), routes drawn with a white casing like a road map, English place names, and an all-India starting view. If WebGL or the tiles are unavailable it falls back to a simplified SVG map with the same API (lines, markers, drivers, incidents, map clicks).
 - **Command palette** (⌘K / Ctrl K, or `/`): jump to any page or route and run actions such as auto-dispatch.
 - **Polling** (`usePolling`): pauses or slows in background tabs. Dashboard every 30 s, routes 20 s, live monitor 10 s, tracking page 5 s.
 - **Resilience**: error boundaries with a recovery screen, a session-retry screen on 429 or network failure, skeleton loaders with a "server waking up" notice, and proof photos cached for the session.
@@ -612,7 +618,7 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 109 tests, in-memory MongoDB
+npm test --workspace=backend    # 113 tests, in-memory MongoDB
 npm test --workspace=frontend   # 37 tests, jsdom
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
@@ -624,11 +630,11 @@ npm run build --workspace=frontend
 | Auth | 10 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit |
 | Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
 | Routes and workflow | 15 | Planning API, batches, assignment, end-to-end driver workflow, delays, recalculation, incidents, re-timing on vehicle change and on start |
-| Auto-dispatch | 9 | Proximity, stale GPS fallback, capacity fit and exact score formula, global matching, preview and confirm with re-validation |
+| Auto-dispatch | 10 | Proximity, stale GPS fallback, home hub position, never another city, capacity fit and exact score formula, global matching, preview and confirm with re-validation |
 | Proof of delivery | 9 | Photo, signature and note; type sniffing; 5 MB limit; privacy; deletion with the route |
 | Tracking | 10 | GPS pings and odometer filtering, dedicated rate limit, public page states, privacy |
 | Analytics | 8 | Every KPI formula, empty data, period comparison, CSV safety |
-| Fleet, maps, demo, health, geocoding | 21 | Vehicles and drivers, geocoding validation, demo seeder (including late at night), security headers, landmark matching and de-duplication |
+| Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Frontend | 37 | Tracking animation never teleports, geo helpers, CSV import, speech, stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache |
 
 An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.
@@ -639,7 +645,8 @@ An end-to-end smoke test on the development servers passed every step: register,
 
 **Current limitations**
 
-- Traffic is simulated (section 5). Mapbox's live traffic layer is drawn on the map but not fed into ETAs.
+- Traffic is simulated with one profile for every city (section 5); local conditions come in as reported incidents.
+- The free OpenStreetMap services (OpenFreeMap tiles, Photon, OSRM) have fair-use limits. At larger scale, self-host them or set `MAPBOX_TOKEN`.
 - One depot per batch. Routes do not chain several trips per vehicle in a day.
 - Free hosting sleeps when idle (section 11).
 - Notifications are in-app and spoken. Email and SMS preferences are stored but not sent (no free provider is wired in).

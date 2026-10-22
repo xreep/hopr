@@ -50,7 +50,7 @@ export default function DispatchPreviewDialog({ onClose, onApplied }) {
         <>
           {preview.unassignedRoutes > 0 && <p className="text-body text-ink-300 mb-4">
             {preview.unassignedRoutes} route{preview.unassignedRoutes === 1 ? ' is' : 's are'} waiting and {preview.availableDrivers} driver{preview.availableDrivers === 1 ? ' is' : 's are'} free.
-            Hopr pairs them by how close each driver is (live GPS, or the depot) and how well their vehicle fits the load. Nothing changes until you confirm.
+            Hopr pairs them by how close each driver is (live GPS, or their vehicle&apos;s home hub) and how well their vehicle fits the load. Drivers in another city are never offered a route. Nothing changes until you confirm.
           </p>}
           {preview.assignments.length === 0 ? (
             preview.unassignedRoutes === 0 ? (

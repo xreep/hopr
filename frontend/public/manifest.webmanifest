@@ -1,13 +1,13 @@
 {
   "name": "Hopr: last-mile route optimization",
   "short_name": "Hopr",
-  "description": "Plan, dispatch and track last-mile deliveries in Ranchi.",
+  "description": "Plan, dispatch and track last-mile deliveries across India.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#070B14",
-  "theme_color": "#070B14",
+  "background_color": "#F4F5F3",
+  "theme_color": "#FFFFFF",
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },

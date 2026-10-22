@@ -1,54 +1,38 @@
-// Night Dispatch theme for Chart.js: ink text, hairline grids, dark tooltips,
-// and a glow for datasets marked `glow: true` (the volt "route" line).
+// Chart.js theme for the light road-signage design: ink text, light grid lines,
+// white tooltips. Colour roles match the rest of the app.
 import { Chart as ChartJS } from 'chart.js'
 
 export const CHART_COLORS = {
-  volt: '#D4FF3F',
-  sky: '#7AA2FF',
-  coral: '#FF6B78',
-  amber: '#F5B544',
-  ink: '#A9B4C8',
-  muted: '#2A3756',
-  grid: 'rgba(169, 180, 200, 0.08)'
-}
-
-const glowPlugin = {
-  id: 'ndGlow',
-  beforeDatasetDraw(chart, args) {
-    const ds = chart.data.datasets[args.index]
-    if (!ds?.glow) return
-    const { ctx } = chart
-    ctx.save()
-    ctx.shadowColor = 'rgba(212, 255, 63, 0.55)'
-    ctx.shadowBlur = 12
-  },
-  afterDatasetDraw(chart, args) {
-    if (chart.data.datasets[args.index]?.glow) chart.ctx.restore()
-  }
+  volt: '#0B6B3A', // route green: the main series
+  sky: '#1F4E9C', // city blue
+  coral: '#C8102E', // failures
+  amber: '#F2B705', // warnings
+  ink: '#5E6873', // secondary series
+  muted: '#D5DADE', // empty / remainder
+  grid: '#E6E9EC'
 }
 
 let applied = false
 export function applyChartTheme() {
   if (applied) return
   applied = true
-  ChartJS.register(glowPlugin)
   const d = ChartJS.defaults
-  d.color = '#8591A8'
+  d.color = '#5E6873'
   d.borderColor = CHART_COLORS.grid
-  d.font.family = 'Inter, ui-sans-serif, system-ui, sans-serif'
+  d.font.family = 'Overpass, ui-sans-serif, system-ui, sans-serif'
   d.font.size = 12
-  d.plugins.legend.labels.color = '#A9B4C8'
+  d.plugins.legend.labels.color = '#47515B'
   d.plugins.legend.labels.usePointStyle = true
+  d.plugins.legend.labels.pointStyle = 'rect'
   d.plugins.legend.labels.boxWidth = 8
   d.plugins.legend.labels.boxHeight = 8
-  d.plugins.tooltip.backgroundColor = '#141E33'
-  d.plugins.tooltip.borderColor = 'rgba(169, 180, 200, 0.18)'
+  d.plugins.tooltip.backgroundColor = '#FFFFFF'
+  d.plugins.tooltip.borderColor = '#C3C9CE'
   d.plugins.tooltip.borderWidth = 1
-  d.plugins.tooltip.titleColor = '#F4F7FB'
-  d.plugins.tooltip.bodyColor = '#A9B4C8'
+  d.plugins.tooltip.titleColor = '#15191D'
+  d.plugins.tooltip.bodyColor = '#47515B'
   d.plugins.tooltip.padding = 10
-  d.plugins.tooltip.cornerRadius = 10
-  d.plugins.tooltip.titleFont = { family: '"Space Grotesk", sans-serif', weight: '600', size: 13 }
-  d.animation.duration = 900
-  d.animation.easing = 'easeOutCubic'
+  d.plugins.tooltip.cornerRadius = 6
+  d.plugins.tooltip.titleFont = { family: 'Overpass, sans-serif', weight: '700', size: 13 }
+  d.animation.duration = 300
 }

@@ -1,10 +1,6 @@
-export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
-export const RANCHI_CENTRE = [85.3096, 23.3441]
-export const DEFAULT_DEPOT = {
-  name: 'Hopr Hub, Kokar',
-  address: 'Kokar, Ranchi, Jharkhand 834001',
-  coordinates: [85.3521, 23.3756]
-}
+// The whole of India: the map's starting view before there is anything to fit
+export const INDIA_VIEW = { center: [80.4, 22.6], zoom: 3.6 }
+export const INDIA_BOUNDS = [[68.1, 6.5], [97.4, 35.7]]
 
 // Mirrors backend/src/config/fleet.js (labels and defaults shown in the UI)
 export const VEHICLE_TYPES = [
@@ -25,9 +21,10 @@ export const PRIORITY_OPTIONS = [
 
 export const MAX_STOPS_PER_ROUTE = 30
 
-// The selected route is always volt; other routes in a batch use these muted hues
-export const VOLT = '#D4FF3F'
-export const ROUTE_COLORS = ['#7AA2FF', '#B39DFF', '#F5B544', '#5EEAD4', '#FF9AA2', '#9FB4D9', '#E2A8FF', '#86EFAC', '#FDBA74', '#94A3B8']
+// The selected route is highway-sign green; other routes in a batch use these hues,
+// chosen to stay readable on a light street map (red is kept for failures)
+export const ROUTE_GREEN = '#0B6B3A'
+export const ROUTE_COLORS = ['#1F4E9C', '#6B3FA0', '#B85C00', '#0E7C86', '#A1286A', '#5B6B12', '#3D5A80', '#7A5230', '#2F7D32', '#5E6873']
 
 // Icon names (components/icons.jsx) per vehicle type
 export const VEHICLE_ICONS = { bike: 'bike', van: 'van', truck: 'bigTruck', ev_van: 'plug' }

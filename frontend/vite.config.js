@@ -12,10 +12,12 @@ export default defineConfig({
       }
     }
   },
+  // MapLibre's worker is an ES module; keep it one when Vite bundles it
+  worker: { format: 'es' },
   build: {
     rollupOptions: {
       output: {
-        // Vendor chunks (Mapbox GL is loaded on demand by the map component)
+        // Vendor chunks (MapLibre GL is loaded on demand by the map component)
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
           if (/[\\/](chart\.js|react-chartjs-2)[\\/]/.test(id)) return 'charts'
