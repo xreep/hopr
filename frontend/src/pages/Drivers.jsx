@@ -76,7 +76,7 @@ export default function Drivers() {
         </div>
       </div>
 
-      <div className="grid grid-4 mb-6">
+      <div className="stats-strip mb-6">
         <StatCard label="Drivers" value={list.length} />
         <StatCard label="On a route now" value={onRoute} isKey />
         <StatCard label="Active accounts" value={list.filter(d => d.isActive).length} />

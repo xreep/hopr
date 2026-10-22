@@ -90,7 +90,7 @@ export default function Analytics() {
         <div className="alert alert-info mb-4">Nothing delivered in this period yet. These numbers fill in as drivers complete stops. <Link to="/route-planner">Plan a route</Link></div>
       )}
 
-      <div className="grid grid-4 mb-6" role="region" aria-label="Key performance indicators">
+      <div className="stats-strip mb-6" role="region" aria-label="Key performance indicators">
         <StatCard label="Deliveries completed" value={kpis.totalDeliveries} isKey trend={trends.totalDeliveries}
           hint={`${kpis.failedDeliveries} failed`} spark={data.deliveryTrend.data} sparkLabel="Deliveries per day" />
         <StatCard label="On-time delivery rate" value={kpis.onTimeRate} suffix="%" trend={trends.onTimeRate} trendUnit=" pts" hint="Inside the window, or ETA + 15 min" />
@@ -111,8 +111,8 @@ export default function Analytics() {
           <Bar data={{
             labels,
             datasets: [
-              { label: 'Delivered', data: data.deliveryTrend.data, backgroundColor: 'rgba(122, 162, 255, 0.75)', hoverBackgroundColor: C.sky, borderRadius: 4, stack: 'd', maxBarThickness: 22 },
-              { label: 'Failed', data: data.deliveryTrend.failed, backgroundColor: 'rgba(255, 107, 120, 0.8)', borderRadius: 4, stack: 'd', maxBarThickness: 22 }
+              { label: 'Delivered', data: data.deliveryTrend.data, backgroundColor: C.volt, borderRadius: 2, stack: 'd', maxBarThickness: 22 },
+              { label: 'Failed', data: data.deliveryTrend.failed, backgroundColor: C.coral, borderRadius: 2, stack: 'd', maxBarThickness: 22 }
             ]
           }} options={{ ...baseOptions, scales: { x: { ...axes.x, stacked: true }, y: { ...axes.y, stacked: true, ticks: { precision: 0 } } } }} />
         </ChartCard>
@@ -121,8 +121,8 @@ export default function Analytics() {
             labels: data.fuelTrend.labels.map(shortLabel),
             datasets: [
               {
-                label: 'Fuel cost (₹)', data: data.fuelTrend.data, borderColor: C.volt, backgroundColor: C.volt, glow: true,
-                borderWidth: 2.25, tension: 0.35, pointRadius: data.fuelTrend.data.map(v => (v > 0 ? 3 : 0)), pointBackgroundColor: '#070B14', pointBorderWidth: 1.5, yAxisID: 'y'
+                label: 'Fuel cost (₹)', data: data.fuelTrend.data, borderColor: C.volt, backgroundColor: C.volt,
+                borderWidth: 2.25, tension: 0.35, pointRadius: data.fuelTrend.data.map(v => (v > 0 ? 3 : 0)), pointBackgroundColor: '#FFFFFF', pointBorderWidth: 1.5, yAxisID: 'y'
               },
               { label: 'CO₂ (kg)', data: data.fuelTrend.co2, borderColor: C.ink, borderDash: [4, 4], borderWidth: 1.5, tension: 0.35, pointRadius: 0, yAxisID: 'y1' }
             ]
@@ -140,8 +140,8 @@ export default function Analytics() {
               labels: ['Delivered', 'On the way', 'Waiting', 'Failed'],
               datasets: [{
                 data: [data.statusDistribution.completed, data.statusDistribution.in_progress, data.statusDistribution.pending, data.statusDistribution.failed],
-                backgroundColor: [C.ink, C.volt, C.muted, C.coral],
-                borderColor: '#0E1626',
+                backgroundColor: [C.volt, C.sky, C.muted, C.coral],
+                borderColor: '#FFFFFF',
                 borderWidth: 3,
                 hoverOffset: 6
               }]
@@ -155,9 +155,8 @@ export default function Analytics() {
               datasets: [{
                 label: 'Average load',
                 data: data.vehicleUtilization.map(v => v.utilization),
-                backgroundColor: 'rgba(122, 162, 255, 0.75)',
-                hoverBackgroundColor: C.sky,
-                borderRadius: 4,
+                backgroundColor: C.sky,
+                borderRadius: 2,
                 maxBarThickness: 18
               }]
             }} options={{

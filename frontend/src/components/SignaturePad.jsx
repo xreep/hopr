@@ -19,12 +19,12 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
     ctx.lineWidth = 2.4
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.strokeStyle = '#F4F7FB'
-    ctx.fillStyle = '#0B1220'
+    ctx.strokeStyle = '#15191D'
+    ctx.fillStyle = '#FFFFFF'
     ctx.fillRect(0, 0, width, height)
     // Signing line
     ctx.save()
-    ctx.strokeStyle = 'rgba(169, 180, 200, 0.35)'
+    ctx.strokeStyle = '#C3C9CE'
     ctx.lineWidth = 1
     ctx.setLineDash([4, 4])
     ctx.beginPath()
@@ -50,7 +50,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
     const ctx = canvasRef.current.getContext('2d')
     ctx.beginPath()
     ctx.arc(last.current[0], last.current[1], 1.2, 0, Math.PI * 2)
-    ctx.fillStyle = '#F4F7FB'
+    ctx.fillStyle = '#15191D'
     ctx.fill()
   }
   const move = e => {

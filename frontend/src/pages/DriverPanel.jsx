@@ -146,7 +146,7 @@ export default function DriverPanel() {
                 <div className="card-body flex-between flex-wrap gap-3">
                   <div>
                     <p className="font-semibold">{route.name}</p>
-                    <p className="text-micro text-ink-400">{route.routeId}{route.vehicle ? `, ${route.vehicle.name} (${route.vehicle.licensePlate})` : ''}</p>
+                    <p className="flex flex-wrap items-center gap-1.5 mt-1 text-micro text-ink-400"><span className="route-plate">{route.routeId}</span>{route.vehicle ? `${route.vehicle.name} (${route.vehicle.licensePlate})` : ''}</p>
                   </div>
                   <div className="flex gap-2">
                     <Link to={`/routes/${route._id}`} className="btn btn-ghost btn-sm">Details</Link>

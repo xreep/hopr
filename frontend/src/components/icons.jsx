@@ -62,15 +62,15 @@ export default function Icon({ name, size = 18, className = '', title, strokeWid
 }
 
 // The Hopr mark: a route with three hops. `animated` draws it on mount.
-export function HopMark({ size = 28, animated = false, className = '' }) {
+// Hopr mark: a highway direction sign. Green plate, white inset border, a route that turns and points ahead.
+export function HopMark({ size = 28, className = '' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={className} aria-hidden="true">
-      <path d="M5 24 C 10 24, 10 9, 16 9 S 22 22, 27 8" stroke="#D4FF3F" strokeWidth="2.6" strokeLinecap="round"
-        className={animated ? 'nd-route-path' : undefined} style={animated ? { '--route-length': 48 } : { filter: 'drop-shadow(0 0 4px rgb(212 255 63 / 0.5))' }} />
-      {[[5, 24], [16, 9], [27, 8]].map(([cx, cy], i) => (
-        <circle key={i} cx={cx} cy={cy} r={i === 2 ? 3.4 : 2.6} fill={i === 2 ? '#D4FF3F' : '#070B14'} stroke="#D4FF3F" strokeWidth="1.8"
-          className={animated ? 'nd-hop-dot' : undefined} style={animated ? { animationDelay: `${300 + i * 380}ms` } : undefined} />
-      ))}
+      <rect width="32" height="32" rx="7" fill="#0B6B3A" />
+      <rect x="2.5" y="2.5" width="27" height="27" rx="5" stroke="#FFFFFF" strokeWidth="1.4" />
+      <path d="M9 25v-6a3 3 0 0 1 3-3h8a3 3 0 0 0 3-3V7.5" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M19 10.5 23 6.5l4 4" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="9" cy="25" r="2.3" fill="#FFFFFF" />
     </svg>
   )
 }

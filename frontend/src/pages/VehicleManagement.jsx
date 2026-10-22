@@ -11,6 +11,8 @@ import AddressAutocomplete from '../components/AddressAutocomplete'
 
 const FUEL_TYPES = ['diesel', 'petrol', 'cng', 'electric', 'hybrid']
 const VEHICLE_STATUSES = ['active', 'maintenance', 'inactive']
+const FUEL_LABELS = { diesel: 'Diesel', petrol: 'Petrol', cng: 'CNG', electric: 'Electric', hybrid: 'Hybrid' }
+const STATUS_LABELS = { active: 'In service', maintenance: 'In maintenance', inactive: 'Out of service' }
 
 const emptyForm = () => ({
   vehicleId: `VEH-${Date.now().toString(36).toUpperCase().slice(-5)}`,
@@ -165,18 +167,18 @@ export default function VehicleManagement() {
         <StatCard label="Vehicles" value={stats.total} />
         <StatCard label="In service" value={stats.active} isKey />
         <StatCard label="In maintenance" value={stats.maintenance} />
-        <StatCard label="Electric" value={stats.electric} hint="Charged at the Kokar hub" />
+        <StatCard label="Electric" value={stats.electric} hint={stats.electric ? "Costed per kWh at the depot charging tariff" : "None in the fleet yet"} />
       </div>
 
       <div className="card">
         <div className="card-header flex flex-wrap gap-2">
           <select className="form-input form-select w-auto" value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })} aria-label="Filter by status">
             <option value="">All statuses</option>
-            {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>
           <select className="form-input form-select w-auto" value={filters.fuelType} onChange={e => setFilters({ ...filters, fuelType: e.target.value })} aria-label="Filter by fuel type">
             <option value="">All fuel types</option>
-            {FUEL_TYPES.map(f => <option key={f} value={f}>{f}</option>)}
+            {FUEL_TYPES.map(f => <option key={f} value={f}>{FUEL_LABELS[f]}</option>)}
           </select>
           <input type="search" className="form-input w-auto flex-1 min-w-[180px]" placeholder="Search by name, ID or plate" value={filters.search}
             onChange={e => setFilters({ ...filters, search: e.target.value })} aria-label="Search vehicles" />
@@ -200,7 +202,7 @@ export default function VehicleManagement() {
                       </div>
                     </td>
                     <td>{vehicleTypeLabel(v.type)}</td>
-                    <td><span className="capitalize">{v.fuelType}</span><div className="text-micro text-ink-400">{v.mileage} {FUEL_UNITS[v.fuelType]}</div></td>
+                    <td><span>{FUEL_LABELS[v.fuelType] || v.fuelType}</span><div className="text-micro text-ink-400">{v.mileage} {FUEL_UNITS[v.fuelType]}</div></td>
                     <td>{v.capacity} kg</td>
                     <td className="nd-tabular tracking-wide">{v.licensePlate}</td>
                     <td><StatusBadge status={v.status === 'active' ? 'in_service' : v.status} /></td>
@@ -233,7 +235,7 @@ export default function VehicleManagement() {
               <div>
                 <label htmlFor="fuelType" className="form-label">Fuel</label>
                 <select id="fuelType" className="form-input form-select" value={form.fuelType} onChange={e => set('fuelType', e.target.value)}>
-                  {FUEL_TYPES.map(f => <option key={f} value={f}>{f}</option>)}
+                  {FUEL_TYPES.map(f => <option key={f} value={f}>{FUEL_LABELS[f]}</option>)}
                 </select>
               </div>
               <Input label={`Efficiency (${FUEL_UNITS[form.fuelType]})`} id="mileage" type="number" step="0.1" min="0" value={form.mileage} onChange={v => set('mileage', v)} />
@@ -242,7 +244,7 @@ export default function VehicleManagement() {
               <div>
                 <label htmlFor="vstatus" className="form-label">Status</label>
                 <select id="vstatus" className="form-input form-select" value={form.status} onChange={e => set('status', e.target.value)}>
-                  {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
                 </select>
               </div>
               <div className="sm:col-span-2">

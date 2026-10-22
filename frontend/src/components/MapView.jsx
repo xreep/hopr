@@ -98,8 +98,10 @@ function StreetMap({ lines = [], points = [], driver, drivers, incidents = [], f
         })
         map.on('load', () => {
           // English place names where OpenStreetMap has them (the base style mixes scripts)
+          // (only layers that show names: road shields show reference numbers and are left alone)
           for (const layer of map.getStyle().layers || []) {
-            if (layer.type === 'symbol' && map.getLayoutProperty(layer.id, 'text-field')) {
+            const field = layer.type === 'symbol' ? map.getLayoutProperty(layer.id, 'text-field') : null
+            if (field && JSON.stringify(field).includes('name')) {
               map.setLayoutProperty(layer.id, 'text-field', ['coalesce', ['get', 'name:en'], ['get', 'name_en'], ['get', 'name']])
             }
           }

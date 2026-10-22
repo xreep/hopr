@@ -95,11 +95,11 @@ export default function Profile() {
 
       <section className="card p-5 mb-5 flex flex-wrap items-center gap-5" aria-label="Account">
         <span className="avatar !w-16 !h-16 !text-xl" aria-hidden="true">{initials(user?.name)}</span>
-        <div className="min-w-0 flex-1">
-          <p className="font-display text-h2 font-semibold truncate">{user?.name}</p>
+        <div className="min-w-[12rem] flex-1">
+          <p className="text-h2 font-extrabold break-words">{user?.name}</p>
           <p className="text-body text-ink-300">{ROLE_LABELS[user?.role]}, member since {formatDate(user?.createdAt)}</p>
         </div>
-        <dl className="text-small">
+        <dl className="text-small w-full sm:w-auto">
           <dt className="text-ink-400">Last signed in</dt>
           <dd className="text-ink-50">{user?.lastLogin ? formatDateTime(user.lastLogin) : 'Never'}</dd>
         </dl>
