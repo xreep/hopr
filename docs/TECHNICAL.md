@@ -237,21 +237,26 @@ Because traffic changes leg times, the same set of stops can be sequenced differ
 
 ### 4.3 Search
 
-1. **Construction seeds**
-   - *Greedy cheapest append*: start at the depot and repeatedly append the stop that adds the least cost. With cost reduced to distance this is the classic nearest-neighbour heuristic; with the full objective it is nearest-neighbour on operating cost.
-   - *Earliest deadline first*: stops ordered by window end (no window last), so tight windows start from a feasible order.
-2. **Local search** on each seed until no move improves the cost, or the time budget (3 s per route) runs out:
-   - *2-opt*: reverse a segment of the route, removing crossings.
-   - *Or-opt (relocate)*: move one stop to another position in the route.
+1. **Up to 8 stops: exact.** Branch and bound over every visiting order. Every cost term only grows as stops are added, so a partial route that already costs more than the best complete one is dropped. The answer is the true optimum for the cost model.
+2. **More than 8 stops:**
+   - *Construction seeds*: greedy cheapest append (nearest neighbour on operating cost) and earliest deadline first (stops ordered by window end).
+   - *Local search* on each seed until no move improves the cost: 2-opt (reverse a segment), Or-opt (move a chain of 1–3 stops, either way round) and swaps of two stops.
+   - *Iterated local search*: kick the best route out of its local optimum (a double-bridge reconnection, alternating with a random reversal and relocation), improve it again, and keep it if it is cheaper. It stops after 30 + 2n kicks in a row without improvement, or at the time budget (3 s per route).
 3. The cheapest result wins. The engine also returns three alternatives for comparison: *Hopr optimized*, *Shortest distance only*, and *Order as entered*. The savings shown to managers are optimized versus as entered.
 
-The search is deterministic: the same input gives the same route. That makes it testable, and the tests check it against brute force on 5 real Ranchi stops (all 120 orders).
+The search is deterministic (its random kicks are seeded): the same input always gives the same route. The tests check it against brute force on real Ranchi stops, check that it is exactly optimal up to 8 stops and on a 9-stop case, and check that it is never worse than the previous search.
+
+**Benchmark** ([BENCHMARK.md](BENCHMARK.md), reproducible with `npm run benchmark --workspace=backend`) on generated routes around the five demo hubs:
+- **Small routes:** the optimum on every one of 75 routes with 6, 8 and 9 stops.
+- **Shortest distance:** the exact shortest path (Held–Karp) on 29 of 30 routes with 12 and 15 stops, within 0.1% on the last.
+- **15 to 30 stops:** 2–4% cheaper than the previous search on average, and never worse.
+- **Speed:** a 30-stop route takes about 1.5 s.
 
 ### 4.4 Why at most 30 stops per route
 
 This is a deliberate trade-off, documented rather than "fixed":
 
-- Each 2-opt or relocate pass tries O(n²) moves, and every move re-simulates the route (traffic depends on arrival time), so a pass costs O(n³). Up to 30 stops this converges well inside the time budget (30 stops: about 50 ms).
+- Each local-search pass tries O(n²) moves, and every move re-simulates the route (traffic depends on arrival time), so a pass costs O(n³). Up to 30 stops the iterated search settles inside the 3 s budget (30 stops: about 1.5 s on average).
 - Past about 30 stops, a single route stops being realistic for one vehicle on a working day in Indian city traffic (service time alone is 2–5 hours).
 - Larger jobs are batches: split across vehicles first (4.5), so each route stays within the limit. One batch accepts up to 300 stops (30 × 10 vehicles).
 
@@ -260,9 +265,12 @@ This is a deliberate trade-off, documented rather than "fixed":
 `planBatch` handles several vehicles at once:
 
 1. **Partition**: a capacity-aware angular sweep around the depot. Stops are sorted by bearing, starting after the widest empty sector, then each vehicle is filled in turn up to an even share of stops, without exceeding its capacity or 30 stops.
-2. Each vehicle's stops are optimised independently, as in 4.3.
-3. A batch heavier than the whole fleet is rejected with a clear message.
-4. The batch budget is 7 s. The largest batch, 300 stops on 10 vehicles, plans in about 480 ms on the test machine.
+2. **Improvement across vehicles** (up to 2 s): each vehicle gets a cost model over all the batch's stops, so any stop can be priced in any vehicle. The engine then moves a stop to another vehicle, or swaps two stops between vehicles, whenever the combined cost of the two routes drops. Each move is priced by inserting the stop at its cheapest position, and capacity and the 30-stop limit always hold. A vehicle may end up empty, which means the batch needs one vehicle fewer.
+3. Each vehicle's stops are then optimised as in 4.3. Any vehicle whose stops changed is also optimised with its original stops, and the batch keeps whichever is cheaper, so the result is never worse than the sweep alone.
+4. A batch heavier than the whole fleet is rejected with a clear message.
+5. The batch budget is 7 s. The largest batch, 300 stops on 10 vehicles, uses about 6.5 s of it on the test machine; typical batches of 40–90 stops take 1–3.5 s.
+
+On the benchmark (section 4 of [BENCHMARK.md](BENCHMARK.md)), moving stops between vehicles makes batches of 40–90 stops on 2–4 vans 1.5–4% cheaper and up to 5% shorter. It was better on 15 of 18 batches, the same on 3, and never worse.
 
 ### 4.6 Re-timing without re-sequencing
 
@@ -276,7 +284,7 @@ This is a deliberate trade-off, documented rather than "fixed":
 The spec suggests shortest-path algorithms (Dijkstra / A*) and multi-stop sequencing logic. Hopr splits the problem the same way:
 
 - **Shortest path between two points** is a road-network problem. OSRM (or Mapbox Directions when configured) solves it on the real OpenStreetMap road graph; when neither answers, Hopr uses the circuity estimate.
-- **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr uses the nearest-neighbour-style construction plus 2-opt / Or-opt improvement described above, the standard practical approach at this size.
+- **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr solves small routes exactly and larger ones with construction plus iterated local search (2-opt, Or-opt, swaps), the standard practical approach at this size; the benchmark measures how close it gets.
 
 ---
 
@@ -308,6 +316,13 @@ When an incident is reported, every planned or active route crossing it is flagg
 `POST /api/routes/:id/recalculate` re-optimises the stops still to visit, from the driver's current position (live GPS, else the last finished stop, else the depot), at the current time, with today's traffic and active incidents. The previous and new finish times are recorded in `recalculations[]`.
 
 A driver's **delay report** shifts every remaining ETA by the reported minutes, and the customer tracking pages follow automatically.
+
+### 5.4 Travel times learned from the fleet
+
+Free live-traffic data does not exist for Indian cities, so Hopr learns from its own drivers (`services/learnedTraffic.js`):
+- **Recording:** each delivered leg on a real route compares the actual drive with the planned leg time. The actual drive is from leaving the previous stop (or the hub) to reaching this one, which is the delivery time minus the vehicle's time at the door. The result is stored as log(actual / planned) for the area (a 0.1° cell, about 11 km, around the route's hub) and IST hour. Legs more than 3× or less than 0.4× the plan are breaks or detours, not traffic, and are ignored. Simulated demo drives never count.
+- **Using it:** once an area and hour has 5 legs, planning, re-timing on start and recalculation multiply that hour's traffic factor by the learned correction. It is blended in gradually, since 20 legs carry as much weight as the model itself, and it is bounded between 0.6 and 2.2, so a few odd trips cannot swing the ETAs.
+- **Measuring it:** analytics reports arrival time accuracy, the average gap between the arrival time last given to the customer and the real arrival, plus the share within 10 minutes. It also reports how many legs have been learned and how many hour slots are in use.
 
 ---
 
@@ -414,6 +429,16 @@ Drivers lose signal often, so the driver app does not depend on it:
 
 The driver's screens (dashboard, My deliveries, dialogs, sidebar and header) and the customer tracking page can be switched between English and Hindi. The choice is remembered on the device, and Hindi is the default when the browser prefers it. Strings live in `frontend/src/i18n/strings.js`; a test checks that every English string has a Hindi version with the same placeholders. Values the server stores in English, such as failure reasons and vehicle types, are translated for display only, so managers still read them in English. Manager screens are English only.
 
+### 7.10 Email notifications and proof retention
+
+- **Email** goes through Resend's HTTP API (free tier, 3,000 a month) when `RESEND_API_KEY` and `EMAIL_FROM` are set; otherwise nothing is sent. Each person's profile settings decide what they get:
+  - *Route changes*: drivers get new route assignments. Managers get failed deliveries (with the reason), finished routes, and new drivers waiting for approval.
+  - *Vehicle maintenance*: managers get one alert per service date, 3 days ahead.
+  - *Weekly report*: a Monday-morning summary of last week's figures.
+
+  Emails are sent in the background, one per person so addresses stay private. Demo routes and the shared demo accounts never get email. SMS is shown as unavailable, because SMS in India needs a registered (DLT) sender, which is not free.
+- **Proof retention**: a TTL index deletes proof photos and signatures `PROOF_RETENTION_DAYS` after upload (default 90; 0 keeps them forever), so the free 512 MB database does not fill up. The delivery record keeps its time, driver and note, and the app says when an image is no longer stored.
+
 ---
 
 ## 8. Authentication, roles and security
@@ -448,7 +473,7 @@ Drivers can read only their own routes and proof images. Managers can complete a
 
 | Control | Implementation |
 |---|---|
-| HTTP headers | helmet on the API; on the website (`vercel.json`, also applied by `vite preview`) a Content Security Policy allowing only the site, the API (`*.onrender.com`), OpenFreeMap tiles and Google Fonts, plus `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy (tracking tokens never leave in a Referer), a permissions policy and HSTS. If the API is hosted elsewhere, add its origin to `connect-src` |
+| HTTP headers | helmet on the API; on the website (`vercel.json`, also applied by `vite preview`) a Content Security Policy allowing only the site (the typeface is self-hosted), the API (`*.onrender.com`), OpenFreeMap tiles and, when error tracking is on, Sentry, plus `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy (tracking tokens never leave in a Referer), a permissions policy and HSTS. If the API is hosted elsewhere, add its origin to `connect-src` |
 | CORS | only `FRONTEND_URL` |
 | Body size | 100 kB JSON / form; images 5 MB |
 | NoSQL injection | express-mongo-sanitize; search text is regex-escaped |
@@ -592,6 +617,7 @@ All KPIs come from recorded deliveries; nothing is simulated. The analytics wind
 | Route efficiency score | Planned km ÷ driven km × 100 (capped at 100), averaged over completed routes with GPS distance |
 | Vehicle utilization rate | Distinct vehicles used ÷ active vehicles × 100 |
 | Delivery completion rate | Delivered stops ÷ stops on dispatched routes × 100 |
+| Arrival time accuracy (added) | Average of \|real arrival − last arrival time given to the customer\| in minutes, where real arrival = delivery time − the vehicle's time at the door; plus the share within 10 minutes. Demo routes excluded |
 
 Also reported: capacity utilisation (load ÷ capacity), total distance, fuel cost and CO₂, kilometres and rupees saved by optimisation, and the change against the previous period of the same length. When there is no data a KPI shows "—" rather than an invented number.
 
@@ -649,15 +675,18 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 129 tests, in-memory MongoDB
+npm test --workspace=backend    # 150 tests, in-memory MongoDB
 npm test --workspace=frontend   # 51 tests, jsdom
+npm run test:e2e                # 16 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, the build, `npm audit` and the end-to-end tests on every pull request and every push to `main`.
+
 | Area | Tests | Highlights |
 |---|---|---|
-| Routing engine | 19 | Brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
+| Routing engine | 22 | Exactly optimal up to 8 stops and on a 9-stop case, never worse than the previous search, the same plan every time; brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
 | Auth | 10 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit |
 | Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
 | Routes and workflow | 15 | Planning API, batches, assignment, end-to-end driver workflow, delays, recalculation, incidents, re-timing on vehicle change and on start |
@@ -668,8 +697,23 @@ npm run build --workspace=frontend
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
+| Learned travel times | 6 | Leg timing against the plan, breaks and detours ignored, gradual and bounded correction, slower drives lead to later ETAs, demo drives never teach it, arrival accuracy |
+| Email, retention, approval, cross-van moves | 12 | Emails follow each person's settings and never reach demo accounts, one maintenance alert per date, Monday report once, nothing without a key; images expire after 90 days and the record stays; sign-ups wait for approval outside demo mode; moving stops between vans is never worse and keeps capacity; weekday and Sunday learning |
 | Offline updates | 3 | Time it happened trusted only within a day and never in the future, start, failure and delivery recorded at those times, repeat refused |
 | Frontend | 51 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order, retry rules and week-old updates dropped, updates applied on the phone |
+
+**End-to-end tests (Playwright, 16).** These run against a production build and a throwaway in-memory database, at desktop size and at phone size for the driver and customer screens. They cover:
+- a visitor opening the demo from the homepage
+- planning from a spreadsheet, saving and auto-dispatching
+- a driver delivering with a drawn signature
+- a delivery made offline, held on the phone and sent on reconnect
+- customer tracking switched to Hindi, and an unknown tracking link
+- axe accessibility checks (WCAG 2.1 AA) on the homepage, sign-in, tracking, every manager screen and the driver panel. Any serious or critical issue fails the run.
+
+Lighthouse on the production build (phone, then desktop; performance, accessibility, best practices and SEO):
+- homepage: 88–93/100/100/100 and 100/100/100/100 (phone performance varies between runs; on phones the street map loads on the first touch or scroll)
+- customer tracking: 76–91/100/100 on a phone (SEO is low on purpose: `robots.txt` keeps tracking links out of search engines)
+- sign-in: 89/100/100/100 and 100/100/100/100
 
 An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.
 
@@ -683,7 +727,7 @@ An end-to-end smoke test on the development servers passed every step: register,
 - The free OpenStreetMap services (OpenFreeMap tiles, Photon, OSRM) have fair-use limits. At larger scale, self-host them or set `MAPBOX_TOKEN`.
 - One depot per batch. Routes do not chain several trips per vehicle in a day.
 - Free hosting sleeps when idle (section 11).
-- Notifications are in-app and spoken. Email and SMS preferences are stored but not sent (no free provider is wired in).
+- Notifications are in-app, spoken and, when configured, by email. SMS is not offered (Indian SMS needs DLT sender registration).
 - Hindi covers the driver and customer screens; manager screens are English only.
 - Offline, a driver can work through routes already on the phone; new assignments and live GPS need signal. Photos waiting to send take space on the phone until they are sent.
 

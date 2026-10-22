@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import Icon, { HopMark } from './icons'
+import { reportError } from '../utils/monitoring'
 
 // Catches render errors so a broken page shows a way forward instead of a blank screen.
 // `resetKey` (e.g. the current path) clears the error when the user navigates away.
@@ -15,6 +16,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('Page crashed:', error, info?.componentStack)
+    reportError(error, { componentStack: info?.componentStack })
   }
 
   componentDidUpdate(prev) {

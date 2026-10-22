@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
-import { StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
+import { StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } from '../components/ui'
 import { formatKm, initials } from '../utils/format'
 import { relativeTime } from '../utils/time'
 import Icon from '../components/icons'
@@ -54,7 +54,7 @@ export default function Drivers() {
     setBusy(driver._id)
     try {
       await api.patch(`/drivers/${driver._id}/status`, { isActive: !driver.isActive })
-      toast.success(`${driver.name} ${driver.isActive ? 'deactivated' : 'activated'}`)
+      toast.success(`${driver.name} ${driver.pendingApproval ? 'approved' : driver.isActive ? 'deactivated' : 'activated'}`)
       load()
     } catch (err) {
       toast.error(errorMessage(err))
@@ -93,7 +93,7 @@ export default function Drivers() {
         {!drivers ? <SkeletonRows label="Loading drivers" /> : list.length === 0 ? (
           <EmptyState title="No drivers yet">Drivers can register from the login page, or an admin can create them.</EmptyState>
         ) : (
-          <div className="table-container">
+          <TableRegion label="Drivers">
             <table className="table">
               <thead>
                 <tr><th>Driver</th><th>Status</th><th>Vehicle</th><th>Delivered</th><th>On time</th><th>Completed</th><th>Avg time</th><th>Distance</th><th>Last GPS</th><th className="text-right"><span className="sr-only">Actions</span></th></tr>
@@ -113,7 +113,7 @@ export default function Drivers() {
                     <td>
                       {d.activeRoute
                         ? <Link to={`/routes/${d.activeRoute._id}`} className="no-underline"><StatusBadge status="on_route" label={`On ${d.activeRoute.routeId}`} /></Link>
-                        : <StatusBadge status={d.isActive ? 'enabled' : 'inactive'} />}
+                        : d.pendingApproval ? <StatusBadge status="late" label="Waiting for approval" /> : <StatusBadge status={d.isActive ? 'enabled' : 'inactive'} />}
                     </td>
                     <td>
                       <select className="form-input form-select form-input-sm" aria-label={`Vehicle for ${d.name}`} value={d.vehicle?._id || ''} disabled={busy === d._id || !d.isActive}
@@ -129,15 +129,15 @@ export default function Drivers() {
                     <td>{formatKm(d.distanceKm)}</td>
                     <td className="text-micro text-ink-300 whitespace-nowrap">{relativeTime(d.lastLocation?.updatedAt)}</td>
                     <td className="text-right">
-                      <button type="button" className="btn btn-ghost btn-sm" disabled={busy === d._id} onClick={() => toggleActive(d)}>
-                        {d.isActive ? 'Deactivate' : 'Activate'}
+                      <button type="button" className={`btn btn-sm ${d.pendingApproval ? 'btn-secondary' : 'btn-ghost'}`} disabled={busy === d._id} onClick={() => toggleActive(d)}>
+                        {d.pendingApproval ? 'Approve' : d.isActive ? 'Deactivate' : 'Activate'}
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
         )}
       </div>
     </div>

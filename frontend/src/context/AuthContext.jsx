@@ -74,6 +74,8 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (userData) => {
     const response = await api.post('/auth/register', userData)
+    // Waiting for a manager's approval: no session yet
+    if (response.data.pendingApproval) return { pendingApproval: true, message: response.data.message }
     const { token, user: created } = response.data
     localStorage.setItem('token', token)
     rememberUser(created)

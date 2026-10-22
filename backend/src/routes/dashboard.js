@@ -64,7 +64,7 @@ router.get('/', authenticate, async (req, res) => {
       })
     }
 
-    const [activeRoutes, todaysRoutes, unassigned, needsRecalc, incidents, vehicleStats, drivers, recent, users, demoWaiting, demoRunning] = await Promise.all([
+    const [activeRoutes, todaysRoutes, unassigned, needsRecalc, incidents, vehicleStats, drivers, recent, users, demoWaiting, demoRunning, awaitingApproval] = await Promise.all([
       Route.find({ status: 'active' }).select('-geometry -alternatives').populate('driver', 'name').populate('vehicle', 'vehicleId name'),
       Route.find({ $or: [{ plannedStart: { $gte: today } }, { completedAt: { $gte: today } }, { status: 'active' }] })
         .select('status stops plannedStart startedAt createdAt').lean(),
@@ -77,7 +77,8 @@ router.get('/', authenticate, async (req, res) => {
         .populate('driver', 'name').populate('vehicle', 'vehicleId name'),
       req.user.role === 'admin' ? User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]) : null,
       Route.countDocuments({ isDemo: true, status: 'planned' }),
-      Route.countDocuments(simulatingFilter())
+      Route.countDocuments(simulatingFilter()),
+      User.countDocuments({ role: 'driver', pendingApproval: true })
     ])
 
     const stopsToday = todaysRoutes.flatMap(r => r.stops.map(s => ({ s, r })))
@@ -90,6 +91,7 @@ router.get('/', authenticate, async (req, res) => {
       role: req.user.role,
       activeRoutes: activeRoutes.length,
       unassignedRoutes: unassigned,
+      driversAwaitingApproval: awaitingApproval,
       routesNeedingRecalculation: needsRecalc,
       activeIncidents: incidents,
       deliveriesToday: deliveredToday.length,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import MapView from '../components/MapView'
+import MapView, { SchematicMap } from '../components/MapView'
+import useWhenIdle from '../hooks/useWhenIdle'
 import usePolling from '../hooks/usePolling'
 import usePageTitle from '../hooks/usePageTitle'
 import { planMove, positionAt, remainingFrom } from '../utils/tracking'
@@ -30,6 +31,7 @@ function TrackDelivery() {
   const [display, setDisplay] = useState(null) // { position, path }
   const [now, setNow] = useState(Date.now())
   const lastOk = useRef(0)
+  const streetMap = useWhenIdle()
   const shown = useRef({ position: null, path: null })
   const frame = useRef(0)
 
@@ -137,46 +139,49 @@ function TrackDelivery() {
   return (
     <div className="track-page">
       <TrackHeader deliveryId={delivery.deliveryId} />
-      <div className="track-map">
-        <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver}
-          fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />
-        {stale && <div className="track-stale" role="status"><span className="spinner spinner-sm" /> {t('track.updating')}</div>}
-      </div>
+      <main className="track-main">
+        <div className="track-map">
+          {streetMap
+            ? <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver} fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />
+            : <SchematicMap lines={mapData.lines} points={mapData.points} driver={mapData.driver} fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />}
+          {stale && <div className="track-stale" role="status"><span className="spinner spinner-sm" /> {t('track.updating')}</div>}
+        </div>
 
-      <section className="track-sheet" aria-live="polite">
-        <p className="text-sm text-muted">{t('track.hi', { name: delivery.customerFirstName })}</p>
-        <h1 className="track-headline">{t(`track.${status}`, { driver: driverName })}</h1>
-        {status === 'on_the_way' && eta && (
-          <p className="track-eta">
-            <span className="track-eta-value">{eta.minutes}<small>{t('common.min')}</small></span>
-            <span>{t('track.away')} {eta.stopsBefore > 1 ? t('track.stopsBefore', { n: eta.stopsBefore }) : eta.stopsBefore === 1 ? t('track.oneStopBefore') : t('track.youreNext')}</span>
-          </p>
-        )}
-        {status === 'arriving' && <p className="track-eta"><span><strong>{t('track.arrivingSoon', { m: data.arrivingRadiusM })}</strong>. {t('track.beReady')}</span></p>}
-        {status === 'packed' && <p className="track-eta"><span>{t('track.expected')} <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></span></p>}
-        {status === 'delivered' && <p className="track-eta"><span>{t('track.deliveredAt')} <strong>{formatClock(delivery.completedAt)}</strong>. {t('track.thanks')}</span></p>}
-        {status === 'failed' && <p className="track-eta">{t('track.reschedule', { reason: translateKnown(lang, 'fail', delivery.failureReason) })}</p>}
-        {data.demo && <p className="text-micro text-ink-400 mt-2">{t('track.demo', { n: data.demo.speedup })}</p>}
+        <section className="track-sheet" aria-live="polite">
+          <p className="text-sm text-muted">{t('track.hi', { name: delivery.customerFirstName })}</p>
+          <h1 className="track-headline">{t(`track.${status}`, { driver: driverName })}</h1>
+          {status === 'on_the_way' && eta && (
+            <p className="track-eta">
+              <span className="track-eta-value">{eta.minutes}<small>{t('common.min')}</small></span>
+              <span>{t('track.away')} {eta.stopsBefore > 1 ? t('track.stopsBefore', { n: eta.stopsBefore }) : eta.stopsBefore === 1 ? t('track.oneStopBefore') : t('track.youreNext')}</span>
+            </p>
+          )}
+          {status === 'arriving' && <p className="track-eta"><span><strong>{t('track.arrivingSoon', { m: data.arrivingRadiusM })}</strong>. {t('track.beReady')}</span></p>}
+          {status === 'packed' && <p className="track-eta"><span>{t('track.expected')} <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></span></p>}
+          {status === 'delivered' && <p className="track-eta"><span>{t('track.deliveredAt')} <strong>{formatClock(delivery.completedAt)}</strong>. {t('track.thanks')}</span></p>}
+          {status === 'failed' && <p className="track-eta">{t('track.reschedule', { reason: translateKnown(lang, 'fail', delivery.failureReason) })}</p>}
+          {data.demo && <p className="text-micro text-ink-400 mt-2">{t('track.demo', { n: data.demo.speedup })}</p>}
 
-        <ol className="track-timeline" aria-label={t('track.progress')}>
-          {data.timeline.map((step, i) => {
-            const current = step.done && !data.timeline[i + 1]?.done
-            return (
-              <li key={step.key} className={`${step.done ? 'done' : ''} ${current ? 'current' : ''}`} aria-current={current ? 'step' : undefined}>
-                <span className="track-step-dot" aria-hidden="true" />
-                <span className="track-step-label">{t(`track.step.${step.key}`)}</span>
-                {step.at && <span className="text-micro text-ink-400">{formatClock(step.at)}</span>}
-              </li>
-            )
-          })}
-        </ol>
+          <ol className="track-timeline" aria-label={t('track.progress')}>
+            {data.timeline.map((step, i) => {
+              const current = step.done && !data.timeline[i + 1]?.done
+              return (
+                <li key={step.key} className={`${step.done ? 'done' : ''} ${current ? 'current' : ''}`} aria-current={current ? 'step' : undefined}>
+                  <span className="track-step-dot" aria-hidden="true" />
+                  <span className="track-step-label">{t(`track.step.${step.key}`)}</span>
+                  {step.at && <span className="text-micro text-ink-400">{formatClock(step.at)}</span>}
+                </li>
+              )
+            })}
+          </ol>
 
-        <dl className="detail-list text-sm mt-4">
-          <dt>{t('track.deliveringTo')}</dt><dd>{delivery.address}</dd>
-          {(delivery.windowStart || delivery.windowEnd) && <><dt>{t('track.slot')}</dt><dd>{t('track.slotRange', { from: delivery.windowStart || '…', to: delivery.windowEnd || '…' })}</dd></>}
-          {data.vehicle && <><dt>{t('track.vehicle')}</dt><dd>{translateKnown(lang, 'vehicle', data.vehicle)}</dd></>}
-        </dl>
-      </section>
+          <dl className="detail-list text-sm mt-4">
+            <dt>{t('track.deliveringTo')}</dt><dd>{delivery.address}</dd>
+            {(delivery.windowStart || delivery.windowEnd) && <><dt>{t('track.slot')}</dt><dd>{t('track.slotRange', { from: delivery.windowStart || '…', to: delivery.windowEnd || '…' })}</dd></>}
+            {data.vehicle && <><dt>{t('track.vehicle')}</dt><dd>{translateKnown(lang, 'vehicle', data.vehicle)}</dd></>}
+          </dl>
+        </section>
+      </main>
     </div>
   )
 }

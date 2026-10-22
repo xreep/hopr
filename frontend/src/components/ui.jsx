@@ -148,6 +148,12 @@ export function Modal({ title, onClose, children, footer, size = 'md', labelledB
   )
 }
 
+// A table that may scroll sideways on small screens: focusable, so it can be scrolled
+// with the keyboard, and named, so screen readers say what it holds
+export function TableRegion({ label, className = '', children }) {
+  return <div className={`table-container ${className}`} role="region" aria-label={label} tabIndex={0}>{children}</div>
+}
+
 export function EmptyState({ title, children, action }) {
   return (
     <div className="empty-state">

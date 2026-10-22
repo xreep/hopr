@@ -1,4 +1,5 @@
 // Fleet analytics computed from recorded routes and deliveries.
+import { VEHICLE_PROFILES } from '../config/fleet.js'
 import { isOnTime, deliveryMinutes, driverPerformance, avg, round1, pct } from './metrics.js'
 import { IST_OFFSET_MIN, istMinutesOfDay } from '../utils/time.js'
 
@@ -35,6 +36,16 @@ function bucketKeys(start, end, granularity) {
 }
 
 // Headline KPIs for a set of routes (one period)
+// Minutes between the arrival time last promised for a delivered stop and when the driver
+// reached the door (delivery time minus the vehicle's time at the door). Simulated demo
+// drives are left out: they keep their ETAs by construction.
+export function arrivalErrorMinutes(stop, route) {
+  if (route.isDemo || !stop.completedAt || !stop.estimatedArrival) return null
+  const serviceMin = (VEHICLE_PROFILES[route.vehicleType] || VEHICLE_PROFILES.van).serviceMin
+  const arrived = new Date(stop.completedAt).getTime() - serviceMin * 60000
+  return Math.abs(arrived - new Date(stop.estimatedArrival).getTime()) / 60000
+}
+
 export function computeKpis(routes, activeVehicleCount) {
   const live = routes.filter(r => r.status !== 'cancelled')
   const dispatched = live.filter(r => r.status === 'active' || r.status === 'completed')
@@ -43,6 +54,7 @@ export function computeKpis(routes, activeVehicleCount) {
   let onTime = 0
   let dispatchedStops = 0
   const durations = []
+  const etaErrors = []
   for (const r of live) {
     const isDispatched = r.status === 'active' || r.status === 'completed'
     if (isDispatched) dispatchedStops += r.stops.length
@@ -52,6 +64,8 @@ export function computeKpis(routes, activeVehicleCount) {
         if (isOnTime(s, r)) onTime += 1
         const d = deliveryMinutes(s, r)
         if (d !== null) durations.push(d)
+        const e = arrivalErrorMinutes(s, r)
+        if (e !== null) etaErrors.push(e)
       } else if (s.status === 'failed') {
         failed += 1
       }
@@ -75,6 +89,9 @@ export function computeKpis(routes, activeVehicleCount) {
     vehicleUtilization: activeVehicleCount > 0 ? round1(Math.min(100, (vehiclesUsed.size / activeVehicleCount) * 100)) : null,
     capacityUtilization: round1(avg(loads)),
     completionRate: pct(completed, dispatchedStops),
+    // How far the arrival time last given to the customer was from the real arrival
+    etaErrorMin: round1(avg(etaErrors)),
+    etaWithin10Pct: etaErrors.length ? pct(etaErrors.filter(e => e <= 10).length, etaErrors.length) : null,
     totalRoutes: live.length,
     completedRoutes: live.filter(r => r.status === 'completed').length,
     totalDistanceKm: round1(live.reduce((s, r) => s + (r.totalDistance || 0), 0)),

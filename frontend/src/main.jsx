@@ -6,10 +6,17 @@ import App from './App'
 import { AuthProvider } from './context/AuthContext'
 import { ConfirmProvider } from './components/ConfirmDialog'
 import ErrorBoundary from './components/ErrorBoundary'
+// Overpass, served with the app (no third-party font requests)
+import '@fontsource/overpass/400.css'
+import '@fontsource/overpass/600.css'
+import '@fontsource/overpass/700.css'
+import '@fontsource/overpass/800.css'
 import './index.css'
 import { primeSpeechOnFirstGesture } from './utils/speak'
+import { initMonitoring } from './utils/monitoring'
 
 primeSpeechOnFirstGesture()
+initMonitoring()
 
 // Offline support for the driver app (production builds only, so development reloads stay fresh)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

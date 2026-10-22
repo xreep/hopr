@@ -1,14 +1,13 @@
 // Hopr service worker: lets the app open without signal. It keeps the app shell, its
-// scripts and styles, the typeface and recently viewed map tiles. It never stores API
+// scripts, styles and typeface, and recently viewed map tiles. It never stores API
 // responses: the driver app keeps its own routes and unsent updates in IndexedDB, per
 // driver, and clears them on sign-out.
-const VERSION = 'hopr-1'
+const VERSION = 'hopr-2'
 const SHELL = `${VERSION}-shell`
 const ASSETS = `${VERSION}-assets`
 const TILES = `${VERSION}-tiles`
 const MAX_TILES = 600
 const TILE_HOSTS = new Set(['tiles.openfreemap.org'])
-const FONT_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com'])
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(SHELL).then(cache => cache.addAll(['/', '/favicon.svg', '/manifest.webmanifest'])))
@@ -43,7 +42,7 @@ async function page(request) {
   }
 }
 
-// Hashed scripts, styles and fonts never change: the cache first
+// Hashed scripts, styles and fonts (all under /assets/) never change: the cache first
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request)
   if (cached) return cached
@@ -77,6 +76,5 @@ self.addEventListener('fetch', event => {
     else if (url.pathname.startsWith('/assets/')) event.respondWith(cacheFirst(request, ASSETS))
     return
   }
-  if (FONT_HOSTS.has(url.hostname)) event.respondWith(cacheFirst(request, ASSETS))
-  else if (TILE_HOSTS.has(url.hostname)) event.respondWith(tile(request))
+  if (TILE_HOSTS.has(url.hostname)) event.respondWith(tile(request))
 })

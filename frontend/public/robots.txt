@@ -1,0 +1,4 @@
+# Customer tracking links are private: keep them out of search results
+User-agent: *
+Disallow: /track/
+Allow: /

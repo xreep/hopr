@@ -129,7 +129,8 @@ router.patch('/:id/status', authenticate, authorize('admin', 'fleet_manager'), p
     // Scoped to drivers: managers must not be able to deactivate admins or other managers
     const driver = await User.findOneAndUpdate(
       { _id: req.params.id, role: 'driver' },
-      { isActive },
+      // Activating a new sign-up approves it
+      { isActive, ...(isActive && { pendingApproval: false }) },
       { new: true }
     ).select('-password')
 

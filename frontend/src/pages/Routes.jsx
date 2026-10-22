@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import usePolling from '../hooks/usePolling'
-import { StatusBadge, EmptyState, SkeletonRows } from '../components/ui'
+import { StatusBadge, EmptyState, SkeletonRows, TableRegion } from '../components/ui'
 import DemoSeedButton from '../components/DemoSeedButton'
 import DispatchPreviewDialog from '../components/DispatchPreviewDialog'
 import { speak } from '../utils/speak'
@@ -149,7 +149,7 @@ export default function RoutesPage() {
         </div>
       ) : (
         <div className="card">
-          <div className="table-container">
+          <TableRegion label="Routes">
             <table className="table min-w-[920px]">
               <thead>
                 <tr>
@@ -193,7 +193,7 @@ export default function RoutesPage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
         </div>
       )}
 

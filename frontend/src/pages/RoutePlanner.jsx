@@ -5,7 +5,7 @@ import api, { errorMessage } from '../utils/api'
 import MapView from '../components/MapView'
 import AddressAutocomplete from '../components/AddressAutocomplete'
 import { fetchSuggestions } from '../utils/geocoding'
-import { StatusBadge } from '../components/ui'
+import { StatusBadge, TableRegion } from '../components/ui'
 import { VEHICLE_TYPES, PRIORITY_OPTIONS, MAX_STOPS_PER_ROUTE, ROUTE_COLORS, ROUTE_GREEN, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
 import Icon from '../components/icons'
 import useMediaQuery from '../hooks/useMediaQuery'
@@ -585,7 +585,7 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
 
         <details className="compare">
           <summary>Compare route options</summary>
-          <div className="table-container mt-2">
+          <TableRegion label="Plan compared with the alternatives" className="mt-2">
             <table className="table compact">
               <thead><tr><th>Option</th><th>Distance</th><th>Time</th><th>Fuel cost</th><th>Late stops</th></tr></thead>
               <tbody>
@@ -596,9 +596,9 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
           <p className="text-small font-medium mt-4 mb-1">The same route in each vehicle type</p>
-          <div className="table-container">
+          <TableRegion label="The same route in each vehicle type">
             <table className="table compact">
               <thead><tr><th>Vehicle</th><th>Energy</th><th>Cost</th><th>CO₂</th><th>Fits the load</th></tr></thead>
               <tbody>
@@ -609,7 +609,7 @@ function PlanResults({ plan, activeRoute, setActiveRoute, drivers, assignments, 
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
         </details>
 
         <div>

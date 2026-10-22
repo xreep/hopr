@@ -67,3 +67,6 @@ coverage/
 
 # Large binaries
 *.tgz
+# Playwright
+/test-results/
+/playwright-report/

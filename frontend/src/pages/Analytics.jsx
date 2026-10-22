@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { Chart as ChartJS, ArcElement, LineElement, BarElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler } from 'chart.js'
 import { Doughnut, Line, Bar } from 'react-chartjs-2'
 import api, { errorMessage } from '../utils/api'
-import { StatCard, PageSkeleton, EmptyState } from '../components/ui'
+import { StatCard, PageSkeleton, EmptyState, TableRegion } from '../components/ui'
 import Icon from '../components/icons'
 import { applyChartTheme, CHART_COLORS as C } from '../components/chartTheme'
 import { formatINR, formatKm, formatDuration } from '../utils/format'
@@ -106,9 +106,30 @@ export default function Analytics() {
           hint={`${formatINR(kpis.optimizationSavingsCost)} in fuel against the order entered, ${kpis.co2Kg} kg CO₂ emitted`} />
       </div>
 
+      <section className="card mb-6 eta-learning" aria-label="Arrival times">
+        <div>
+          <p className="stats-label">Arrival time accuracy</p>
+          <p className="stats-value">{kpis.etaErrorMin === null ? '—' : <>{Math.round(kpis.etaErrorMin)}<span className="stats-suffix">min</span></>}</p>
+          <p className="stats-hint">
+            {kpis.etaErrorMin === null
+              ? 'Average gap between the arrival time given to the customer and the real one, once drivers deliver'
+              : `Average gap between the arrival time given to the customer and the real one. ${kpis.etaWithin10Pct}% within 10 minutes.`}
+          </p>
+        </div>
+        <div>
+          <p className="stats-label">Travel times learned from your drivers</p>
+          <p className="stats-value">{data.learning?.legs ?? 0}<span className="stats-suffix">legs</span></p>
+          <p className="stats-hint">
+            {data.learning?.hoursInUse
+              ? `Planning now uses what real drives showed for ${data.learning.hoursInUse} hour slot${data.learning.hoursInUse === 1 ? '' : 's'} across ${data.learning.areas} area${data.learning.areas === 1 ? '' : 's'}.`
+              : 'Each delivered leg is compared with the plan. After 5 legs in an area and hour, planning starts correcting its traffic model.'}
+          </p>
+        </div>
+      </section>
+
       <div className="grid grid-2 gap-6 mb-6">
         <ChartCard title="Deliveries per day" caption={`${kpis.totalDeliveries} delivered, ${kpis.failedDeliveries} failed`}>
-          <Bar data={{
+          <Bar aria-label={`Deliveries per day: ${kpis.totalDeliveries} delivered and ${kpis.failedDeliveries} failed in this period`} data={{
             labels,
             datasets: [
               { label: 'Delivered', data: data.deliveryTrend.data, backgroundColor: C.volt, borderRadius: 2, stack: 'd', maxBarThickness: 22 },
@@ -117,7 +138,7 @@ export default function Analytics() {
           }} options={{ ...baseOptions, scales: { x: { ...axes.x, stacked: true }, y: { ...axes.y, stacked: true, ticks: { precision: 0 } } } }} />
         </ChartCard>
         <ChartCard title="Fuel spend and emissions" caption={`${formatINR(kpis.totalFuelCost)} planned fuel, ${formatKm(kpis.totalDistanceKm)} planned`}>
-          <Line data={{
+          <Line aria-label={`Fuel spend and emissions per day: ${formatINR(kpis.totalFuelCost)} planned fuel and ${kpis.co2Kg} kg CO2 in this period`} data={{
             labels: data.fuelTrend.labels.map(shortLabel),
             datasets: [
               {
@@ -136,7 +157,7 @@ export default function Analytics() {
       <div className="grid grid-2 gap-6 mb-6">
         <ChartCard title="Where every stop stands" caption={`${statusTotal} stops in this period`}>
           {statusTotal ? (
-            <Doughnut data={{
+            <Doughnut aria-label={`Where every stop stands: ${statusTotal} stops in this period`} data={{
               labels: ['Delivered', 'On the way', 'Waiting', 'Failed'],
               datasets: [{
                 data: [data.statusDistribution.completed, data.statusDistribution.in_progress, data.statusDistribution.pending, data.statusDistribution.failed],
@@ -150,7 +171,7 @@ export default function Analytics() {
         </ChartCard>
         <ChartCard title="How full each vehicle runs" caption="Average load as a share of capacity">
           {data.vehicleUtilization.length ? (
-            <Bar data={{
+            <Bar aria-label="How full each vehicle runs: average load as a share of capacity, per vehicle" data={{
               labels: data.vehicleUtilization.map(v => v.name),
               datasets: [{
                 label: 'Average load',
@@ -173,7 +194,7 @@ export default function Analytics() {
         <div className="card">
           <div className="card-header"><h3>Drivers</h3></div>
           {data.driverPerformance.length ? (
-            <div className="table-container">
+            <TableRegion label="Drivers">
               <table className="table">
                 <thead><tr><th>Driver</th><th>Delivered</th><th>On time</th><th>Completed</th><th>Avg time</th></tr></thead>
                 <tbody>
@@ -188,14 +209,14 @@ export default function Analytics() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableRegion>
           ) : <EmptyState title="No driver activity in this period" />}
         </div>
 
         <div className="card">
           <div className="card-header"><h3>Planned against actual</h3></div>
           {data.plannedVsActual.length ? (
-            <div className="table-container">
+            <TableRegion label="Planned against actual">
               <table className="table">
                 <thead><tr><th>Route</th><th>Distance, plan and GPS</th><th>Time, plan and actual</th><th>Efficiency</th></tr></thead>
                 <tbody>
@@ -209,7 +230,7 @@ export default function Analytics() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableRegion>
           ) : <EmptyState title="No routes finished in this period">Completed routes show their planned and driven distance here.</EmptyState>}
         </div>
       </div>

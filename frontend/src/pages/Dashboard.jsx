@@ -82,6 +82,7 @@ function DriverDashboard({ data }) {
 
 function ManagerDashboard({ data, reload }) {
   const alerts = [
+    data.driversAwaitingApproval > 0 && { icon: 'user', text: `${data.driversAwaitingApproval} new driver${data.driversAwaitingApproval > 1 ? 's are' : ' is'} waiting for approval`, to: '/drivers', action: 'Review' },
     data.unassignedRoutes > 0 && { icon: 'users', text: `${data.unassignedRoutes} route${data.unassignedRoutes > 1 ? 's are' : ' is'} waiting for a driver`, to: '/routes?dispatch=1', action: 'Auto-dispatch' },
     data.routesNeedingRecalculation > 0 && { icon: 'refresh', text: `${data.routesNeedingRecalculation} route${data.routesNeedingRecalculation > 1 ? 's are' : ' is'} affected by new traffic`, to: '/monitor', action: 'Review' },
     data.activeIncidents > 0 && { icon: 'alert', text: `${data.activeIncidents} active traffic incident${data.activeIncidents > 1 ? 's' : ''}`, to: '/monitor', action: 'View on map' }

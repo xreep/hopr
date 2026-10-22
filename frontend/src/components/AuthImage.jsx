@@ -14,7 +14,7 @@ export default function AuthImage({ id, alt, className = '' }) {
       .catch(() => !cancelled && setFailed(true))
     return () => { cancelled = true }
   }, [id])
-  if (failed) return <span className="text-xs text-muted">Image unavailable</span>
+  if (failed) return <span className="text-xs text-muted">Image no longer stored. Proof images are deleted after a set number of days; the delivery record stays.</span>
   if (!src) return <span className={`auth-image-placeholder ${className}`} aria-label="Loading image" />
   return (
     <a href={src} target="_blank" rel="noopener noreferrer">

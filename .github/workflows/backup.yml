@@ -1,0 +1,47 @@
+name: Database backup
+
+# Nightly encrypted backup of the production database (MongoDB Atlas M0 has no backups
+# of its own). Needs two repository secrets: MONGODB_URI and BACKUP_PASSPHRASE. The dump
+# is encrypted before upload because workflow artifacts are visible to anyone who can
+# read the repository. Restore steps are in docs/SECURITY.md.
+on:
+  schedule:
+    - cron: '30 20 * * *' # 02:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets are set
+        id: ready
+        run: |
+          if [ -z "$MONGODB_URI" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "MONGODB_URI and BACKUP_PASSPHRASE are not both set; skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Dump and encrypt
+        if: steps.ready.outputs.go == 'true'
+        run: |
+          stamp=$(date -u +%Y-%m-%dT%H%MZ)
+          docker run --rm -e MONGODB_URI -v "$PWD:/backup" mongo:7 \
+            sh -c 'mongodump --uri "$MONGODB_URI" --archive=/backup/hopr.archive --gzip'
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
+            --symmetric --cipher-algo AES256 --output "hopr-$stamp.archive.gpg" hopr.archive
+          rm hopr.archive
+          echo "FILE=hopr-$stamp.archive.gpg" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        if: steps.ready.outputs.go == 'true'
+        with:
+          name: ${{ env.FILE }}
+          path: ${{ env.FILE }}
+          retention-days: 14

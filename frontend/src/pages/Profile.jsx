@@ -11,11 +11,11 @@ const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'D
 
 const CHANNELS = [
   { key: 'push', label: 'In-app notifications', desc: 'Toasts and voice announcements while Hopr is open' },
-  { key: 'email', label: 'Email', desc: 'Summaries and alerts sent to your inbox' },
-  { key: 'sms', label: 'SMS', desc: 'Text messages for urgent changes' }
+  { key: 'email', label: 'Email', desc: 'Alerts and the weekly report, once your administrator has turned email on' },
+  { key: 'sms', label: 'SMS', desc: 'Not available: SMS in India needs a registered (DLT) sender', unavailable: true }
 ]
 const TOPICS = [
-  { key: 'routeUpdates', label: 'Route changes', desc: 'New assignments, recalculations and delays' },
+  { key: 'routeUpdates', label: 'Route changes', desc: 'Drivers: new routes. Managers: failed deliveries, finished routes and new drivers to approve' },
   { key: 'maintenanceAlerts', label: 'Vehicle maintenance', desc: 'Upcoming service dates for your vehicles' },
   { key: 'weeklyReports', label: 'Weekly report', desc: 'A Monday summary of last week’s deliveries' }
 ]
@@ -167,7 +167,7 @@ export default function Profile() {
                     <span className="block text-micro text-ink-400">{item.desc}</span>
                   </label>
                   <span className="switch">
-                    <input id={`n-${item.key}`} type="checkbox" role="switch" checked={Boolean(notifications[item.key])}
+                    <input id={`n-${item.key}`} type="checkbox" role="switch" checked={!item.unavailable && Boolean(notifications[item.key])} disabled={item.unavailable}
                       onChange={e => setNotifications(prev => ({ ...prev, [item.key]: e.target.checked }))} />
                     <span className="switch-track" aria-hidden="true" />
                     <span className="switch-thumb" aria-hidden="true" />
