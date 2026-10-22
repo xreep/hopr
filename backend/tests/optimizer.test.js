@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { optimizeRoute, planBatch, evaluateSequence, OptimizationError } from '../src/services/routeOptimizer.js'
+import { optimizeRoute, planBatch, evaluateSequence, bestSequence, OptimizationError } from '../src/services/routeOptimizer.js'
 import { RANCHI_HUB, RANCHI_LOCATIONS as L } from '../src/data/ranchiLocations.js'
 import { estimateFuel } from '../src/services/fuel.js'
 
@@ -211,5 +211,46 @@ describe('multi-vehicle batch planning', () => {
     const plan = planBatch({ depot: RANCHI_HUB, stops, vehicles: [van, van], departureTime: DEPART, includeAlternatives: false })
     expect(plan.routes.every(r => r.stops.length <= 30)).toBe(true)
     expect(plan.totals.stops).toBe(40)
+  })
+})
+
+describe('search strategies', () => {
+  // Seeded stops around the Ranchi hub, some with windows and priorities
+  function instance(seed, n) {
+    let a = seed
+    const r = () => ((a = (a * 16807) % 2147483647) / 2147483647)
+    const [lng, lat] = RANCHI_HUB.coordinates
+    return {
+      depot: RANCHI_HUB,
+      vehicle: { type: 'van' },
+      departureTime: DEPART,
+      stops: Array.from({ length: n }, (_, i) => ({
+        address: `Stop ${i + 1}`,
+        coordinates: [lng + (r() - 0.5) * 0.12, lat + (r() - 0.5) * 0.12],
+        priority: r() < 0.2 ? 'urgent' : 'standard',
+        ...(r() < 0.4 ? { windowStart: '10:45', windowEnd: '11:45' } : {})
+      }))
+    }
+  }
+
+  it('is exactly optimal up to 8 stops', () => {
+    for (let seed = 1; seed <= 4; seed++) {
+      const inst = instance(seed, 8)
+      expect(bestSequence(inst).cost).toBeCloseTo(bestSequence(inst, { strategy: 'exact' }).cost, 6)
+    }
+  })
+
+  it('finds the optimum on 9 stops, beyond the exhaustive limit', () => {
+    const inst = instance(11, 9)
+    expect(bestSequence(inst).cost).toBeCloseTo(bestSequence(inst, { strategy: 'exact', timeBudgetMs: 60000 }).cost, 6)
+  })
+
+  it('is never worse than the previous search, and gives the same plan every time', () => {
+    for (let seed = 20; seed < 24; seed++) {
+      const inst = instance(seed, 18)
+      const now = bestSequence(inst)
+      expect(now.cost).toBeLessThanOrEqual(bestSequence(inst, { strategy: 'baseline' }).cost + 1e-6)
+      expect(bestSequence(inst).sequence).toEqual(now.sequence)
+    }
   })
 })

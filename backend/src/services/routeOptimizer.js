@@ -2,9 +2,14 @@
 //
 // Single route: a depot plus up to 30 stops. Sequencing minimises an operating
 // cost (INR) built from traffic-aware driving time, fuel, missed delivery-window
-// penalties and a priority waiting cost. Search = two seeded constructions
-// (greedy cheapest-append and earliest-deadline-first) improved with 2-opt and
-// Or-opt (relocate) local search under a time budget.
+// penalties and a priority waiting cost. Search:
+//   - up to 8 stops: exhaustive branch and bound, so the order is provably optimal
+//   - larger routes: two seeded constructions (greedy cheapest-append and earliest-
+//     deadline-first), local search (2-opt, Or-opt chains of 1-3 stops, swaps), then
+//     iterated local search (double-bridge kicks) until it stops improving or the
+//     time budget runs out. Seeded, so the same input always gives the same plan.
+// The previous search (constructions + 2-opt + single relocate) is kept as the
+// 'baseline' strategy so the benchmark can compare the two.
 //
 // Batch: stops are split across vehicles with a capacity-aware angular sweep
 // around the depot, then each vehicle's route is optimised independently.
@@ -139,7 +144,9 @@ function buildContext({ depot, stops, vehicle, departureTime, trafficEnabled, in
 }
 
 // Walks a visiting order (indices into ctx.stops, 0-based) and returns cost + metrics.
-function simulate(ctx, order, { detail = false, objective = 'cost' } = {}) {
+// `partial` skips the return to the depot: the cost of a prefix is then a lower bound on
+// every completion of it (all cost terms only grow), which branch and bound relies on.
+function simulate(ctx, order, { detail = false, objective = 'cost', partial = false } = {}) {
   const { km, incidentFactor, factorAt, windows, vehicle, stops } = ctx
   let t = 0
   let prev = 0
@@ -190,7 +197,7 @@ function simulate(ctx, order, { detail = false, objective = 'cost' } = {}) {
   }
 
   let returnLeg = null
-  if (ctx.returnToDepot && order.length) {
+  if (ctx.returnToDepot && order.length && !partial) {
     const { legKm, baseMin, legMin, factor } = travel(prev, 0)
     distance += legKm
     drive += legMin
@@ -235,39 +242,51 @@ function earliestDeadlineFirst(ctx) {
     .map(x => x.i)
 }
 
-function localSearch(ctx, initial, objective, deadline) {
+// First-improvement local search. 'baseline' uses 2-opt and single-stop relocation;
+// the default also moves chains of 2-3 stops (either way round) and swaps pairs.
+function localSearch(ctx, initial, objective, deadline, { extended = true } = {}) {
   let order = [...initial]
   let best = simulate(ctx, order, { objective }).cost
   const n = order.length
+  const tryOrder = candidate => {
+    const c = simulate(ctx, candidate, { objective }).cost
+    if (c < best - 1e-9) {
+      order = candidate
+      best = c
+      return true
+    }
+    return false
+  }
+  const maxChain = extended ? Math.min(3, n - 1) : 1
   let improved = true
   while (improved && Date.now() < deadline) {
     improved = false
     // 2-opt: reverse a segment
     for (let i = 0; i < n - 1 && !improved; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const candidate = [...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)]
-        const c = simulate(ctx, candidate, { objective }).cost
-        if (c < best - 1e-9) {
-          order = candidate
-          best = c
-          improved = true
-          break
+      for (let j = i + 1; j < n && !improved; j++) {
+        improved = tryOrder([...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)])
+      }
+    }
+    // Or-opt: move a chain of 1..maxChain stops elsewhere, as is or reversed
+    for (let len = 1; len <= maxChain && !improved; len++) {
+      for (let i = 0; i + len <= n && !improved; i++) {
+        const chain = order.slice(i, i + len)
+        const rest = [...order.slice(0, i), ...order.slice(i + len)]
+        for (let j = 0; j <= rest.length && !improved; j++) {
+          if (j === i) continue
+          improved = tryOrder([...rest.slice(0, j), ...chain, ...rest.slice(j)]) ||
+            (len > 1 && extended && tryOrder([...rest.slice(0, j), ...[...chain].reverse(), ...rest.slice(j)]))
         }
       }
     }
-    // Or-opt: relocate a single stop
-    for (let i = 0; i < n && !improved; i++) {
-      for (let j = 0; j < n; j++) {
-        if (i === j) continue
-        const candidate = [...order]
-        const [moved] = candidate.splice(i, 1)
-        candidate.splice(j, 0, moved)
-        const c = simulate(ctx, candidate, { objective }).cost
-        if (c < best - 1e-9) {
-          order = candidate
-          best = c
-          improved = true
-          break
+    // Swap two stops
+    if (extended) {
+      for (let i = 0; i < n - 1 && !improved; i++) {
+        for (let j = i + 1; j < n && !improved; j++) {
+          const candidate = [...order]
+          candidate[i] = order[j]
+          candidate[j] = order[i]
+          improved = tryOrder(candidate)
         }
       }
     }
@@ -275,14 +294,109 @@ function localSearch(ctx, initial, objective, deadline) {
   return { order, cost: best }
 }
 
-function searchBestOrder(ctx, objective, deadline) {
+// Routes this small are searched exhaustively (8! = 40,320 orders at most, far fewer
+// after pruning), so the answer is the true optimum for the cost model
+export const EXACT_MAX_STOPS = 8
+
+function exhaustive(ctx, objective) {
+  const n = ctx.stops.length
+  const used = new Array(n).fill(false)
+  const prefix = []
+  let bestOrder = null
+  let bestCost = Infinity
+  const visit = () => {
+    if (prefix.length === n) {
+      const { cost } = simulate(ctx, prefix, { objective })
+      if (cost < bestCost - 1e-9) {
+        bestCost = cost
+        bestOrder = [...prefix]
+      }
+      return
+    }
+    for (let i = 0; i < n; i++) {
+      if (used[i]) continue
+      prefix.push(i)
+      // Every cost term only grows as stops are added: a prefix that already costs
+      // more than the best full route cannot lead to a better one
+      if (simulate(ctx, prefix, { objective, partial: true }).cost < bestCost - 1e-9) {
+        used[i] = true
+        visit()
+        used[i] = false
+      }
+      prefix.pop()
+    }
+  }
+  visit()
+  return { order: bestOrder, cost: bestCost }
+}
+
+// Small deterministic random generator, so a plan never changes between runs
+function mulberry32(seed) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Kicks that move the search out of a local optimum. Double bridge: cut the order into
+// four pieces A B C D and rejoin as A C B D, which local search cannot undo in one move.
+// Alternated with a random segment reversal plus a random relocation, which suits
+// short routes better.
+function kick(order, rng, k) {
+  if (k % 2 === 1 || order.length < 8) {
+    const out = [...order]
+    const i = Math.floor(rng() * out.length)
+    const j = Math.floor(rng() * out.length)
+    const [a, b] = i < j ? [i, j] : [j, i]
+    out.splice(a, b - a + 1, ...out.slice(a, b + 1).reverse())
+    const [moved] = out.splice(Math.floor(rng() * out.length), 1)
+    out.splice(Math.floor(rng() * (out.length + 1)), 0, moved)
+    return out
+  }
+  return doubleBridge(order, rng)
+}
+
+function doubleBridge(order, rng) {
+  const n = order.length
+  const cuts = [1 + Math.floor(rng() * (n - 3))]
+  cuts.push(cuts[0] + 1 + Math.floor(rng() * (n - cuts[0] - 2)))
+  cuts.push(cuts[1] + 1 + Math.floor(rng() * (n - cuts[1] - 1)))
+  const [a, b, c] = cuts
+  return [...order.slice(0, a), ...order.slice(b, c), ...order.slice(a, b), ...order.slice(c)]
+}
+
+function searchBestOrder(ctx, objective, deadline, { strategy = 'ils' } = {}) {
+  const n = ctx.stops.length
+  if (strategy === 'exact' || (strategy !== 'baseline' && n <= EXACT_MAX_STOPS)) return exhaustive(ctx, objective).order
+
+  const extended = strategy !== 'baseline'
   const seeds = objective === 'distance'
     ? [greedyAppend(ctx, 'distance')]
     : [greedyAppend(ctx, objective), earliestDeadlineFirst(ctx)]
   let best = null
   for (const seed of seeds) {
-    const result = localSearch(ctx, seed, objective, deadline)
+    const result = localSearch(ctx, seed, objective, deadline, { extended })
     if (!best || result.cost < best.cost - 1e-9) best = result
+  }
+  if (strategy === 'baseline') return best.order
+
+  // Iterated local search: kick the best order, improve it again, keep it if better.
+  // Stops after enough kicks in a row find nothing, or at the deadline.
+  const rng = mulberry32(n * 7919 + Math.round(best.cost))
+  const patience = 30 + 2 * n
+  let misses = 0
+  for (let k = 0; k < 60 + 10 * n && misses < patience && Date.now() < deadline; k++) {
+    const result = localSearch(ctx, kick(best.order, rng, k), objective, deadline, { extended })
+    if (result.cost < best.cost - 1e-9) {
+      best = result
+      misses = 0
+    } else {
+      misses++
+    }
   }
   return best.order
 }
@@ -405,7 +519,8 @@ export function optimizeRoute({
   returnToDepot = false,
   fuelPrices = defaultFuelPrices(),
   timeBudgetMs = OPTIMIZER_TIME_BUDGET_MS,
-  includeAlternatives = true
+  includeAlternatives = true,
+  strategy = 'ils'
 } = {}) {
   const computeStarted = Date.now()
   const normalized = normalizeStops(stops)
@@ -420,11 +535,11 @@ export function optimizeRoute({
     fuelPrices
   })
   const deadline = computeStarted + timeBudgetMs
-  const order = searchBestOrder(ctx, 'cost', deadline)
+  const order = searchBestOrder(ctx, 'cost', deadline, { strategy })
 
   let alternatives = []
   if (includeAlternatives) {
-    const shortest = searchBestOrder(ctx, 'distance', deadline + timeBudgetMs)
+    const shortest = searchBestOrder(ctx, 'distance', deadline + timeBudgetMs, { strategy })
     const asEntered = normalized.map((_, i) => i)
     alternatives = [
       summarize(ctx, order, 'Hopr optimized (traffic, windows, priority, fuel)', 'optimized'),
@@ -448,6 +563,22 @@ export function evaluateSequence({
   })
   const sim = simulate(ctx, sequence, { objective })
   return { cost: sim.cost, distanceKm: sim.distance, totalMinutes: sim.totalMinutes, lateMinutes: sim.late }
+}
+
+// The best visiting order a strategy finds, and its cost: 'ils' (what planning uses),
+// 'baseline' (the previous search) or 'exact' (exhaustive; slow beyond ~10 stops).
+// Used by the benchmark and the tests.
+export function bestSequence({
+  depot, stops, vehicle, departureTime, trafficEnabled = true, incidents = [], returnToDepot = false,
+  fuelPrices = defaultFuelPrices()
+}, { strategy = 'ils', objective = 'cost', timeBudgetMs = OPTIMIZER_TIME_BUDGET_MS } = {}) {
+  const started = Date.now()
+  const ctx = buildContext({
+    depot: resolveDepot(depot), stops: normalizeStops(stops), vehicle: resolveVehicle(vehicle),
+    departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices
+  })
+  const order = searchBestOrder(ctx, objective, started + timeBudgetMs, { strategy })
+  return { sequence: order, cost: simulate(ctx, order, { objective }).cost, ms: Date.now() - started }
 }
 
 // Full result (ETAs, windows, fuel) for a fixed visiting order. Used when a planned
@@ -578,4 +709,4 @@ export function planBatch({ depot, stops, vehicles, ...options } = {}) {
   }
 }
 
-export default { optimizeRoute, planBatch, partitionStops, resolveVehicle, normalizeStops, evaluateSequence, retimeSequence }
+export default { optimizeRoute, planBatch, partitionStops, resolveVehicle, normalizeStops, evaluateSequence, retimeSequence, bestSequence }

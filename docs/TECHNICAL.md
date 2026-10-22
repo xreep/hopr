@@ -237,21 +237,26 @@ Because traffic changes leg times, the same set of stops can be sequenced differ
 
 ### 4.3 Search
 
-1. **Construction seeds**
-   - *Greedy cheapest append*: start at the depot and repeatedly append the stop that adds the least cost. With cost reduced to distance this is the classic nearest-neighbour heuristic; with the full objective it is nearest-neighbour on operating cost.
-   - *Earliest deadline first*: stops ordered by window end (no window last), so tight windows start from a feasible order.
-2. **Local search** on each seed until no move improves the cost, or the time budget (3 s per route) runs out:
-   - *2-opt*: reverse a segment of the route, removing crossings.
-   - *Or-opt (relocate)*: move one stop to another position in the route.
+1. **Up to 8 stops: exact.** Branch and bound over every visiting order. Every cost term only grows as stops are added, so a partial route that already costs more than the best complete one is dropped. The answer is the true optimum for the cost model.
+2. **More than 8 stops:**
+   - *Construction seeds*: greedy cheapest append (nearest neighbour on operating cost) and earliest deadline first (stops ordered by window end).
+   - *Local search* on each seed until no move improves the cost: 2-opt (reverse a segment), Or-opt (move a chain of 1–3 stops, either way round) and swaps of two stops.
+   - *Iterated local search*: kick the best route out of its local optimum (a double-bridge reconnection, alternating with a random reversal and relocation), improve it again, and keep it if it is cheaper. It stops after 30 + 2n kicks in a row without improvement, or at the time budget (3 s per route).
 3. The cheapest result wins. The engine also returns three alternatives for comparison: *Hopr optimized*, *Shortest distance only*, and *Order as entered*. The savings shown to managers are optimized versus as entered.
 
-The search is deterministic: the same input gives the same route. That makes it testable, and the tests check it against brute force on 5 real Ranchi stops (all 120 orders).
+The search is deterministic (its random kicks are seeded): the same input always gives the same route. The tests check it against brute force on real Ranchi stops, check that it is exactly optimal up to 8 stops and on a 9-stop case, and check that it is never worse than the previous search.
+
+**Benchmark** ([BENCHMARK.md](BENCHMARK.md), reproducible with `npm run benchmark --workspace=backend`) on generated routes around the five demo hubs:
+- **Small routes:** the optimum on every one of 75 routes with 6, 8 and 9 stops.
+- **Shortest distance:** the exact shortest path (Held–Karp) on 29 of 30 routes with 12 and 15 stops, within 0.1% on the last.
+- **15 to 30 stops:** 2–4% cheaper than the previous search on average, and never worse.
+- **Speed:** a 30-stop route takes about 1.5 s.
 
 ### 4.4 Why at most 30 stops per route
 
 This is a deliberate trade-off, documented rather than "fixed":
 
-- Each 2-opt or relocate pass tries O(n²) moves, and every move re-simulates the route (traffic depends on arrival time), so a pass costs O(n³). Up to 30 stops this converges well inside the time budget (30 stops: about 50 ms).
+- Each local-search pass tries O(n²) moves, and every move re-simulates the route (traffic depends on arrival time), so a pass costs O(n³). Up to 30 stops the iterated search settles inside the 3 s budget (30 stops: about 1.5 s on average).
 - Past about 30 stops, a single route stops being realistic for one vehicle on a working day in Indian city traffic (service time alone is 2–5 hours).
 - Larger jobs are batches: split across vehicles first (4.5), so each route stays within the limit. One batch accepts up to 300 stops (30 × 10 vehicles).
 
@@ -276,7 +281,7 @@ This is a deliberate trade-off, documented rather than "fixed":
 The spec suggests shortest-path algorithms (Dijkstra / A*) and multi-stop sequencing logic. Hopr splits the problem the same way:
 
 - **Shortest path between two points** is a road-network problem. OSRM (or Mapbox Directions when configured) solves it on the real OpenStreetMap road graph; when neither answers, Hopr uses the circuity estimate.
-- **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr uses the nearest-neighbour-style construction plus 2-opt / Or-opt improvement described above, the standard practical approach at this size.
+- **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr solves small routes exactly and larger ones with construction plus iterated local search (2-opt, Or-opt, swaps), the standard practical approach at this size; the benchmark measures how close it gets.
 
 ---
 
