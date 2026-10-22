@@ -2,6 +2,7 @@ import 'dotenv/config'
 import mongoose from 'mongoose'
 import app from './app.js'
 import { startSimulationClock } from './services/simulation.js'
+import { initMonitoring } from './services/monitoring.js'
 
 // H1: Fail fast on missing JWT_SECRET in production
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
@@ -26,6 +27,7 @@ const connectDB = async () => {
 }
 
 const startServer = async () => {
+  if (await initMonitoring()) console.log('Error tracking on')
   await connectDB()
   startSimulationClock() // demo morning drives, if any are running
   app.listen(PORT, () => {

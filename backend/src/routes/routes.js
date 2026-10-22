@@ -15,6 +15,7 @@ import { addMinutes } from '../utils/time.js'
 import { haversineKm } from '../utils/geo.js'
 import User from '../models/User.js'
 import { recordLeg } from '../services/learnedTraffic.js'
+import { reportError } from '../services/monitoring.js'
 
 const router = express.Router()
 router.param('id', objectIdParam)
@@ -71,6 +72,7 @@ function sendError(res, error, fallback) {
     return res.status(400).json({ message: Object.values(error.errors)[0]?.message || 'Invalid data' })
   }
   console.error(fallback, error)
+  reportError(error, { action: fallback })
   return res.status(500).json({ message: fallback })
 }
 

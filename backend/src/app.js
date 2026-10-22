@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit'
 import mongoSanitize from 'express-mongo-sanitize'
 import jwt from 'jsonwebtoken'
 import { jwtSecret, JWT_ALGORITHM } from './services/token.js'
+import { reportError } from './services/monitoring.js'
 
 import authRoutes from './routes/auth.js'
 import routeRoutes from './routes/routes.js'
@@ -158,6 +159,7 @@ app.use((err, req, res, next) => {
 
   const isDev = process.env.NODE_ENV === 'development'
   const status = err.status || err.statusCode || 500
+  if (status >= 500) reportError(err, { method: req.method, path: req.path })
 
   res.status(status).json({
     message: isDev || status < 500 ? err.message : 'Internal server error',
