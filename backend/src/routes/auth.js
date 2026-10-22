@@ -28,13 +28,19 @@ router.post('/register', [
       return res.status(400).json({ message: 'Email already registered' })
     }
 
+    // Outside demo mode a new driver waits for a manager's approval before signing in
+    const needsApproval = !demoMode()
     const user = await User.create({
       name,
       email,
       password,
       role: 'driver',
-      phone
+      phone,
+      ...(needsApproval && { isActive: false, pendingApproval: true })
     })
+    if (needsApproval) {
+      return res.status(201).json({ pendingApproval: true, message: 'Account created. A fleet manager needs to approve it before you can sign in.' })
+    }
 
     const token = generateToken(user)
 
@@ -69,7 +75,7 @@ router.post('/login', [
     }
 
     if (!user.isActive) {
-      return res.status(401).json({ message: 'Account is deactivated' })
+      return res.status(401).json({ message: user.pendingApproval ? 'Your account is waiting for a fleet manager to approve it' : 'Account is deactivated' })
     }
 
     // Shared demo accounts have published passwords: locking them would only let one

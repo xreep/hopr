@@ -54,7 +54,7 @@ export default function Drivers() {
     setBusy(driver._id)
     try {
       await api.patch(`/drivers/${driver._id}/status`, { isActive: !driver.isActive })
-      toast.success(`${driver.name} ${driver.isActive ? 'deactivated' : 'activated'}`)
+      toast.success(`${driver.name} ${driver.pendingApproval ? 'approved' : driver.isActive ? 'deactivated' : 'activated'}`)
       load()
     } catch (err) {
       toast.error(errorMessage(err))
@@ -113,7 +113,7 @@ export default function Drivers() {
                     <td>
                       {d.activeRoute
                         ? <Link to={`/routes/${d.activeRoute._id}`} className="no-underline"><StatusBadge status="on_route" label={`On ${d.activeRoute.routeId}`} /></Link>
-                        : <StatusBadge status={d.isActive ? 'enabled' : 'inactive'} />}
+                        : d.pendingApproval ? <StatusBadge status="late" label="Waiting for approval" /> : <StatusBadge status={d.isActive ? 'enabled' : 'inactive'} />}
                     </td>
                     <td>
                       <select className="form-input form-select form-input-sm" aria-label={`Vehicle for ${d.name}`} value={d.vehicle?._id || ''} disabled={busy === d._id || !d.isActive}
@@ -129,8 +129,8 @@ export default function Drivers() {
                     <td>{formatKm(d.distanceKm)}</td>
                     <td className="text-micro text-ink-300 whitespace-nowrap">{relativeTime(d.lastLocation?.updatedAt)}</td>
                     <td className="text-right">
-                      <button type="button" className="btn btn-ghost btn-sm" disabled={busy === d._id} onClick={() => toggleActive(d)}>
-                        {d.isActive ? 'Deactivate' : 'Activate'}
+                      <button type="button" className={`btn btn-sm ${d.pendingApproval ? 'btn-secondary' : 'btn-ghost'}`} disabled={busy === d._id} onClick={() => toggleActive(d)}>
+                        {d.pendingApproval ? 'Approve' : d.isActive ? 'Deactivate' : 'Activate'}
                       </button>
                     </td>
                   </tr>

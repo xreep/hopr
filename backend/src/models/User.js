@@ -37,6 +37,8 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // A self-registered driver waits here (inactive) until a manager approves them
+  pendingApproval: { type: Boolean, default: false },
   lastLogin: {
     type: Date
   },
