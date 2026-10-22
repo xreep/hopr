@@ -1,12 +1,35 @@
 # Hopr
 
+[![CI](https://github.com/xreep/hopr/actions/workflows/ci.yml/badge.svg)](https://github.com/xreep/hopr/actions/workflows/ci.yml)
+
 Route optimization for last-mile delivery anywhere in India. Fleet managers plan multi-stop, multi-vehicle routes that account for traffic, delivery windows, priority and fuel; dispatch them to drivers; and watch them live. Drivers deliver with photo and signature proof. Customers follow their parcel on a live tracking link.
 
 - **Live app**: not deployed yet. See [Deployment](#deployment-free-tiers-0); add the URLs here once they exist.
   - Frontend: `https://<your-app>.vercel.app`
   - API: `https://<your-api>.onrender.com/api/health`
 - **Technical documentation**: [docs/TECHNICAL.md](docs/TECHNICAL.md), covering architecture, data models, the routing algorithm, traffic, fuel, security, the full API reference, NFRs and tests
+- **Routing benchmark**: [docs/BENCHMARK.md](docs/BENCHMARK.md), comparing the engine with the true optimum and simpler methods
+- **Security and operations**: [docs/SECURITY.md](docs/SECURITY.md), with the threat model, backups and incident steps
 - **Product requirements**: [docs/PRD.md](docs/PRD.md)
+
+| | |
+|---|---|
+| ![The homepage: a Delhi route driven on its real roads beside a live route sheet](docs/screenshots/homepage.jpg) | ![The dashboard during a demo morning, zoomed to one van in Delhi](docs/screenshots/dashboard.jpg) |
+| The homepage, with a demo route driven on its real roads | A demo morning: five cities on the road, one van followed |
+| ![The route planner with a six-stop Delhi route on real roads](docs/screenshots/planner.jpg) | ![The driver app on a phone](docs/screenshots/driver.jpg) ![The customer tracking page in Hindi](docs/screenshots/tracking-hindi.jpg) |
+| Planning six Delhi deliveries | The driver app, and customer tracking in Hindi |
+
+**How good is it?**
+- **Routing:** finds the optimal order on all 75 test routes of 6–9 stops, and the exact shortest path on 29 of 30 routes of 12–15 stops. On 15–30 stops it is 2–4% cheaper than the previous search and never worse ([benchmark](docs/BENCHMARK.md)).
+- **Lighthouse (production build):**
+
+  | Page | Phone | Desktop |
+  |---|---|---|
+  | Homepage | 70–87 / 100 / 100 / 100 | 98 / 100 / 100 / 100 |
+  | Sign-in | 89 / 100 / 100 / 100 | 100 / 100 / 100 / 100 |
+
+  Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs.
+- **Tests:** 189 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
 
 ## What it does
 
@@ -97,6 +120,7 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | `PORT` | no | Defaults to 5001 locally; Render sets it automatically |
 | `TRUST_PROXY` | no | Proxy hops to trust for client IPs; defaults to `1` in production |
 | `DEMO_MODE` | no | `true` for a public demo: turns on Load demo data, the demo morning and the demo sign-in buttons, and protects the demo accounts from being changed or locked out. Leave it unset for real use: the demo endpoints then do not exist |
+| `SENTRY_DSN` | no | Report server errors to Sentry (free tier), without personal data. Unset: nothing is sent |
 | `MAPBOX_TOKEN` | no | Server-side Mapbox token; when set, Mapbox is tried first for geocoding and road directions, with OpenStreetMap as the fallback |
 | `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: typical Indian retail 97.90, 92.60, 91.50 and ₹10/kWh; set your state's prices) |
 
@@ -105,6 +129,7 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | Variable | Required | Description |
 |---|---|---|
 | `VITE_API_URL` | yes | `/api` locally (through the dev proxy); the full Render URL ending in `/api` in production |
+| `VITE_SENTRY_DSN` | no | Report page crashes to Sentry. Unset: the Sentry code is never downloaded |
 
 Never commit `.env` files; they are git-ignored.
 
@@ -120,15 +145,19 @@ Run from the repository root:
 | `npm run lint` | ESLint in both workspaces |
 | `npm start` | Start the API in production mode |
 | `npm run seed --workspace=backend` | Load demo accounts, fleet and five city demo routes into `MONGODB_URI` |
+| `npm run test:e2e` | End-to-end browser tests (Playwright) against a production build and a throwaway database |
+| `npm run benchmark --workspace=backend` | Routing benchmark; rewrites `docs/BENCHMARK.md` |
 
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 129 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security
+npm test --workspace=backend    # 138 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times
 npm test --workspace=frontend   # 51 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
+npx playwright install chromium # once, for the end-to-end tests
+npm run test:e2e                # 16 browser tests at desktop and phone sizes, including accessibility checks
 ```
 
-Backend tests run against an in-memory MongoDB, so no database setup is needed. [docs/TECHNICAL.md](docs/TECHNICAL.md#13-testing) has the full breakdown and the end-to-end smoke test results.
+Backend and end-to-end tests run against an in-memory MongoDB, so no database setup is needed. GitHub Actions runs all of these, plus lint, the build and `npm audit`, on every pull request. [docs/TECHNICAL.md](docs/TECHNICAL.md#13-testing) has the full breakdown and the end-to-end smoke test results.
 
 ## Deployment (free tiers, ₹0)
 
@@ -175,13 +204,16 @@ The website's security headers, including the Content Security Policy, are in `f
 hopr/
 ├── backend/        Express API: routes/, services/ (routing engine, traffic, fuel, dispatch,
 │                   tracking, analytics), models/, middleware/, tests/
-├── frontend/       React app: pages/, components/, hooks/, utils/, public/ (icons, manifest)
-└── docs/           TECHNICAL.md and PRD.md
+├── frontend/       React app: pages/, components/, hooks/, utils/, i18n/, offline/,
+│                   public/ (icons, manifest, service worker)
+├── e2e/            Playwright end-to-end and accessibility tests, README screenshots
+├── .github/        CI on every pull request; nightly encrypted database backup
+└── docs/           TECHNICAL.md, PRD.md, BENCHMARK.md, SECURITY.md, screenshots/
 ```
 
 ## Security
 
-Passwords are hashed with bcrypt. JWT sessions are revoked on password change, and accounts lock for 15 minutes after five failed logins. Every endpoint checks its role and validates and sanitises its input. Rate limits are layered by traffic type, helmet sets security headers, and production errors carry no internals. `npm audit` reports 0 vulnerabilities.
+Passwords are hashed with bcrypt. JWT sessions are revoked on password change, and accounts lock for 15 minutes after five failed logins. Every endpoint checks its role and validates and sanitises its input. Rate limits are layered by traffic type, helmet sets security headers on the API and a strict Content Security Policy protects the website, and production errors carry no internals. `npm audit` reports 0 vulnerabilities. [docs/SECURITY.md](docs/SECURITY.md) has the threat model, backups and incident steps.
 
 These limits are deliberate and documented in [TECHNICAL.md §8](docs/TECHNICAL.md#8-authentication-roles-and-security):
 - sessions are stored in `localStorage`

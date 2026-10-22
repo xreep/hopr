@@ -314,6 +314,13 @@ When an incident is reported, every planned or active route crossing it is flagg
 
 A driver's **delay report** shifts every remaining ETA by the reported minutes, and the customer tracking pages follow automatically.
 
+### 5.4 Travel times learned from the fleet
+
+Free live-traffic data does not exist for Indian cities, so Hopr learns from its own drivers (`services/learnedTraffic.js`):
+- **Recording:** each delivered leg on a real route compares the actual drive with the planned leg time. The actual drive is from leaving the previous stop (or the hub) to reaching this one, which is the delivery time minus the vehicle's time at the door. The result is stored as log(actual / planned) for the area (a 0.1° cell, about 11 km, around the route's hub) and IST hour. Legs more than 3× or less than 0.4× the plan are breaks or detours, not traffic, and are ignored. Simulated demo drives never count.
+- **Using it:** once an area and hour has 5 legs, planning, re-timing on start and recalculation multiply that hour's traffic factor by the learned correction. It is blended in gradually, since 20 legs carry as much weight as the model itself, and it is bounded between 0.6 and 2.2, so a few odd trips cannot swing the ETAs.
+- **Measuring it:** analytics reports arrival time accuracy, the average gap between the arrival time last given to the customer and the real arrival, plus the share within 10 minutes. It also reports how many legs have been learned and how many hour slots are in use.
+
 ---
 
 ## 6. Fuel estimation
@@ -453,7 +460,7 @@ Drivers can read only their own routes and proof images. Managers can complete a
 
 | Control | Implementation |
 |---|---|
-| HTTP headers | helmet on the API; on the website (`vercel.json`, also applied by `vite preview`) a Content Security Policy allowing only the site, the API (`*.onrender.com`), OpenFreeMap tiles and Google Fonts, plus `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy (tracking tokens never leave in a Referer), a permissions policy and HSTS. If the API is hosted elsewhere, add its origin to `connect-src` |
+| HTTP headers | helmet on the API; on the website (`vercel.json`, also applied by `vite preview`) a Content Security Policy allowing only the site (the typeface is self-hosted), the API (`*.onrender.com`), OpenFreeMap tiles and, when error tracking is on, Sentry, plus `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy (tracking tokens never leave in a Referer), a permissions policy and HSTS. If the API is hosted elsewhere, add its origin to `connect-src` |
 | CORS | only `FRONTEND_URL` |
 | Body size | 100 kB JSON / form; images 5 MB |
 | NoSQL injection | express-mongo-sanitize; search text is regex-escaped |
@@ -597,6 +604,7 @@ All KPIs come from recorded deliveries; nothing is simulated. The analytics wind
 | Route efficiency score | Planned km ÷ driven km × 100 (capped at 100), averaged over completed routes with GPS distance |
 | Vehicle utilization rate | Distinct vehicles used ÷ active vehicles × 100 |
 | Delivery completion rate | Delivered stops ÷ stops on dispatched routes × 100 |
+| Arrival time accuracy (added) | Average of \|real arrival − last arrival time given to the customer\| in minutes, where real arrival = delivery time − the vehicle's time at the door; plus the share within 10 minutes. Demo routes excluded |
 
 Also reported: capacity utilisation (load ÷ capacity), total distance, fuel cost and CO₂, kilometres and rupees saved by optimisation, and the change against the previous period of the same length. When there is no data a KPI shows "—" rather than an invented number.
 
@@ -654,15 +662,18 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 129 tests, in-memory MongoDB
+npm test --workspace=backend    # 138 tests, in-memory MongoDB
 npm test --workspace=frontend   # 51 tests, jsdom
+npm run test:e2e                # 16 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, the build, `npm audit` and the end-to-end tests on every pull request and every push to `main`.
+
 | Area | Tests | Highlights |
 |---|---|---|
-| Routing engine | 19 | Brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
+| Routing engine | 22 | Exactly optimal up to 8 stops and on a 9-stop case, never worse than the previous search, the same plan every time; brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
 | Auth | 10 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit |
 | Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
 | Routes and workflow | 15 | Planning API, batches, assignment, end-to-end driver workflow, delays, recalculation, incidents, re-timing on vehicle change and on start |
@@ -673,8 +684,21 @@ npm run build --workspace=frontend
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
+| Learned travel times | 6 | Leg timing against the plan, breaks and detours ignored, gradual and bounded correction, slower drives lead to later ETAs, demo drives never teach it, arrival accuracy |
 | Offline updates | 3 | Time it happened trusted only within a day and never in the future, start, failure and delivery recorded at those times, repeat refused |
 | Frontend | 51 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order, retry rules and week-old updates dropped, updates applied on the phone |
+
+**End-to-end tests (Playwright, 16).** These run against a production build and a throwaway in-memory database, at desktop size and at phone size for the driver and customer screens. They cover:
+- a visitor opening the demo from the homepage
+- planning from a spreadsheet, saving and auto-dispatching
+- a driver delivering with a drawn signature
+- a delivery made offline, held on the phone and sent on reconnect
+- customer tracking switched to Hindi, and an unknown tracking link
+- axe accessibility checks (WCAG 2.1 AA) on the homepage, sign-in, tracking, every manager screen and the driver panel. Any serious or critical issue fails the run.
+
+Lighthouse on the production build (phone, then desktop; performance, accessibility, best practices and SEO):
+- homepage: 70–87/100/100/100 and 98/100/100/100 (phone performance varies between runs)
+- sign-in: 89/100/100/100 and 100/100/100/100
 
 An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.
 
