@@ -1,15 +1,15 @@
 import { istHour, istDay } from '../utils/time.js'
 import { pointToSegment } from '../utils/geo.js'
 
-// Simulated traffic: a weekday congestion profile for Ranchi (multiplier on
-// free-flow travel time), plus live incidents (congestion zones, road closures)
-// that fleet managers report. Real-time traffic tiles from Mapbox are shown on
-// the map; ETAs use this model so they are deterministic and testable.
+// Simulated traffic: a weekday congestion profile typical of Indian cities (multiplier
+// on free-flow travel time, by IST hour), plus live incidents (congestion zones, road
+// closures) that fleet managers report. ETAs use this model so they are deterministic
+// and testable.
 const WEEKDAY_PROFILE = [
   1.0, 1.0, 1.0, 1.0, 1.0, 1.05, // 00-05
   1.15, 1.3, 1.55, 1.6, 1.45, 1.3, // 06-11 school + office peak
   1.25, 1.25, 1.25, 1.3, 1.4, 1.6, // 12-17
-  1.65, 1.5, 1.35, 1.2, 1.1, 1.05 // 18-23 evening peak (Main Road, Lalpur, Kanke Road)
+  1.65, 1.5, 1.35, 1.2, 1.1, 1.05 // 18-23 evening peak
 ]
 const SUNDAY_RELIEF = 0.85
 

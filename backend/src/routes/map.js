@@ -4,14 +4,14 @@ import axios from 'axios'
 import { authenticate } from '../middleware/auth.js'
 import { validateRequest } from '../middleware/validate.js'
 import { buildRouteGeometry } from '../services/geometry.js'
-import { DEFAULT_DEPOT } from '../config/fleet.js'
-import { RANCHI_CENTRE } from '../data/ranchiLocations.js'
-import { SERVICE_BBOX, matchLandmarks, dedupeSuggestions } from '../services/geocoding.js'
+import { INDIA_CENTRE } from '../data/indiaCities.js'
+import { INDIA_BBOX, matchLandmarks, dedupeSuggestions, parseNear } from '../services/geocoding.js'
+import Vehicle from '../models/Vehicle.js'
 
 const router = express.Router()
 
 // Geocoding providers: Mapbox when MAPBOX_TOKEN is set, otherwise the free
-// OpenStreetMap Photon API. Results are biased towards Ranchi and cached.
+// OpenStreetMap Photon API. Results are limited to India, ranked near the caller's hub, and cached.
 const providersDisabled = () => process.env.NODE_ENV === 'test'
 const mapboxToken = () => process.env.MAPBOX_TOKEN || null
 
@@ -29,16 +29,16 @@ function cached(key, loader) {
   return value
 }
 
-async function mapboxSearch(q, limit, { local = true } = {}) {
+async function mapboxSearch(q, limit, near) {
   const { data } = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`, {
     params: {
       access_token: mapboxToken(),
       limit,
       country: 'in',
-      proximity: RANCHI_CENTRE.join(','),
+      ...(near && { proximity: near.join(',') }),
       autocomplete: true,
       types: 'address,poi,neighborhood,locality,place,postcode',
-      ...(local && { bbox: SERVICE_BBOX.join(',') })
+      bbox: INDIA_BBOX.join(',')
     },
     timeout: 5000
   })
@@ -53,9 +53,10 @@ function photonLabel(p) {
     .join(', ')
 }
 
-async function photonSearch(q, limit, { local = true } = {}) {
+async function photonSearch(q, limit, near) {
+  const [lon, lat] = near || INDIA_CENTRE
   const { data } = await axios.get('https://photon.komoot.io/api/', {
-    params: { q, limit: limit + 3, lang: 'en', lat: RANCHI_CENTRE[1], lon: RANCHI_CENTRE[0], ...(local && { bbox: SERVICE_BBOX.join(',') }) },
+    params: { q, limit: limit + 3, lang: 'en', lat, lon, bbox: INDIA_BBOX.join(',') },
     headers: { 'User-Agent': 'Hopr route optimization (student project)' },
     timeout: 5000
   })
@@ -65,32 +66,29 @@ async function photonSearch(q, limit, { local = true } = {}) {
     .map(f => ({ label: photonLabel(f.properties), address: photonLabel(f.properties), coordinates: f.geometry.coordinates, source: 'osm' }))
 }
 
-async function search(q, limit) {
+async function search(q, limit, near = null) {
   if (providersDisabled()) {
     const err = new Error('Geocoding provider not available')
     err.status = 503
     throw err
   }
-  // Curated Ranchi landmarks first, then the provider: inside the Ranchi service area,
-  // widening to all of India only when nothing local matches. Repeats are removed.
-  const landmarks = matchLandmarks(q, limit)
-  const key = `${mapboxToken() ? 'mb' : 'osm'}:${limit}:${q.toLowerCase()}`
+  // Curated places first, then the provider (Mapbox, else OpenStreetMap), limited to
+  // India and ranked near the hub when one is given. Repeats are removed.
+  const landmarks = matchLandmarks(q, limit, near)
+  const nearKey = near ? near.map(n => n.toFixed(1)).join(',') : 'in'
+  const key = `${mapboxToken() ? 'mb' : 'osm'}:${limit}:${nearKey}:${q.toLowerCase()}`
   let provider = []
   try {
-    provider = await cached(key, async () => {
-      const lookup = mapboxToken()
-        ? (opts) => mapboxSearch(q, limit + 3, opts).catch(error => {
-          console.warn('Mapbox geocoding failed, falling back to OpenStreetMap:', error.message)
-          return photonSearch(q, limit + 3, opts)
-        })
-        : (opts) => photonSearch(q, limit + 3, opts)
-      const local = await lookup({ local: true })
-      return local.length ? local : lookup({ local: false })
-    })
+    provider = await cached(key, () => (mapboxToken()
+      ? mapboxSearch(q, limit + 3, near).catch(error => {
+        console.warn('Mapbox geocoding failed, falling back to OpenStreetMap:', error.message)
+        return photonSearch(q, limit + 3, near)
+      })
+      : photonSearch(q, limit + 3, near)))
   } catch (error) {
-    // The landmarks still help when the provider is down
+    // The curated places still help when the provider is down
     if (!landmarks.length) throw error
-    console.warn('Geocoding provider failed, returning landmarks only:', error.message)
+    console.warn('Geocoding provider failed, returning known places only:', error.message)
   }
   return dedupeSuggestions([...landmarks, ...provider], limit)
 }
@@ -101,17 +99,28 @@ function sendProviderError(res, error) {
   return res.status(502).json({ message: 'Geocoding service is unavailable, please try again' })
 }
 
-router.get('/config', authenticate, (req, res) => {
-  res.json({ depot: DEFAULT_DEPOT, centre: RANCHI_CENTRE, geocoder: mapboxToken() ? 'mapbox' : 'osm' })
+// Map settings plus the hubs the fleet is based at (quick picks for a batch's start point)
+router.get('/config', authenticate, async (req, res) => {
+  try {
+    const based = await Vehicle.find({ 'base.coordinates.1': { $exists: true } }).select('base').lean()
+    const hubs = [...new Map(based.map(v => [v.base.coordinates.join(), v.base])).values()]
+      .map(({ name, address, coordinates }) => ({ name, address, coordinates }))
+      .sort((a, b) => (a.name || a.address).localeCompare(b.name || b.address))
+    res.json({ centre: INDIA_CENTRE, hubs, geocoder: mapboxToken() ? 'mapbox' : 'osm' })
+  } catch (error) {
+    console.error('Map config failed:', error)
+    res.status(500).json({ message: 'Failed to load map settings' })
+  }
 })
 
 router.get('/suggest', authenticate, [
   query('q').isString().trim().isLength({ min: 3, max: 200 }).withMessage('Type at least 3 characters'),
   query('limit').optional().isInt({ min: 1, max: 8 }).toInt(),
+  query('near').optional().matches(/^-?\d{1,3}(\.\d+)?,-?\d{1,2}(\.\d+)?$/).withMessage('near must be "lng,lat"'),
   validateRequest
 ], async (req, res) => {
   try {
-    res.json({ suggestions: await search(req.query.q, req.query.limit || 5) })
+    res.json({ suggestions: await search(req.query.q, req.query.limit || 5, parseNear(req.query.near)) })
   } catch (error) {
     sendProviderError(res, error)
   }
