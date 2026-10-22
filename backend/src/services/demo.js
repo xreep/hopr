@@ -120,6 +120,14 @@ export async function ensureDemoFleet(users) {
   return vehicles
 }
 
+// A public demo starts ready to use: on a server in demo mode with no demo accounts yet
+// (a fresh database), load the demo data once at startup
+export async function seedDemoIfEmpty() {
+  if (!demoMode() || await User.exists({ email: DEMO_ACCOUNTS[1].email })) return false
+  await seedDemo()
+  return true
+}
+
 // One-click demo: accounts, a fleet in five cities and a fresh five-stop route in each.
 // Ravi's Ranchi route is assigned so the driver app has work; the others wait for
 // auto-dispatch, which pairs each with the driver based in that city.

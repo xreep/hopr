@@ -6,6 +6,7 @@ import { initMonitoring } from './services/monitoring.js'
 import { syncRetention } from './models/Upload.js'
 import TravelTimeStat from './models/TravelTimeStat.js'
 import { startNotificationClock } from './services/notify.js'
+import { seedDemoIfEmpty } from './services/demo.js'
 
 // H1: Fail fast on missing JWT_SECRET in production
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
@@ -34,6 +35,7 @@ const startServer = async () => {
   await connectDB()
   await syncRetention() // proof images expire after PROOF_RETENTION_DAYS
   await TravelTimeStat.syncIndexes() // learned travel times are keyed by kind of day too
+  if (await seedDemoIfEmpty()) console.log('Demo data loaded into the empty database')
   startSimulationClock() // demo morning drives, if any are running
   if (startNotificationClock()) console.log('Email notifications on') // maintenance alerts, weekly report
   app.listen(PORT, () => {

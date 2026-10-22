@@ -1,0 +1,30 @@
+# Render blueprint for the Hopr API (free plan). In Render: New > Blueprint, pick this
+# repository, then fill in the two values marked sync: false when asked.
+services:
+  - type: web
+    name: hopr-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci --omit=dev --workspace=backend
+    startCommand: npm start --workspace=backend
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Render creates a long random secret; nobody needs to see or paste it
+      - key: JWT_SECRET
+        generateValue: true
+      # Public demo: demo buttons, demo morning, demo data loaded on first start
+      - key: DEMO_MODE
+        value: "true"
+      # MongoDB Atlas connection string (Atlas > Connect > Drivers)
+      - key: MONGODB_URI
+        sync: false
+      # The Vercel address of the web app, e.g. https://hopr.vercel.app (no trailing slash)
+      - key: FRONTEND_URL
+        sync: false
