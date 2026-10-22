@@ -1,7 +1,7 @@
 # Hopr: Product Requirements Document
 
 **Product**: Hopr, a smart route optimization system for last-mile delivery
-**Market**: Ranchi, Jharkhand (single-city launch)
+**Market**: delivery operators across India (demo data in New Delhi, Mumbai, Bengaluru, Kolkata and Ranchi)
 **Collaborating organisation**: Unified Mentor
 **Reference products**: Google Maps, Onfleet, Routific
 **Status**: Phase 1 scope built and tested; deployment on free tiers
@@ -11,7 +11,7 @@
 
 ## 1. Problem
 
-Last-mile delivery is the most expensive and least predictable stage of logistics. Small and mid-sized delivery operators in Indian cities such as Ranchi still plan routes by hand or from static maps. The result:
+Last-mile delivery is the most expensive and least predictable stage of logistics. Small and mid-sized delivery operators across Indian cities still plan routes by hand or from static maps. The result:
 
 - **Inefficient sequencing**: drivers visit stops in the order they were written down, not the order that is cheapest to drive.
 - **Traffic delays**: plans ignore the morning and evening peaks on Main Road, Lalpur and Kanke Road, and road closures.
@@ -31,7 +31,7 @@ Customers feel it as late parcels and no idea when the driver will arrive.
 | Optimise delivery routes using algorithm-based logic | Cost-based sequencing with 2-opt and relocate improvement, traffic-aware | Optimised plan is never worse than the order as entered (enforced by tests) |
 | Reduce total travel distance and fuel consumption | Fuel cost in the objective, alternatives and savings shown on every plan | Savings in km and ₹ reported per route and in analytics |
 | Improve on-time delivery rates | Delivery windows in the optimiser, live ETAs, delay reports | On-time rate measured per day and per period |
-| Enable traffic-aware route adjustments | Ranchi traffic profile, incidents, recalculation from the driver's position | Affected routes flagged as soon as an incident is reported |
+| Enable traffic-aware route adjustments | Indian-city traffic profile, incidents, recalculation from the driver's position | Affected routes flagged as soon as an incident is reported |
 | Provide actionable insights for fleet managers | Dashboard alerts, live monitor, analytics with comparisons and CSV export | All six spec KPIs available with previous-period comparison |
 
 ### Secondary objectives
@@ -88,7 +88,7 @@ Status: ✅ built and tested.
 
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
-| RP-1 | Manual entry of delivery addresses | Address search suggests Ranchi places as you type; choosing one fills the address and coordinates; unknown addresses cannot be optimised until located | ✅ |
+| RP-1 | Manual entry of delivery addresses | Address search suggests places anywhere in India as you type, nearest the chosen hub first; choosing one fills the address and coordinates; unknown addresses cannot be optimised until located | ✅ |
 | RP-2 | CSV upload | A CSV with an address column (plus optional customer, phone, priority, window, weight, size, notes) fills the stop list; a downloadable template is provided; malformed rows are reported | ✅ |
 | RP-3 | Number and type of vehicles | Choose specific fleet vehicles (active only) or a vehicle type (bike, van, truck, electric van) and a count of 1–10 | ✅ |
 | RP-4 | Priority setting | Each stop is urgent, standard or low; urgent stops are visited earlier when the time cost is small | ✅ |
@@ -101,8 +101,8 @@ Status: ✅ built and tested.
 
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
-| TM-1 | Map API integration | Mapbox maps, geocoding and directions with a token; full functionality without one (OpenStreetMap geocoding, schematic map) | ✅ |
-| TM-2 | Traffic-aware suggestions | Travel times follow Ranchi's hourly traffic profile; the same stops can be ordered differently at peak and off-peak | ✅ |
+| TM-1 | Map API integration | Street maps, address search and road routing work with no paid key (OpenFreeMap, Photon, OSRM); Mapbox geocoding and directions are used when a server token is set | ✅ |
+| TM-2 | Traffic-aware suggestions | Travel times follow an Indian-city hourly traffic profile; the same stops can be ordered differently at peak and off-peak | ✅ |
 | TM-3 | Road closures and congestion | Managers report a closure or congestion zone on the map; routes crossing it are flagged | ✅ |
 | TM-4 | Dynamic recalculation | Remaining stops can be re-optimised from the driver's current position at the current time | ✅ |
 | TM-5 | Live monitoring | Every active route and driver on one map, refreshed every 10 s, with stale-GPS indication | ✅ |
@@ -111,7 +111,7 @@ Status: ✅ built and tested.
 
 | ID | Requirement | Acceptance criteria | Status |
 |---|---|---|---|
-| FO-1 | Fuel per route | Litres (or kWh), ₹ cost and CO₂ for every route, from the vehicle's mileage and Ranchi fuel prices | ✅ |
+| FO-1 | Fuel per route | Litres (or kWh), ₹ cost and CO₂ for every route, from the vehicle's mileage and Indian fuel prices (set per state) | ✅ |
 | FO-2 | Compare options by fuel efficiency | Each plan shows optimised, shortest-distance and as-entered options with distance, time, fuel and cost | ✅ |
 | FO-3 | Vehicle type selection | Bike, van, truck and electric van, each with realistic capacity, speed and mileage | ✅ |
 | FO-4 | Distance vs fuel cost | Distance and fuel cost shown side by side in the planner, route list, route detail and analytics | ✅ |
@@ -158,7 +158,7 @@ Status: ✅ built and tested.
 | NFR-4 | Scalable architecture | Grows with the fleet | Stateless API, indexed queries, routing engine as pure functions; shared cache and rate-limit store needed only when running several instances |
 | NFR-5 | Responsive UI | Mobile and desktop | Every page verified at 375 px and up to 1440 px |
 | NFR-6 | Accessibility | Usable by keyboard and screen reader | Visible focus, skip link, labelled controls, dialog focus handling, reduced motion respected |
-| NFR-7 | Cost | ₹0 | Free tiers only: Vercel, Render, MongoDB Atlas M0, OpenStreetMap Photon, optional Mapbox free tier |
+| NFR-7 | Cost | ₹0 | Free tiers and open services only: Vercel, Render, MongoDB Atlas M0, OpenFreeMap tiles, Photon geocoding, OSRM routing; Mapbox optional |
 
 ## 7. Data requirements
 
@@ -169,7 +169,7 @@ Status: ✅ built and tested.
 | Route | Total distance, estimated fuel, estimated delivery time, traffic impact factor, route status | Stops, depot, vehicle, driver, geometry, fuel cost, CO₂, violations, savings, live GPS, actuals |
 | Driver | Driver ID, contact details, assigned vehicle, performance metrics | Account status, last known location |
 
-**Data realism**: 16 real Ranchi locations geocoded from OpenStreetMap; the hub in Kokar; Ranchi retail fuel prices; India's grid emission factor for electric vehicles; vehicle profiles typical of Indian last-mile fleets (Hero Splendor+, Tata Ace, Tata Ace EV, Tata 407). A one-click demo builds a five-stop morning route through Ranchi with real delivery windows.
+**Data realism**: a hub and five real delivery points in each of New Delhi, Mumbai, Bengaluru, Kolkata and Ranchi, geocoded from OpenStreetMap; Indian retail fuel prices; India's grid emission factor for electric vehicles; vehicle profiles typical of Indian last-mile fleets (Hero Splendor+, Tata Ace, Tata Ace EV, Mahindra Jeeto, Tata 407) with state number plates. A one-click demo builds a five-stop morning route with real delivery windows in each city.
 
 ## 8. Key performance indicators
 
@@ -188,7 +188,7 @@ All six appear in Analytics with the previous period for comparison. Delivered-t
 
 **Assumptions (from the specification)**
 
-- Real-time traffic data is available: Hopr simulates Ranchi traffic deterministically and draws Mapbox live traffic when a token is set.
+- Real-time traffic data is available: Hopr simulates Indian-city traffic deterministically, and managers report live congestion and closures as incidents.
 - Drivers have GPS-enabled devices: the driver app shares location every 5 seconds, with manual fallbacks when GPS is denied.
 - Address input is accurate: address search confirms every stop's location before planning.
 
@@ -207,7 +207,7 @@ All six appear in Analytics with the previous period for comparison. Delivered-t
 |---|---|---|
 | Free API server sleeps when idle | First request after idle takes up to a minute | The app explains the delay; uptime ping; paid plan when budget allows |
 | Simulated traffic differs from a given day | ETAs off on unusual days | Incidents, recalculation and delay reports; live ETAs from GPS for customers |
-| Geocoding quality outside central Ranchi | Wrong pin for an address | Service-area restriction, landmark matching, the planner shows every pin on the map before optimising |
+| Geocoding quality in smaller towns | Wrong pin for an address | Results limited to India and ranked near the hub, curated places, and the planner shows every pin on a street map before optimising |
 | Drivers without data coverage | Gaps in live tracking | Stale-location state on the tracking page; a failed action shows an error so the driver can try again |
 
 ## 10. Release plan
@@ -216,8 +216,8 @@ All six appear in Analytics with the previous period for comparison. Delivered-t
 |---|---|---|
 | 1. Gap analysis | Specification vs codebase review | Done |
 | 2. Spec gaps and new features | Proof of delivery, live customer tracking, time windows, auto-dispatch, address autocomplete, spoken notifications, demo seeder | Done |
-| 3. Design | "Night Dispatch" design system and redesign of every page | Done |
-| 4. Testing | Unit and API tests (146), end-to-end smoke test, zero console errors | Done |
+| 3. Design | A design system and redesign of every page, later replaced by the light "road signage" system | Done |
+| 4. Testing | Unit and API tests (150), end-to-end smoke test, zero console errors | Done |
 | 5. Documentation and deployment | Technical documentation, PRD, README; Vercel + Render + Atlas | Documentation done; deployment needs the owner's accounts |
 
 ## 11. Future enhancements

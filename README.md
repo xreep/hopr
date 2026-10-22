@@ -1,6 +1,6 @@
 # Hopr
 
-Route optimization for last-mile delivery in Ranchi. Fleet managers plan multi-stop, multi-vehicle routes that account for traffic, delivery windows, priority and fuel; dispatch them to drivers; and watch them live. Drivers deliver with photo and signature proof. Customers follow their parcel on a live tracking link.
+Route optimization for last-mile delivery anywhere in India. Fleet managers plan multi-stop, multi-vehicle routes that account for traffic, delivery windows, priority and fuel; dispatch them to drivers; and watch them live. Drivers deliver with photo and signature proof. Customers follow their parcel on a live tracking link.
 
 - **Live app**: not deployed yet. See [Deployment](#deployment-free-tiers-0); add the URLs here once they exist.
   - Frontend: `https://<your-app>.vercel.app`
@@ -11,7 +11,7 @@ Route optimization for last-mile delivery in Ranchi. Fleet managers plan multi-s
 ## What it does
 
 **Fleet managers and admins**
-- Plan a batch: type addresses (Ranchi autocomplete) or upload a CSV, then set priority, delivery window and weight per stop
+- Plan a batch: type addresses (India-wide autocomplete, nearest the hub first) or upload a CSV, then set priority, delivery window and weight per stop
 - Choose vehicles: fleet vehicles, or a type (motorbike, van, truck, electric van) and a count
 - Optimise: sequence, ETAs in IST, fuel and CO₂, window violations, savings against the order as entered, and alternatives
 - Dispatch: assign by hand, or auto-dispatch with a preview of every pairing
@@ -40,8 +40,10 @@ These accounts are created by the demo seeder (below). They are demo credentials
 | Driver (Ravi Kumar Oraon) | driver@hopr.com | driver123 |
 | Driver (Pooja Kumari) | pooja.driver@hopr.com | driver123 |
 | Driver (Imran Ansari) | imran.driver@hopr.com | driver123 |
+| Driver (Kavya Reddy) | kavya.driver@hopr.com | driver123 |
+| Driver (Sourav Das) | sourav.driver@hopr.com | driver123 |
 
-The login page has one-click buttons for the first three. The seeder also creates four vehicles and a five-stop Ranchi morning route with delivery windows, assigned to Ravi. Re-running it is safe: it adds a fresh demo route and never overwrites passwords.
+The login page has one-click buttons for the first three. The seeder also creates six vehicles, each based at a hub in New Delhi, Mumbai, Bengaluru, Kolkata or Ranchi, and a five-stop morning route with delivery windows in each city. The Ranchi route is assigned to Ravi; the other four wait for auto-dispatch, which pairs each with the driver in that city. Re-running it is safe: it adds fresh demo routes and never overwrites passwords.
 
 ## Quick start
 
@@ -77,7 +79,7 @@ npm run dev
 
 The API runs on 5001 locally because macOS uses port 5000 for AirPlay Receiver. To use another port, set `PORT` in `backend/.env` and start the app with the matching proxy target, e.g. `VITE_PROXY_TARGET=http://localhost:5050 npm run dev` (a shell variable, read by `vite.config.js`).
 
-No map token is needed to try everything. Without one, Hopr uses OpenStreetMap for address search and draws a schematic map; add Mapbox tokens for street maps and road-following routes.
+No map key is needed. Street maps come from OpenFreeMap, address search from Photon and road-following routes from the public OSRM service, all built on OpenStreetMap. A server-side `MAPBOX_TOKEN` is optional and only swaps in Mapbox geocoding and directions.
 
 ## Environment variables
 
@@ -91,15 +93,14 @@ No map token is needed to try everything. Without one, Hopr uses OpenStreetMap f
 | `FRONTEND_URL` | yes in production | The frontend origin allowed by CORS, e.g. `https://your-app.vercel.app` (no trailing slash) |
 | `PORT` | no | Defaults to 5001 locally; Render sets it automatically |
 | `TRUST_PROXY` | no | Proxy hops to trust for client IPs; defaults to `1` in production |
-| `MAPBOX_TOKEN` | no | Server-side Mapbox token for geocoding and road directions |
-| `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: Ranchi retail 97.90, 92.60, 91.50 and ₹10/kWh) |
+| `MAPBOX_TOKEN` | no | Server-side Mapbox token; when set, Mapbox is tried first for geocoding and road directions, with OpenStreetMap as the fallback |
+| `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: typical Indian retail 97.90, 92.60, 91.50 and ₹10/kWh; set your state's prices) |
 
 ### Frontend (`frontend/.env`)
 
 | Variable | Required | Description |
 |---|---|---|
 | `VITE_API_URL` | yes | `/api` locally (through the dev proxy); the full Render URL ending in `/api` in production |
-| `VITE_MAPBOX_TOKEN` | no | Mapbox public token (starts with `pk.`) for street maps in the browser |
 
 Never commit `.env` files; they are git-ignored.
 
@@ -114,12 +115,12 @@ Run from the repository root:
 | `npm test` | All tests in both workspaces |
 | `npm run lint` | ESLint in both workspaces |
 | `npm start` | Start the API in production mode |
-| `npm run seed --workspace=backend` | Load demo accounts, fleet and a demo route into `MONGODB_URI` |
+| `npm run seed --workspace=backend` | Load demo accounts, fleet and five city demo routes into `MONGODB_URI` |
 
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 109 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics
+npm test --workspace=backend    # 113 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics
 npm test --workspace=frontend   # 37 tests: tracking animation, timing, session handling, dialogs, command palette
 ```
 
@@ -147,7 +148,7 @@ The free plan sleeps after 15 minutes without traffic, and the next request take
 
 1. Add New → Project → import the repository.
 2. Root directory `frontend`; framework preset Vite (build `npm run build`, output `dist`).
-3. Environment variables: `VITE_API_URL=https://<your-api>.onrender.com/api` and, optionally, `VITE_MAPBOX_TOKEN`.
+3. Environment variables: `VITE_API_URL=https://<your-api>.onrender.com/api`.
 4. Deploy, then set `FRONTEND_URL` on Render to the Vercel URL and redeploy the API.
 
 `frontend/vercel.json` rewrites every path to the app, so shared links such as `/track/<token>` open directly.
@@ -160,7 +161,7 @@ Seed the production database from your machine, pointing at Atlas:
 MONGODB_URI="<your Atlas connection string>" npm run seed --workspace=backend
 ```
 
-Then sign in as the fleet manager. **Load Ranchi demo** (Routes, or Admin) creates a fresh demo route whenever you need one.
+Then sign in as the fleet manager. **Load demo data** (Routes, or Admin) creates fresh demo routes in all five cities whenever you need them.
 
 ## Project structure
 
