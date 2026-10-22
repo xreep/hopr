@@ -64,6 +64,8 @@ const stopSchema = new mongoose.Schema({
   failedAt: Date,
   failureReason: { type: String, trim: true, maxlength: 300 },
   proof: proofSchema,
+  // Set when the driver app sent this update late (recorded offline): when it arrived
+  receivedAt: Date,
   issues: [issueSchema],
   // Unguessable capability for the public customer tracking page
   trackingToken: { type: String, index: true }
@@ -151,7 +153,12 @@ const routeSchema = new mongoose.Schema({
     _id: false
   }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  isDemo: { type: Boolean, default: false }
+  isDemo: { type: Boolean, default: false },
+  // Demo morning: a simulated drive (demo routes only), see services/simulation.js
+  simulation: {
+    startedAt: Date,
+    speedup: Number
+  }
 }, {
   timestamps: true
 })

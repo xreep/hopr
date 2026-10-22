@@ -4,7 +4,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import mongoSanitize from 'express-mongo-sanitize'
 import jwt from 'jsonwebtoken'
-import { jwtSecret } from './services/token.js'
+import { jwtSecret, JWT_ALGORITHM } from './services/token.js'
 
 import authRoutes from './routes/auth.js'
 import routeRoutes from './routes/routes.js'
@@ -62,7 +62,7 @@ function clientKey(req) {
   const header = req.headers.authorization
   if (header?.startsWith('Bearer ')) {
     try {
-      return `user:${jwt.verify(header.slice(7), jwtSecret()).id}`
+      return `user:${jwt.verify(header.slice(7), jwtSecret(), { algorithms: [JWT_ALGORITHM] }).id}`
     } catch { /* fall through to IP */ }
   }
   return `ip:${req.ip}`

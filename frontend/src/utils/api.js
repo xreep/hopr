@@ -24,6 +24,7 @@ api.interceptors.response.use(
     const url = error.config?.url || ''
     if (error.response?.status === 401 && !NO_REDIRECT.some(p => url.startsWith(p))) {
       localStorage.removeItem('token')
+      localStorage.removeItem('hopr:user')
       if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/track')) {
         window.location.href = '/login'
       }

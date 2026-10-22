@@ -19,6 +19,14 @@ export const DEMO_ACCOUNTS = [
   { name: 'Sourav Das', email: 'sourav.driver@hopr.com', password: 'driver123', role: 'driver', phone: '+91 90000 00007' }
 ]
 
+// A public demo runs with DEMO_MODE=true: it turns on one-click demo data and the demo
+// morning, and protects the demo accounts (whose passwords are published) from being
+// changed, deleted or locked out. Without it the demo endpoints do not exist, so a fleet
+// manager cannot create the known admin account and sign in with it.
+export const demoMode = () => process.env.DEMO_MODE === 'true'
+const DEMO_EMAILS = new Set(DEMO_ACCOUNTS.map(a => a.email))
+export const isDemoEmail = email => DEMO_EMAILS.has(String(email || '').toLowerCase())
+
 const hubOf = key => DEMO_CITIES.find(c => c.key === key).hub
 
 // One local driver and vehicle per city, based at that city's hub, with state number

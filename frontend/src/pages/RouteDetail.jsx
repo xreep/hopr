@@ -203,6 +203,7 @@ function StopRow({ stop }) {
               : <span>ETA <span className="eta-chip">{formatClock(stop.estimatedArrival)}</span>{etaDiff > 0
                 ? <span className="text-signal-amber">, {formatDuration(etaDiff)} later than planned</span>
                 : etaDiff < -5 ? <span className="text-ink-400">, ahead of plan</span> : null}</span>}
+          {stop.receivedAt && <span className="text-ink-400">Recorded on the phone without signal, received {formatClock(stop.receivedAt)}</span>}
           {(stop.windowStart || stop.windowEnd) && <span className="text-ink-300">Window {stop.windowStart || '…'} to {stop.windowEnd || '…'}</span>}
           {stop.windowStatus === 'late' && stop.status !== 'completed' && <StatusBadge status="late" label={`${stop.lateByMin} min late`} />}
           {stop.packageWeightKg > 0 && <span className="text-ink-400">{stop.packageWeightKg} kg, {stop.packageSize} parcel</span>}

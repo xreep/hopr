@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import Icon from './icons'
+import useDemoMode from '../hooks/useDemoMode'
 
 // One click: demo accounts, a fleet in five cities and a fresh five-stop route in each
 export default function DemoSeedButton({ className = 'btn btn-outline' }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
+  const demo = useDemoMode()
   const run = async () => {
     setBusy(true)
     try {
@@ -20,6 +22,7 @@ export default function DemoSeedButton({ className = 'btn btn-outline' }) {
       setBusy(false)
     }
   }
+  if (!demo) return null
   return (
     <button type="button" className={className} onClick={run} disabled={busy}>
       {busy ? <><span className="spinner spinner-sm" /> Preparing demo</> : <><Icon name="sparkle" />Load demo data</>}

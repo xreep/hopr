@@ -48,6 +48,20 @@ const planValidators = [
   body('depot.coordinates.*').optional().isFloat({ min: -180, max: 180 })
 ]
 
+// The driver app works offline and sends updates late: `at` is when the update actually
+// happened. It is trusted only within the last 24 hours and never in the future.
+const OFFLINE_WINDOW_MS = 24 * 3600000
+export function eventTime(at, now = new Date()) {
+  const when = at ? new Date(at) : null
+  if (!when || Number.isNaN(when.getTime()) || when > now || now - when > OFFLINE_WINDOW_MS) return now
+  return when
+}
+// An update that arrives more than two minutes after it happened was recorded offline:
+// keep when it arrived too, so managers can see which times came from the phone
+export const sentLate = (at, now = new Date()) => now - at > 2 * 60000
+
+const atValidator = body('at').optional({ values: 'falsy' }).isISO8601().withMessage('at must be an ISO date')
+
 function sendError(res, error, fallback) {
   if (error instanceof OptimizationError) {
     return res.status(error.status).json({ message: error.message })
@@ -254,14 +268,14 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
   }
 })
 
-router.patch('/:id/start', authenticate, async (req, res) => {
+router.patch('/:id/start', authenticate, [atValidator, validateRequest], async (req, res) => {
   try {
     const route = await loadAccessibleRoute(req, res)
     if (!route) return
     if (!route.driver) return res.status(409).json({ message: 'Assign a driver before starting the route' })
     if (route.status !== 'planned') return res.status(409).json({ message: `Route is already ${route.status}` })
 
-    const now = new Date()
+    const now = eventTime(req.body.at)
     route.status = 'active'
     route.startedAt = now
     await forecastFromStart(route, now)
@@ -280,6 +294,7 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
   body('status').isIn(['in_progress', 'completed', 'failed']).withMessage('Invalid status'),
   body('reason').if(body('status').equals('failed')).isString().trim().notEmpty().isLength({ max: 300 })
     .withMessage('A reason is required when a delivery fails'),
+  atValidator,
   validateRequest
 ], async (req, res) => {
   try {
@@ -299,18 +314,21 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
       return res.status(403).json({ message: 'Complete deliveries with proof of delivery' })
     }
 
+    const at = eventTime(req.body.at)
     if (route.status === 'planned') {
       route.status = 'active'
-      route.startedAt = new Date()
+      route.startedAt = at
     }
 
     const wasCompleted = route.status === 'completed'
     const { status } = req.body
     stop.status = status
     if (status === 'completed') {
-      stop.completedAt = new Date()
+      stop.completedAt = at
+      if (sentLate(at)) stop.receivedAt = new Date()
     } else if (status === 'failed') {
-      stop.failedAt = new Date()
+      stop.failedAt = at
+      if (sentLate(at)) stop.receivedAt = new Date()
       stop.failureReason = req.body.reason.trim()
     }
 
@@ -331,6 +349,7 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
 // Proof of delivery (Onfleet-style): photo and/or customer signature + optional note
 router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
   body('note').optional().isString().trim().isLength({ max: 500 }).withMessage('Note must be 500 characters or fewer'),
+  atValidator,
   validateRequest
 ], async (req, res) => {
   try {
@@ -370,7 +389,7 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
       saved[kind] = doc._id
     }
 
-    const now = new Date()
+    const now = eventTime(req.body.at)
     if (route.status === 'planned') {
       route.status = 'active'
       route.startedAt = now
@@ -378,6 +397,7 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
     const wasCompleted = route.status === 'completed'
     stop.status = 'completed'
     stop.completedAt = now
+    if (sentLate(now)) stop.receivedAt = new Date()
     stop.proof = {
       photo: saved.photo,
       signature: saved.signature,

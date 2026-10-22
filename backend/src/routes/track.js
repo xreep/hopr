@@ -5,6 +5,8 @@ import { VEHICLE_PROFILES, ARRIVING_RADIUS_M, STALE_LOCATION_SEC } from '../conf
 
 const router = express.Router()
 const TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/
+// A link keeps working for two days after the delivery is finished, then shows nothing
+export const LINK_LIFETIME_MS = 48 * 3600000
 
 const firstName = name => (name || '').trim().split(/\s+/)[0] || 'Your driver'
 const initials = name => (name || '').trim().split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '•'
@@ -17,12 +19,17 @@ router.get('/:token', async (req, res) => {
     if (!TOKEN_RE.test(token)) return res.status(404).json({ message: 'Tracking link not found' })
 
     const route = await Route.findOne({ 'stops.trackingToken': token })
-      .select('status stops geometry geometrySource vehicleType trafficEnabled driverLocation startedAt driver')
+      .select('status stops geometry geometrySource vehicleType trafficEnabled driverLocation startedAt driver simulation updatedAt')
       .populate('driver', 'name')
     if (!route) return res.status(404).json({ message: 'Tracking link not found' })
     const stop = route.stops.find(s => s.trackingToken === token)
 
     const now = new Date()
+    const finishedAt = stop.completedAt || stop.failedAt || (route.status === 'cancelled' ? route.updatedAt : null)
+    if (finishedAt && now - new Date(finishedAt) > LINK_LIFETIME_MS) {
+      return res.status(410).json({ message: 'This tracking link has expired' })
+    }
+
     const location = route.driverLocation?.coordinates?.length === 2 ? route.driverLocation : null
     const stale = location ? isStale(location.updatedAt, now) : true
     const done = stop.status === 'completed' || stop.status === 'failed'
@@ -34,12 +41,15 @@ router.get('/:token', async (req, res) => {
     else if (route.status === 'active') status = location && isArriving(location.coordinates, stop) ? 'arriving' : 'on_the_way'
 
     const live = (status === 'on_the_way' || status === 'arriving') && location
+    const simulated = Boolean(route.simulation?.startedAt) && route.status === 'active'
     let eta = null
     let path = null
     if (live) {
       const remaining = remainingPath(route, stop, location.coordinates)
       path = remaining.path
       eta = etaMinutes({ route, target: stop, path, now })
+      // A demo drive runs faster than real time: count down on its clock
+      if (simulated) eta.minutes = Math.max(1, Math.round(eta.minutes / route.simulation.speedup))
     }
 
     const steps = ['packed', 'on_the_way', 'arriving', 'delivered']
@@ -70,6 +80,7 @@ router.get('/:token', async (req, res) => {
       location: live ? { coordinates: location.coordinates, heading: location.heading ?? null, updatedAt: location.updatedAt, stale } : null,
       remainingPath: path,
       eta: eta ? { minutes: eta.minutes, distanceKm: eta.distanceKm, stopsBefore: eta.stopsBefore } : null,
+      demo: simulated ? { speedup: route.simulation.speedup } : null,
       arrivingRadiusM: ARRIVING_RADIUS_M,
       staleAfterSec: STALE_LOCATION_SEC,
       serverTime: now.toISOString()
