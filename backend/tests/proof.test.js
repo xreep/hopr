@@ -102,3 +102,24 @@ describe('F1 proof of delivery', () => {
     expect((await completeStop(other.auth, route._id, stop._id)).status).toBe(403)
   })
 })
+
+describe('proof image retention', () => {
+  it('lets MongoDB delete images after the retention period (90 days by default)', async () => {
+    await Upload.syncIndexes()
+    const indexes = await Upload.collection.indexes()
+    const ttl = indexes.find(i => i.name === 'proof_retention')
+    expect(ttl.key).toEqual({ createdAt: 1 })
+    expect(ttl.expireAfterSeconds).toBe(90 * 86400)
+  })
+
+  it('keeps the delivery record when the image has gone', async () => {
+    const { manager, driver, route, stop } = await setup()
+    await completeStop(driver.auth, route._id, stop._id, { note: 'Left with the guard' })
+    await Upload.deleteMany({}) // what the expiry does
+    const detail = await api().get(`/api/routes/${route._id}`).set(manager.auth)
+    const done = detail.body.route.stops.find(s => s._id === stop._id)
+    expect(done.status).toBe('completed')
+    expect(done.proof.note).toBe('Left with the guard')
+    expect((await api().get(`/api/uploads/${done.proof.photo}`).set(manager.auth)).status).toBe(404)
+  })
+})

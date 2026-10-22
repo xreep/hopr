@@ -14,9 +14,12 @@
     "build": "npm run build --workspaces",
     "start": "npm run start --workspace=backend",
     "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces"
+    "lint": "npm run lint --workspaces",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
     "concurrently": "^8.2.2"
   }
 }

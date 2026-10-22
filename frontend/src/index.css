@@ -165,6 +165,7 @@
 
   /* ---------- Tables ---------- */
   .table-container { overflow-x: auto; position: relative; } /* contains sr-only cells so they cannot widen the page */
+  .table-container:focus-visible { outline: 2px solid var(--h-blue); outline-offset: 2px; }
   .table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   .table th, .table td { padding: 0.7rem 0.95rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--h-line); }
   .table th { font-weight: 700; font-size: 0.75rem; color: var(--h-ink-3); background: var(--h-sunken); white-space: nowrap; }
@@ -365,7 +366,7 @@
     font: 800 11px/1 Overpass, sans-serif; color: #FFFFFF; background: var(--h-blue); border: 2px solid #FFFFFF; box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
   }
   .driver-marker.stale .driver-pulse { display: none; }
-  .driver-marker.stale .driver-avatar { background: #8A929B; }
+  .driver-marker.stale .driver-avatar { background: #5F6973; } /* grey with 6:1 contrast for the initials */
   .maplibregl-ctrl-attrib { font-size: 10px; }
 
   /* ---------- Autocomplete ---------- */
@@ -560,6 +561,7 @@
   /* ---------- Public tracking page (customer, mobile-first) ---------- */
   .track-page { min-height: 100vh; display: flex; flex-direction: column; background: var(--h-canvas); }
   .track-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 1rem; background: var(--h-surface); border-bottom: 1px solid var(--h-line); }
+  .track-main { display: flex; flex-direction: column; flex: 1; }
   .track-map { position: relative; height: 52vh; min-height: 300px; }
   .track-map .map-container { border-radius: 0; }
   .track-stale {
@@ -614,7 +616,7 @@
   .sign-arrow { display: inline-flex; width: 1.5rem; height: 1.5rem; align-items: center; justify-content: center; }
   .sign-city { font-weight: 800; font-size: 1.25rem; }
   .sign-hub { font-weight: 600; font-size: 0.875rem; color: #D5EADC; }
-  .sign-note { margin-top: 0.75rem; font-size: 0.75rem; color: #BFDCC9; }
+  .sign-note { margin-top: 0.75rem; font-size: 0.75rem; color: #E6F2EA; } /* 5.7:1 on sign green */
 
   @media (max-width: 1023px) {
     .login-page { grid-template-columns: minmax(0, 1fr); }
@@ -708,4 +710,14 @@
 
 @layer components {
   .offline-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: #FFF8E1; border: 1px solid #F0DFA6; border-left: 4px solid var(--h-yellow); }
+}
+
+@layer components {
+  .eta-learning { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eta-learning > div { padding: 0.95rem 1.1rem; }
+  .eta-learning > div + div { border-left: 1px solid var(--h-line); }
+  @media (max-width: 640px) {
+    .eta-learning { grid-template-columns: minmax(0, 1fr); }
+    .eta-learning > div + div { border-left: 0; border-top: 1px solid var(--h-line); }
+  }
 }

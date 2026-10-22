@@ -55,6 +55,8 @@ function hindiVoice() {
 
 export function speak(text, { lang = 'en' } = {}) {
   if (!text || muted || !isSpeechSupported()) return false
+  // Browsers are removing speech before the visitor has interacted with the page
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return false
   try {
     const synth = window.speechSynthesis
     synth.cancel()

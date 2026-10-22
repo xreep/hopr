@@ -143,7 +143,7 @@ router.patch('/users/:id/status', authenticate, authorize('admin'), protectDemoA
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { isActive: req.body.isActive },
+      { isActive: req.body.isActive, ...(req.body.isActive && { pendingApproval: false }) },
       { new: true }
     ).select('-password')
 

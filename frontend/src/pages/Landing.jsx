@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import MapView from '../components/MapView'
+import MapView, { SchematicMap } from '../components/MapView'
 import DirectionSign from '../components/DirectionSign'
 import { StatCard } from '../components/ui'
 import Icon, { HopMark } from '../components/icons'
@@ -10,6 +10,7 @@ import { errorMessage } from '../utils/api'
 import { DEMO_USERS, DEMO_MISSING } from '../utils/demo'
 import { pointAlong, slicePolyline, stopsAlongKm } from '../utils/geo'
 import useMediaQuery from '../hooks/useMediaQuery'
+import useWhenIdle from '../hooks/useWhenIdle'
 import useDemoMode from '../hooks/useDemoMode'
 import ROUTE from '../data/landingRoute.json'
 
@@ -90,14 +91,19 @@ function useDriveClock(still) {
 function HeroDrive() {
   const still = useMediaQuery('(prefers-reduced-motion: reduce)')
   const [simMin, ref] = useDriveClock(still)
+  // Phones load the street map on the first touch or scroll; larger screens once idle
+  const streetMap = useWhenIdle({ waitForInteraction: useMediaQuery('(max-width: 640px)') })
   const drive = driveAt(simMin)
   const position = pointAlong(ROUTE.line, drive.km)
   const finished = drive.delivered === ROUTE.stops.length
+  // Redraw the driven and remaining lines every 300 m, not every frame: the van marker
+  // moves smoothly on its own, and re-cutting a 1,200-point line each frame is costly
+  const cutKm = Math.floor(drive.km / 0.3) * 0.3
 
   const map = useMemo(() => ({
     lines: [
-      { id: 'driven', coordinates: slicePolyline(ROUTE.line, 0, drive.km), color: '#8A929B', width: 4 },
-      { id: 'ahead', coordinates: slicePolyline(ROUTE.line, drive.km), width: 4.5 }
+      { id: 'driven', coordinates: slicePolyline(ROUTE.line, 0, cutKm), color: '#8A929B', width: 4 },
+      { id: 'ahead', coordinates: slicePolyline(ROUTE.line, cutKm), width: 4.5 }
     ],
     points: [
       { id: 'hub', coordinates: ROUTE.depot.coordinates, label: 'H', variant: 'depot', title: ROUTE.depot.name },
@@ -109,12 +115,14 @@ function HeroDrive() {
         title: s.place
       }))
     ]
-  }), [drive.km, drive.delivered])
+  }), [cutKm, drive.delivered])
 
   return (
     <div className="landing-drive" ref={ref}>
       <div className="landing-map">
-        <MapView lines={map.lines} points={map.points} driver={{ coordinates: position, initials: 'PK' }} fitKey="landing" height="100%" />
+        {streetMap
+          ? <MapView lines={map.lines} points={map.points} driver={{ coordinates: position, initials: 'PK' }} fitKey="landing" height="100%" />
+          : <SchematicMap lines={map.lines} points={map.points} driver={{ coordinates: position, initials: 'PK' }} fitKey="landing" height="100%" />}
       </div>
       <aside className="landing-sheet" aria-label="Route sheet, New Delhi demo route">
         <div className="landing-sheet-head">

@@ -111,3 +111,32 @@ describe('tracking links and late updates', () => {
     expect(saved.stops.id(second._id).receivedAt).toBeUndefined()
   })
 })
+
+describe('sign-up approval outside demo mode', () => {
+  afterEach(() => { process.env.DEMO_MODE = 'true' })
+
+  it('makes a new driver wait for a manager before signing in', async () => {
+    delete process.env.DEMO_MODE
+    const signup = await api().post('/api/auth/register').send({ name: 'New Driver', email: 'new.driver@example.com', password: 'secret123' })
+    expect(signup.status).toBe(201)
+    expect(signup.body.pendingApproval).toBe(true)
+    expect(signup.body.token).toBeUndefined()
+
+    const early = await signIn('new.driver@example.com', 'secret123')
+    expect(early.status).toBe(401)
+    expect(early.body.message).toMatch(/waiting for a fleet manager/)
+
+    const manager = await createUser('fleet_manager')
+    expect((await api().get('/api/dashboard').set(manager.auth)).body.driversAwaitingApproval).toBe(1)
+    const pending = await User.findOne({ email: 'new.driver@example.com' })
+    const approve = await api().patch(`/api/drivers/${pending._id}/status`).set(manager.auth).send({ isActive: true })
+    expect(approve.body.driver.pendingApproval).toBe(false)
+    expect((await signIn('new.driver@example.com', 'secret123')).status).toBe(200)
+  })
+
+  it('lets demo visitors sign up and start straight away', async () => {
+    const signup = await api().post('/api/auth/register').send({ name: 'Demo Visitor', email: 'visitor@example.com', password: 'secret123' })
+    expect(signup.status).toBe(201)
+    expect(signup.body.token).toBeTruthy()
+  })
+})

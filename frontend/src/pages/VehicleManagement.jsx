@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
-import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
+import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } from '../components/ui'
 import { VEHICLE_TYPES, FUEL_UNITS, VEHICLE_ICONS, vehicleTypeLabel } from '../config'
 import Icon from '../components/icons'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -187,7 +187,7 @@ export default function VehicleManagement() {
         {!vehicles ? <SkeletonRows label="Loading vehicles" /> : list.length === 0 ? (
           <EmptyState title="No vehicles found" action={<button className="btn btn-primary btn-sm" onClick={() => open()}>Add your first vehicle</button>} />
         ) : (
-          <div className="table-container">
+          <TableRegion label="Vehicles">
             <table className="table">
               <thead>
                 <tr><th>Vehicle</th><th>Type</th><th>Fuel and efficiency</th><th>Capacity</th><th>Plate</th><th>Status</th><th>Driver</th><th>Next service</th><th className="text-right"><span className="sr-only">Actions</span></th></tr>
@@ -216,7 +216,7 @@ export default function VehicleManagement() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
         )}
       </div>
 

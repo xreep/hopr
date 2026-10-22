@@ -7,6 +7,7 @@ import { authenticate, authorize } from '../middleware/auth.js'
 import { validateRequest } from '../middleware/validate.js'
 import { planDispatch, scoreCandidate } from '../services/dispatch.js'
 import { applyVehicle } from '../services/routePlanning.js'
+import * as notify from '../services/notify.js'
 
 const router = express.Router()
 
@@ -87,6 +88,7 @@ router.post('/confirm', authenticate, authorize('admin', 'fleet_manager'), [
       route.assignedAt = new Date()
       await applyVehicle(route, candidate.vehicle)
       await route.save()
+      notify.inBackground(notify.routeAssigned(route, candidate.driver._id))
       seenDrivers.add(String(a.driver))
       seenVehicles.add(String(a.vehicle))
       assigned.push({ route: route._id, routeId: route.routeId, driver: candidate.driver.name })

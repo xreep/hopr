@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
-import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
+import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } from '../components/ui'
 import { formatDate } from '../utils/time'
 import DemoSeedButton from '../components/DemoSeedButton'
 import useDemoMode from '../hooks/useDemoMode'
@@ -141,7 +141,7 @@ export default function AdminPanel() {
           <input type="search" className="form-input flex-1 min-w-[180px]" placeholder="Search name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search users" />
         </div>
         {!users ? <SkeletonRows label="Loading users" /> : list.length === 0 ? <EmptyState title="No users found" /> : (
-          <div className="table-container">
+          <TableRegion label="Users">
             <table className="table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Phone</th><th>Status</th><th>Last login</th><th className="text-right">Actions</th></tr></thead>
               <tbody>
@@ -166,7 +166,7 @@ export default function AdminPanel() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
         )}
       </div>
 
@@ -176,6 +176,7 @@ export default function AdminPanel() {
           <dl className="detail-list">
             <dt>Street maps</dt><dd>OpenFreeMap (OpenStreetMap data), no key needed</dd>
             <dt>Geocoding (server)</dt><dd>{config ? (config.geocoder === 'mapbox' ? 'Mapbox Geocoding API' : 'OpenStreetMap Photon (set MAPBOX_TOKEN on Render for Mapbox)') : '…'}</dd>
+            <dt>Email notifications</dt><dd>{config ? (config.email ? 'On (Resend)' : 'Off. Set RESEND_API_KEY and EMAIL_FROM on Render to send them') : '…'}</dd>
             <dt>Hubs</dt><dd>{config ? (config.hubs?.length ? config.hubs.map(h => h.name || h.address).join(', ') : 'None yet. Set a home hub on each vehicle.') : '…'}</dd>
             <dt>Fuel prices</dt><dd>Indian retail defaults; set FUEL_PRICE_* on the server for your state</dd>
           </dl>

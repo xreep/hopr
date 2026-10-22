@@ -75,6 +75,8 @@ const vehicleSchema = new mongoose.Schema({
   nextMaintenance: {
     type: Date
   },
+  // The service date managers were last emailed about (one alert per date)
+  maintenanceNotifiedFor: Date,
   totalDistance: {
     type: Number,
     default: 0

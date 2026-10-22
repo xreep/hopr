@@ -44,7 +44,12 @@ export default function Login() {
         const user = await login(form.email, form.password)
         toast.success(`Welcome back, ${user.name.split(' ')[0]}`)
       } else {
-        await register({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined })
+        const created = await register({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined })
+        if (created.pendingApproval) {
+          toast.success(created.message, { duration: 8000 })
+          setMode('login')
+          return
+        }
         toast.success('Account created. You\'re registered as a driver.')
       }
       navigate('/dashboard')
@@ -78,7 +83,7 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <section className="login-main" aria-label="Sign in">
+      <main className="login-main" aria-label="Sign in">
         <Link to="/" className="brand" aria-label="Hopr home">
           <HopMark size={32} />Hopr
         </Link>
@@ -86,7 +91,7 @@ export default function Login() {
         <div className="login-form">
           <h1 className="text-h1 font-extrabold">{mode === 'login' ? 'Sign in' : 'Create a driver account'}</h1>
           <p className="text-body text-ink-400 mt-1 mb-6">
-            {mode === 'login' ? 'Plan routes, dispatch drivers or start your deliveries.' : 'New accounts start as drivers. An admin can change your role.'}
+            {mode === 'login' ? 'Plan routes, dispatch drivers or start your deliveries.' : 'New accounts start as drivers. A fleet manager approves new accounts before they can sign in.'}
           </p>
 
           <form onSubmit={handleSubmit} noValidate>
@@ -144,7 +149,7 @@ export default function Login() {
         </div>
 
         <p className="text-micro text-ink-400">Route optimisation for last-mile delivery in India</p>
-      </section>
+      </main>
 
       <aside className="login-aside" aria-label="About Hopr">
         <DirectionSign title="Plan, dispatch and track deliveries across India."

@@ -2,6 +2,10 @@ import 'dotenv/config'
 import mongoose from 'mongoose'
 import app from './app.js'
 import { startSimulationClock } from './services/simulation.js'
+import { initMonitoring } from './services/monitoring.js'
+import { syncRetention } from './models/Upload.js'
+import TravelTimeStat from './models/TravelTimeStat.js'
+import { startNotificationClock } from './services/notify.js'
 
 // H1: Fail fast on missing JWT_SECRET in production
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
@@ -26,8 +30,12 @@ const connectDB = async () => {
 }
 
 const startServer = async () => {
+  if (await initMonitoring()) console.log('Error tracking on')
   await connectDB()
+  await syncRetention() // proof images expire after PROOF_RETENTION_DAYS
+  await TravelTimeStat.syncIndexes() // learned travel times are keyed by kind of day too
   startSimulationClock() // demo morning drives, if any are running
+  if (startNotificationClock()) console.log('Email notifications on') // maintenance alerts, weekly report
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
   })
