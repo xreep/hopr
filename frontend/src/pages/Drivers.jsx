@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
-import { StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
+import { StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } from '../components/ui'
 import { formatKm, initials } from '../utils/format'
 import { relativeTime } from '../utils/time'
 import Icon from '../components/icons'
@@ -93,7 +93,7 @@ export default function Drivers() {
         {!drivers ? <SkeletonRows label="Loading drivers" /> : list.length === 0 ? (
           <EmptyState title="No drivers yet">Drivers can register from the login page, or an admin can create them.</EmptyState>
         ) : (
-          <div className="table-container">
+          <TableRegion label="Drivers">
             <table className="table">
               <thead>
                 <tr><th>Driver</th><th>Status</th><th>Vehicle</th><th>Delivered</th><th>On time</th><th>Completed</th><th>Avg time</th><th>Distance</th><th>Last GPS</th><th className="text-right"><span className="sr-only">Actions</span></th></tr>
@@ -137,7 +137,7 @@ export default function Drivers() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableRegion>
         )}
       </div>
     </div>

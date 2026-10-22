@@ -78,7 +78,7 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <section className="login-main" aria-label="Sign in">
+      <main className="login-main" aria-label="Sign in">
         <Link to="/" className="brand" aria-label="Hopr home">
           <HopMark size={32} />Hopr
         </Link>
@@ -144,7 +144,7 @@ export default function Login() {
         </div>
 
         <p className="text-micro text-ink-400">Route optimisation for last-mile delivery in India</p>
-      </section>
+      </main>
 
       <aside className="login-aside" aria-label="About Hopr">
         <DirectionSign title="Plan, dispatch and track deliveries across India."

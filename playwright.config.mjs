@@ -21,7 +21,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
-    { name: 'phone', use: { ...devices['Pixel 7'] }, testMatch: /driver|tracking/ }
+    { name: 'phone', use: { ...devices['Pixel 7'] }, testMatch: /driver|tracking|accessibility/ }
   ],
   webServer: [
     {
