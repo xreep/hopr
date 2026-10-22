@@ -14,6 +14,7 @@ import { VEHICLE_TYPES, PRIORITIES, MAX_STOPS_PER_BATCH, MAX_VEHICLES_PER_BATCH 
 import { addMinutes } from '../utils/time.js'
 import { haversineKm } from '../utils/geo.js'
 import User from '../models/User.js'
+import { recordLeg } from '../services/learnedTraffic.js'
 
 const router = express.Router()
 router.param('id', objectIdParam)
@@ -339,6 +340,7 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
     route.refreshProgress()
     await route.save()
     await recordCompletion(route, wasCompleted)
+    if (status === 'completed') await recordLeg(route, stop).catch(() => null)
 
     res.json({ route })
   } catch (error) {
@@ -410,6 +412,7 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
     route.refreshProgress()
     await route.save()
     await recordCompletion(route, wasCompleted)
+    await recordLeg(route, stop).catch(() => null) // teaches planning how long this leg really took
 
     res.json({ route: await populateRoute(Route.findById(route._id)) })
   } catch (error) {

@@ -15,7 +15,7 @@
 // around the depot, then each vehicle's route is optimised independently.
 
 import { haversineKm, isValidCoordinate, angleFrom } from '../utils/geo.js'
-import { formatIST, hhmmToMinutes, istMinutesOfDay, addMinutes, isHHMM } from '../utils/time.js'
+import { formatIST, hhmmToMinutes, istMinutesOfDay, istHour, addMinutes, isHHMM } from '../utils/time.js'
 import { timeOfDayFactor, legIncidentEffect, trafficLevel } from './traffic.js'
 import { estimateFuel } from './fuel.js'
 import {
@@ -96,7 +96,7 @@ export function normalizeStops(stops, { maxStops = MAX_STOPS_PER_ROUTE } = {}) {
 }
 
 // Precomputes everything the simulation needs so the local search inner loop is cheap.
-function buildContext({ depot, stops, vehicle, departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices }) {
+function buildContext({ depot, stops, vehicle, departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices, learnedFactors }) {
   const points = [depot.coordinates, ...stops.map(s => s.coordinates)]
   const n = points.length
   const closures = (incidents || []).filter(i => i.type === 'closure')
@@ -126,7 +126,9 @@ function buildContext({ depot, stops, vehicle, departureTime, trafficEnabled, in
   const hourFactors = []
   const firstHourStart = -(depMinOfDay % 60)
   for (let h = 0; h < 72; h++) {
-    hourFactors.push(trafficEnabled ? timeOfDayFactor(addMinutes(departure, firstHourStart + h * 60 + 1)) : 1)
+    const at = addMinutes(departure, firstHourStart + h * 60 + 1)
+    // The traffic model, corrected by what the fleet's own drives have shown (learnedTraffic.js)
+    hourFactors.push(trafficEnabled ? timeOfDayFactor(at) * (learnedFactors?.[istHour(at)] ?? 1) : 1)
   }
   const factorAt = t => hourFactors[Math.min(71, Math.max(0, Math.floor((t - firstHourStart) / 60)))]
 
@@ -520,7 +522,8 @@ export function optimizeRoute({
   fuelPrices = defaultFuelPrices(),
   timeBudgetMs = OPTIMIZER_TIME_BUDGET_MS,
   includeAlternatives = true,
-  strategy = 'ils'
+  strategy = 'ils',
+  learnedFactors = null
 } = {}) {
   const computeStarted = Date.now()
   const normalized = normalizeStops(stops)
@@ -532,7 +535,8 @@ export function optimizeRoute({
     trafficEnabled,
     incidents,
     returnToDepot,
-    fuelPrices
+    fuelPrices,
+    learnedFactors
   })
   const deadline = computeStarted + timeBudgetMs
   const order = searchBestOrder(ctx, 'cost', deadline, { strategy })
@@ -585,12 +589,12 @@ export function bestSequence({
 // route is handed to a different vehicle: same stops and distance, new timings and fuel.
 export function retimeSequence({
   depot, stops, vehicle, departureTime, trafficEnabled = true, incidents = [], returnToDepot = false,
-  fuelPrices = defaultFuelPrices()
+  fuelPrices = defaultFuelPrices(), learnedFactors = null
 }, sequence = stops.map((_, i) => i)) {
   const computeStarted = Date.now()
   const ctx = buildContext({
     depot: resolveDepot(depot), stops: normalizeStops(stops), vehicle: resolveVehicle(vehicle),
-    departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices
+    departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices, learnedFactors
   })
   return buildResult(ctx, sequence, { alternatives: [], computeStarted })
 }

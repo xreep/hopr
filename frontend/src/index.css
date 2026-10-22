@@ -709,3 +709,13 @@
 @layer components {
   .offline-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: #FFF8E1; border: 1px solid #F0DFA6; border-left: 4px solid var(--h-yellow); }
 }
+
+@layer components {
+  .eta-learning { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eta-learning > div { padding: 0.95rem 1.1rem; }
+  .eta-learning > div + div { border-left: 1px solid var(--h-line); }
+  @media (max-width: 640px) {
+    .eta-learning { grid-template-columns: minmax(0, 1fr); }
+    .eta-learning > div + div { border-left: 0; border-top: 1px solid var(--h-line); }
+  }
+}

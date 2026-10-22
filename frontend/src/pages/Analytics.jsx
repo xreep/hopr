@@ -106,6 +106,27 @@ export default function Analytics() {
           hint={`${formatINR(kpis.optimizationSavingsCost)} in fuel against the order entered, ${kpis.co2Kg} kg CO₂ emitted`} />
       </div>
 
+      <section className="card mb-6 eta-learning" aria-label="Arrival times">
+        <div>
+          <p className="stats-label">Arrival time accuracy</p>
+          <p className="stats-value">{kpis.etaErrorMin === null ? '—' : <>{Math.round(kpis.etaErrorMin)}<span className="stats-suffix">min</span></>}</p>
+          <p className="stats-hint">
+            {kpis.etaErrorMin === null
+              ? 'Average gap between the arrival time given to the customer and the real one, once drivers deliver'
+              : `Average gap between the arrival time given to the customer and the real one. ${kpis.etaWithin10Pct}% within 10 minutes.`}
+          </p>
+        </div>
+        <div>
+          <p className="stats-label">Travel times learned from your drivers</p>
+          <p className="stats-value">{data.learning?.legs ?? 0}<span className="stats-suffix">legs</span></p>
+          <p className="stats-hint">
+            {data.learning?.hoursInUse
+              ? `Planning now uses what real drives showed for ${data.learning.hoursInUse} hour slot${data.learning.hoursInUse === 1 ? '' : 's'} across ${data.learning.areas} area${data.learning.areas === 1 ? '' : 's'}.`
+              : 'Each delivered leg is compared with the plan. After 5 legs in an area and hour, planning starts correcting its traffic model.'}
+          </p>
+        </div>
+      </section>
+
       <div className="grid grid-2 gap-6 mb-6">
         <ChartCard title="Deliveries per day" caption={`${kpis.totalDeliveries} delivered, ${kpis.failedDeliveries} failed`}>
           <Bar data={{

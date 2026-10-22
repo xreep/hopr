@@ -1,4 +1,5 @@
 import express from 'express'
+import { learningSummary } from '../services/learnedTraffic.js'
 import { query } from 'express-validator'
 import Route from '../models/Route.js'
 import Vehicle from '../models/Vehicle.js'
@@ -36,12 +37,13 @@ router.get('/', authenticate, authorize('admin', 'fleet_manager'), rangeQuery, a
   try {
     const range = req.query.range || '30d'
     const { start, end, prevStart } = rangeWindow(range)
-    const [routes, previousRoutes, vehicles] = await Promise.all([
+    const [routes, previousRoutes, vehicles, learning] = await Promise.all([
       routesBetween(start, end),
       routesBetween(prevStart, start),
-      Vehicle.find().select('vehicleId name type status').lean()
+      Vehicle.find().select('vehicleId name type status').lean(),
+      learningSummary()
     ])
-    res.json(buildAnalytics({ routes, previousRoutes, vehicles, range, now: end }))
+    res.json({ ...buildAnalytics({ routes, previousRoutes, vehicles, range, now: end }), learning })
   } catch (error) {
     console.error('Analytics error:', error)
     res.status(500).json({ message: 'Failed to fetch analytics' })

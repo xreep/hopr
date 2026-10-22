@@ -3,6 +3,7 @@ import Vehicle from '../models/Vehicle.js'
 import User from '../models/User.js'
 import TrafficIncident from '../models/TrafficIncident.js'
 import { planBatch, optimizeRoute, retimeSequence, OptimizationError } from './routeOptimizer.js'
+import { learnedFactors } from './learnedTraffic.js'
 import { buildRouteGeometry, isRoadGeometry } from './geometry.js'
 import { DEFAULT_DEPOT, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
 
@@ -51,8 +52,10 @@ export async function resolvePlanningVehicles({ vehicleIds, vehicleType = 'van',
 export async function planFromRequest(body) {
   const vehicles = await resolvePlanningVehicles(body)
   const incidents = incidentsForOptimizer(await TrafficIncident.findActive())
+  const depot = body.depot?.coordinates ? body.depot : DEFAULT_DEPOT
   const plan = planBatch({
-    depot: body.depot?.coordinates ? body.depot : DEFAULT_DEPOT,
+    depot,
+    learnedFactors: await learnedFactors(depot.coordinates),
     stops: body.stops.map(pickStop),
     vehicles,
     departureTime: body.departureTime || new Date(),
@@ -155,7 +158,8 @@ async function retimeStops(route, vehicle, departureTime) {
     departureTime,
     trafficEnabled: route.trafficEnabled !== false,
     returnToDepot: Boolean(route.returnToDepot),
-    incidents: incidentsForOptimizer(await TrafficIncident.findActive())
+    incidents: incidentsForOptimizer(await TrafficIncident.findActive()),
+    learnedFactors: await learnedFactors(route.depot?.coordinates)
   })
   const byId = new Map(ordered.map(s => [s._id.toString(), s]))
   return { result, pairs: result.stops.map(r => [byId.get(r._stopId), r]) }
@@ -242,6 +246,7 @@ export async function recalculateRoute(route, { reason = 'manual', now = new Dat
     departureTime: now,
     trafficEnabled: route.trafficEnabled !== false,
     incidents,
+    learnedFactors: await learnedFactors(route.depot?.coordinates),
     includeAlternatives: false
   })
 
