@@ -217,7 +217,7 @@ All six appear in Analytics with the previous period for comparison. Delivered-t
 | 1. Gap analysis | Specification vs codebase review | Done |
 | 2. Spec gaps and new features | Proof of delivery, live customer tracking, time windows, auto-dispatch, address autocomplete, spoken notifications, demo seeder | Done |
 | 3. Design | A design system and redesign of every page, later replaced by the light "road signage" system | Done |
-| 4. Testing | Unit and API tests (189) and end-to-end browser tests (16), end-to-end smoke test, zero console errors | Done |
+| 4. Testing | Unit and API tests (201) and end-to-end browser tests (16), end-to-end smoke test, zero console errors | Done |
 | 5. Documentation and deployment | Technical documentation, PRD, README; Vercel + Render + Atlas | Documentation done; deployment needs the owner's accounts |
 | 6. Product polish | Public homepage, demo morning, Hindi for drivers and customers, a driver app that works offline | Done |
 

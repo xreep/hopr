@@ -10,6 +10,7 @@ import { errorMessage } from '../utils/api'
 import { DEMO_USERS, DEMO_MISSING } from '../utils/demo'
 import { pointAlong, slicePolyline, stopsAlongKm } from '../utils/geo'
 import useMediaQuery from '../hooks/useMediaQuery'
+import useWhenIdle from '../hooks/useWhenIdle'
 import useDemoMode from '../hooks/useDemoMode'
 import ROUTE from '../data/landingRoute.json'
 
@@ -87,28 +88,11 @@ function useDriveClock(still) {
   return [simMin, ref]
 }
 
-// The street map (MapLibre, about 1 MB) loads once the page is idle; until then the same
-// drive is drawn as a light schematic, so the first paint stays fast on phones
-function useWhenIdle(delayMs = 1500) {
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    let idle = 0
-    const timer = setTimeout(() => {
-      if ('requestIdleCallback' in window) idle = window.requestIdleCallback(() => setReady(true), { timeout: 3000 })
-      else setReady(true)
-    }, delayMs)
-    return () => {
-      clearTimeout(timer)
-      if (idle) window.cancelIdleCallback?.(idle)
-    }
-  }, [delayMs])
-  return ready
-}
-
 function HeroDrive() {
   const still = useMediaQuery('(prefers-reduced-motion: reduce)')
   const [simMin, ref] = useDriveClock(still)
-  const streetMap = useWhenIdle()
+  // Phones load the street map on the first touch or scroll; larger screens once idle
+  const streetMap = useWhenIdle({ waitForInteraction: useMediaQuery('(max-width: 640px)') })
   const drive = driveAt(simMin)
   const position = pointAlong(ROUTE.line, drive.km)
   const finished = drive.delivered === ROUTE.stops.length

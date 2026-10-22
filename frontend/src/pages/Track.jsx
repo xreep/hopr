@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import MapView from '../components/MapView'
+import MapView, { SchematicMap } from '../components/MapView'
+import useWhenIdle from '../hooks/useWhenIdle'
 import usePolling from '../hooks/usePolling'
 import usePageTitle from '../hooks/usePageTitle'
 import { planMove, positionAt, remainingFrom } from '../utils/tracking'
@@ -30,6 +31,7 @@ function TrackDelivery() {
   const [display, setDisplay] = useState(null) // { position, path }
   const [now, setNow] = useState(Date.now())
   const lastOk = useRef(0)
+  const streetMap = useWhenIdle()
   const shown = useRef({ position: null, path: null })
   const frame = useRef(0)
 
@@ -139,8 +141,9 @@ function TrackDelivery() {
       <TrackHeader deliveryId={delivery.deliveryId} />
       <main className="track-main">
         <div className="track-map">
-          <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver}
-            fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />
+          {streetMap
+            ? <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver} fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />
+            : <SchematicMap lines={mapData.lines} points={mapData.points} driver={mapData.driver} fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />}
           {stale && <div className="track-stale" role="status"><span className="spinner spinner-sm" /> {t('track.updating')}</div>}
         </div>
 

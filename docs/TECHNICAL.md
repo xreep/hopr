@@ -675,7 +675,7 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 138 tests, in-memory MongoDB
+npm test --workspace=backend    # 150 tests, in-memory MongoDB
 npm test --workspace=frontend   # 51 tests, jsdom
 npm run test:e2e                # 16 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
@@ -698,6 +698,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
 | Learned travel times | 6 | Leg timing against the plan, breaks and detours ignored, gradual and bounded correction, slower drives lead to later ETAs, demo drives never teach it, arrival accuracy |
+| Email, retention, approval, cross-van moves | 12 | Emails follow each person's settings and never reach demo accounts, one maintenance alert per date, Monday report once, nothing without a key; images expire after 90 days and the record stays; sign-ups wait for approval outside demo mode; moving stops between vans is never worse and keeps capacity; weekday and Sunday learning |
 | Offline updates | 3 | Time it happened trusted only within a day and never in the future, start, failure and delivery recorded at those times, repeat refused |
 | Frontend | 51 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order, retry rules and week-old updates dropped, updates applied on the phone |
 
@@ -710,7 +711,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 - axe accessibility checks (WCAG 2.1 AA) on the homepage, sign-in, tracking, every manager screen and the driver panel. Any serious or critical issue fails the run.
 
 Lighthouse on the production build (phone, then desktop; performance, accessibility, best practices and SEO):
-- homepage: 70–87/100/100/100 and 98/100/100/100 (phone performance varies between runs)
+- homepage: 88–93/100/100/100 and 100/100/100/100 (phone performance varies between runs; on phones the street map loads on the first touch or scroll)
+- customer tracking: 76–91/100/100 on a phone (SEO is low on purpose: `robots.txt` keeps tracking links out of search engines)
 - sign-in: 89/100/100/100 and 100/100/100/100
 
 An end-to-end smoke test on the development servers passed every step: register, log in as each role, plan a five-stop route with windows using address autocomplete, create a vehicle and a driver, auto-dispatch, complete a stop with photo and signature, follow the tracking page as the marker moves and "arriving" is spoken, and view analytics. It finished with zero console errors.

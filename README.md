@@ -25,11 +25,12 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
 
   | Page | Phone | Desktop |
   |---|---|---|
-  | Homepage | 70–87 / 100 / 100 / 100 | 98 / 100 / 100 / 100 |
+  | Homepage | 88–93 / 100 / 100 / 100 | 100 / 100 / 100 / 100 |
   | Sign-in | 89 / 100 / 100 / 100 | 100 / 100 / 100 / 100 |
+  | Customer tracking | 76–91 / 100 / 100 / private | |
 
-  Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs.
-- **Tests:** 189 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
+  Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs. Tracking links are kept out of search engines on purpose. On phones the homepage loads its street map on the first touch or scroll, saving mobile data.
+- **Tests:** 201 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
 
 ## What it does
 
@@ -153,7 +154,7 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 138 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times
+npm test --workspace=backend    # 150 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email
 npm test --workspace=frontend   # 51 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 npx playwright install chromium # once, for the end-to-end tests
 npm run test:e2e                # 16 browser tests at desktop and phone sizes, including accessibility checks
