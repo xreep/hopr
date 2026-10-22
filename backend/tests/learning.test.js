@@ -20,7 +20,7 @@ describe('learning travel times from delivered legs', () => {
 
   it('compares the real drive (minus time at the door) with the planned leg', () => {
     // 26 min after leaving, less 6 min at the door: a 20 min drive planned as 10
-    expect(legSample(route(26), route(26).stops[0])).toEqual({ area: areaOf(RANCHI_HUB.coordinates), hour: 10, ratio: 2 })
+    expect(legSample(route(26), route(26).stops[0])).toEqual({ area: areaOf(RANCHI_HUB.coordinates), dayType: 'weekday', hour: 10, ratio: 2 })
   })
 
   it('ignores legs that were a break or a detour rather than traffic', () => {
@@ -81,5 +81,23 @@ describe('arrival time accuracy', () => {
     const kpis = computeKpis([{ status: 'completed', vehicleType: 'van', stops: [stop, early] }], 1)
     expect(kpis.etaErrorMin).toBe(15)
     expect(kpis.etaWithin10Pct).toBe(50)
+  })
+})
+
+describe('weekday and Sunday learning', () => {
+  it('uses Sunday’s own correction once it has enough legs, else all days together', async () => {
+    const { learnedFactors } = await import('../src/services/learnedTraffic.js')
+    const area = areaOf(RANCHI_HUB.coordinates)
+    const thursday = new Date('2026-10-15T04:30:00Z')
+    const sunday = new Date('2026-10-18T04:30:00Z')
+    await TravelTimeStat.insertMany([
+      { area, dayType: 'all', hour: 10, samples: 40, sumLogRatio: 40 * Math.log(1.5) },
+      { area, dayType: 'weekday', hour: 10, samples: 40, sumLogRatio: 40 * Math.log(1.6) },
+      { area, dayType: 'sunday', hour: 10, samples: 2, sumLogRatio: 2 * Math.log(0.8) }
+    ])
+    expect((await learnedFactors(RANCHI_HUB.coordinates, thursday))[10]).toBeCloseTo(Math.exp((40 / 60) * Math.log(1.6)), 6)
+    expect((await learnedFactors(RANCHI_HUB.coordinates, sunday))[10]).toBeCloseTo(Math.exp((40 / 60) * Math.log(1.5)), 6) // too few Sunday legs
+    await TravelTimeStat.updateOne({ area, dayType: 'sunday', hour: 10 }, { $set: { samples: 40, sumLogRatio: 40 * Math.log(0.8) } })
+    expect((await learnedFactors(RANCHI_HUB.coordinates, sunday))[10]).toBeCloseTo(Math.exp((40 / 60) * Math.log(0.8)), 6)
   })
 })

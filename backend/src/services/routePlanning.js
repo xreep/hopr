@@ -55,7 +55,7 @@ export async function planFromRequest(body) {
   const depot = body.depot?.coordinates ? body.depot : DEFAULT_DEPOT
   const plan = planBatch({
     depot,
-    learnedFactors: await learnedFactors(depot.coordinates),
+    learnedFactors: await learnedFactors(depot.coordinates, body.departureTime || new Date()),
     stops: body.stops.map(pickStop),
     vehicles,
     departureTime: body.departureTime || new Date(),
@@ -159,7 +159,7 @@ async function retimeStops(route, vehicle, departureTime) {
     trafficEnabled: route.trafficEnabled !== false,
     returnToDepot: Boolean(route.returnToDepot),
     incidents: incidentsForOptimizer(await TrafficIncident.findActive()),
-    learnedFactors: await learnedFactors(route.depot?.coordinates)
+    learnedFactors: await learnedFactors(route.depot?.coordinates, departureTime)
   })
   const byId = new Map(ordered.map(s => [s._id.toString(), s]))
   return { result, pairs: result.stops.map(r => [byId.get(r._stopId), r]) }
@@ -246,7 +246,7 @@ export async function recalculateRoute(route, { reason = 'manual', now = new Dat
     departureTime: now,
     trafficEnabled: route.trafficEnabled !== false,
     incidents,
-    learnedFactors: await learnedFactors(route.depot?.coordinates),
+    learnedFactors: await learnedFactors(route.depot?.coordinates, now),
     includeAlternatives: false
   })
 
