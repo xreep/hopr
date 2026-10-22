@@ -9,18 +9,21 @@ import Icon from '../components/icons'
 import MapView from '../components/MapView'
 import useMediaQuery from '../hooks/useMediaQuery'
 import { buildFleetMap, buildPlanMap } from '../utils/fleetMap'
-import { formatKm, formatDuration, initials } from '../utils/format'
-import { formatClock, relativeTime, formatDateTime } from '../utils/time'
+import { formatKm, initials } from '../utils/format'
+import { formatClock, formatDateTime } from '../utils/time'
+import { useT } from '../i18n/language'
+import { durationIn } from '../i18n/strings'
 
-function greeting() {
+function greeting(t) {
   const hour = Number(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }))
-  if (hour < 12) return 'Good morning'
-  if (hour < 17) return 'Good afternoon'
-  return 'Good evening'
+  if (hour < 12) return t('dash.greeting.morning')
+  if (hour < 17) return t('dash.greeting.afternoon')
+  return t('dash.greeting.evening')
 }
 
 export default function Dashboard() {
   const { user, isDriver } = useAuth()
+  const { t } = useT()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -42,11 +45,11 @@ export default function Dashboard() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">{greeting()}, {user?.name?.split(' ')[0]}</h1>
-          <p className="page-subtitle">{isDriver ? 'Your deliveries for today.' : 'How today’s deliveries are going across your hubs.'}</p>
+          <h1 className="page-title">{greeting(t)}, {user?.name?.split(' ')[0]}</h1>
+          <p className="page-subtitle">{isDriver ? t('dash.driverSubtitle') : 'How today’s deliveries are going across your hubs.'}</p>
         </div>
         {isDriver
-          ? <Link to="/driver-panel" className="btn btn-primary"><Icon name="navigation" />Open my deliveries</Link>
+          ? <Link to="/driver-panel" className="btn btn-primary"><Icon name="navigation" />{t('dash.openDeliveries')}</Link>
           : <Link to="/route-planner" className="btn btn-primary"><Icon name="plus" />Plan routes</Link>}
       </div>
       {error && <div className="alert alert-error mb-4">{error}</div>}
@@ -56,19 +59,20 @@ export default function Dashboard() {
 }
 
 function DriverDashboard({ data }) {
+  const { t } = useT()
   return (
     <>
       <div className="stats-strip mb-6">
-        <StatCard label="Delivered today" value={data.completedToday} isKey />
-        <StatCard label="Assigned routes" value={data.assignedRoutes} />
-        <StatCard label="On-time rate" value={data.onTimeRate} suffix="%" hint="Last 30 days" />
-        <StatCard label="Completion rate" value={data.completionRate} suffix="%" hint="Last 30 days" />
+        <StatCard label={t('dash.deliveredToday')} value={data.completedToday} isKey />
+        <StatCard label={t('dash.assignedRoutes')} value={data.assignedRoutes} />
+        <StatCard label={t('dash.onTimeRate')} value={data.onTimeRate} suffix="%" hint={t('dash.last30')} />
+        <StatCard label={t('dash.completionRate')} value={data.completionRate} suffix="%" hint={t('dash.last30')} />
       </div>
       <div className="card">
-        <div className="card-header"><h3>My routes</h3></div>
+        <div className="card-header"><h3>{t('dash.myRoutes')}</h3></div>
         <div className="card-body">
           {data.routes.length === 0
-            ? <EmptyState title="No routes assigned yet">You&apos;ll hear an announcement when your fleet manager assigns one.</EmptyState>
+            ? <EmptyState title={t('dash.noRoutes')}>{t('dash.noRoutesHint')}</EmptyState>
             : <LiveRoutes routes={data.routes} />}
         </div>
       </div>
@@ -220,6 +224,7 @@ function FleetCard({ liveRoutes, demo, onDemoChange }) {
 }
 
 function LiveRoutes({ routes, focus, onFocus, watching, onWatch }) {
+  const { t, lang, ago } = useT()
   return (
     <ul className="live-list">
       {routes.map(r => {
@@ -243,13 +248,13 @@ function LiveRoutes({ routes, focus, onFocus, watching, onWatch }) {
                     )}
                   </span>
                 </div>
-                <p className="text-micro text-ink-400 truncate">{r.name}, {formatKm(r.totalDistance)}, {formatDuration(r.estimatedTime)}</p>
+                <p className="text-micro text-ink-400 truncate">{r.name}, {formatKm(r.totalDistance)}, {durationIn(lang, r.estimatedTime)}</p>
                 <div className="progress mt-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.progress.done} of ${r.progress.total} stops done`}>
                   <span style={{ width: `${pct}%` }} />
                 </div>
                 <p className="text-micro text-ink-300 mt-1.5">
-                  {r.nextStop ? <>Next: {r.nextStop.customerName || r.nextStop.address.split(',')[0]} at <span className="eta-chip">{formatClock(r.nextStop.estimatedArrival)}</span></> : 'All stops done'}
-                  {r.lastPingSecondsAgo !== null && <span className="text-ink-400">. GPS {relativeTime(Date.now() - r.lastPingSecondsAgo * 1000)}</span>}
+                  {r.nextStop ? <>{t('dash.next', { name: r.nextStop.customerName || r.nextStop.address.split(',')[0] })} <span className="eta-chip">{formatClock(r.nextStop.estimatedArrival)}</span></> : t('dash.allDone')}
+                  {r.lastPingSecondsAgo !== null && <span className="text-ink-400">. GPS {ago(Date.now() - r.lastPingSecondsAgo * 1000)}</span>}
                   {r.lateStops > 0 && <span className="text-signal-amber">. {r.lateStops} at risk</span>}
                   {r.needsRecalculation && <span className="text-signal-amber">. Traffic changed</span>}
                 </p>

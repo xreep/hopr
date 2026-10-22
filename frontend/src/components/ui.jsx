@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '../i18n/language'
 import Icon from './icons'
 import HopLine from './HopLine'
 
@@ -99,10 +100,13 @@ const STATUS_VARIANTS = {
 const STATUS_LABELS = { in_progress: 'In progress', on_time: 'On time', ev_van: 'EV van', in_service: 'In service', enabled: 'Active', on_route: 'On a route' }
 
 export function StatusBadge({ status, label, className = '' }) {
+  const { translated, t } = useT()
   if (!status) return null
+  const key = `status.${status}`
+  const local = translated && t(key) !== key ? t(key) : null
   return (
     <span className={`badge ${STATUS_VARIANTS[status] || 'badge-neutral'} ${className}`}>
-      {label || STATUS_LABELS[status] || status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+      {label || local || STATUS_LABELS[status] || status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
     </span>
   )
 }

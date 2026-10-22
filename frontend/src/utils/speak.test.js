@@ -34,6 +34,20 @@ describe('speak()', () => {
     expect(utterance.voice.name).toBe('Rishi')
   })
 
+  it('speaks Hindi with a Hindi voice, or tags the language when none is installed', async () => {
+    let synth = installSpeech([{ name: 'Rishi', lang: 'en-IN' }, { name: 'Lekha', lang: 'hi-IN' }])
+    let mod = await freshModule()
+    mod.speak('डिलीवरी पूरी हुई।', { lang: 'hi' })
+    expect(synth.speak.mock.calls[0][0].voice.name).toBe('Lekha')
+    expect(synth.speak.mock.calls[0][0].lang).toBe('hi-IN')
+
+    synth = installSpeech([{ name: 'Rishi', lang: 'en-IN' }])
+    mod = await freshModule()
+    mod.speak('डिलीवरी पूरी हुई।', { lang: 'hi' })
+    expect(synth.speak.mock.calls[0][0].voice).toBeUndefined()
+    expect(synth.speak.mock.calls[0][0].lang).toBe('hi-IN')
+  })
+
   it('falls back to any English voice, and to lang only when there are no voices', async () => {
     let synth = installSpeech([{ name: 'Daniel', lang: 'en-GB' }, { name: 'Anna', lang: 'de-DE' }])
     let mod = await freshModule()

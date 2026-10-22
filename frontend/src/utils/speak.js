@@ -1,6 +1,6 @@
 // Spoken notifications via the Web Speech API (no dependencies).
-// speak(text): English voice (Indian English preferred), rate 1, cancels whatever is
-// being said first, and is a silent no-op where speech synthesis is unsupported.
+// speak(text, { lang }): English voice (Indian English preferred), or Hindi with lang 'hi';
+// rate 1, cancels whatever is being said first, and is a silent no-op where speech synthesis is unsupported.
 // Mute state is shared app-wide and persisted in localStorage.
 
 const STORAGE_KEY = 'hopr:voice-muted'
@@ -48,15 +48,21 @@ function englishVoice() {
     null
 }
 
-export function speak(text) {
+function hindiVoice() {
+  const voices = window.speechSynthesis.getVoices?.() || []
+  return voices.find(v => /^hi[-_]?/i.test(v.lang)) || null
+}
+
+export function speak(text, { lang = 'en' } = {}) {
   if (!text || muted || !isSpeechSupported()) return false
   try {
     const synth = window.speechSynthesis
     synth.cancel()
     const utterance = new window.SpeechSynthesisUtterance(String(text))
-    const voice = englishVoice()
+    const voice = lang === 'hi' ? hindiVoice() : englishVoice()
     if (voice) utterance.voice = voice
-    utterance.lang = voice?.lang || 'en-IN'
+    // Without an installed Hindi voice, the lang tag still lets the browser pick one
+    utterance.lang = voice?.lang || (lang === 'hi' ? 'hi-IN' : 'en-IN')
     utterance.rate = 1
     utterance.pitch = 1
     synth.speak(utterance)

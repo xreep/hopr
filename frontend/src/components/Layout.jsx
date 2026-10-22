@@ -8,6 +8,9 @@ import ErrorBoundary from './ErrorBoundary'
 import CommandPalette from './CommandPalette'
 import { isMac } from '../utils/platform'
 import usePageTitle from '../hooks/usePageTitle'
+import { useT } from '../i18n/language'
+import { translateKnown } from '../i18n/strings'
+import { LanguageProvider } from './LanguageProvider'
 
 const MANAGERS = ['admin', 'fleet_manager']
 const navigation = [
@@ -25,11 +28,19 @@ const navigation = [
 
 const PAGE_TITLES = Object.fromEntries(navigation.map(item => [item.href, item.name]))
 
-const todayIST = () => new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long' })
+const todayIST = lang => new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long' })
 const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'Driver' }
 
+// Drivers can read their screens in Hindi; the manager screens stay in English
 export default function Layout() {
+  const { isDriver } = useAuth()
+  return isDriver ? <LanguageProvider><Shell /></LanguageProvider> : <Shell />
+}
+
+function Shell() {
   const { user, logout } = useAuth()
+  const { t, lang } = useT()
+  const nav = name => translateKnown(lang, 'nav', name)
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -53,7 +64,7 @@ export default function Layout() {
 
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
   // Route detail pages name themselves after the route
-  usePageTitle(location.pathname.startsWith('/routes/') ? null : PAGE_TITLES[location.pathname] || 'Page not found')
+  usePageTitle(location.pathname.startsWith('/routes/') ? null : nav(PAGE_TITLES[location.pathname] || 'Page not found'))
 
   const filteredNav = navigation.filter(item => item.roles.includes(user?.role))
 
@@ -71,7 +82,7 @@ export default function Layout() {
             <HopMark size={30} />
             <span>Hopr</span>
           </NavLink>
-          <button type="button" className="btn btn-ghost btn-sm btn-icon menu-button" onClick={() => setSidebarOpen(false)} aria-label="Close navigation menu">
+          <button type="button" className="btn btn-ghost btn-sm btn-icon menu-button" onClick={() => setSidebarOpen(false)} aria-label={t('nav.closeMenu')}>
             <Icon name="x" />
           </button>
         </div>
@@ -81,7 +92,7 @@ export default function Layout() {
               <li key={item.href}>
                 <NavLink to={item.href} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} end={item.href === '/routes'}>
                   <Icon name={item.icon} />
-                  {item.name}
+                  {nav(item.name)}
                 </NavLink>
               </li>
             ))}
@@ -92,9 +103,9 @@ export default function Layout() {
             <div className="avatar" aria-hidden="true">{initials(user?.name)}</div>
             <div className="flex-1 min-w-0">
               <p className="text-body font-medium truncate">{user?.name}</p>
-              <p className="text-micro text-ink-400">{ROLE_LABELS[user?.role]}</p>
+              <p className="text-micro text-ink-400">{user?.role === 'driver' ? t('role.driver') : ROLE_LABELS[user?.role]}</p>
             </div>
-            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={handleLogout} aria-label="Log out" title="Log out">
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={handleLogout} aria-label={t('nav.logout')} title={t('nav.logout')}>
               <Icon name="logout" />
             </button>
           </div>
@@ -104,16 +115,16 @@ export default function Layout() {
       <div className="main-content">
         <header className="top-bar">
           <div className="flex items-center gap-3 min-w-0">
-            <button className="btn btn-ghost btn-icon menu-button" onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu" aria-expanded={sidebarOpen}>
+            <button className="btn btn-ghost btn-icon menu-button" onClick={() => setSidebarOpen(true)} aria-label={t('nav.openMenu')} aria-expanded={sidebarOpen}>
               <Icon name="menu" size={20} />
             </button>
             <NavLink to="/dashboard" className="brand lg:hidden" aria-label="Hopr dashboard"><HopMark size={24} /></NavLink>
-            <span className="text-small text-ink-400 hidden md:block">{todayIST()}</span>
+            <span className="text-small text-ink-400 hidden md:block">{todayIST(lang)}</span>
           </div>
           <div className="flex items-center gap-1">
             <button type="button" className="btn btn-ghost btn-sm palette-trigger" onClick={() => setPaletteOpen(true)} aria-label="Search and run commands" aria-keyshortcuts={isMac() ? 'Meta+K' : 'Control+K'}>
               <Icon name="search" />
-              <span className="hidden sm:inline">Search</span>
+              <span className="hidden sm:inline">{t('nav.search')}</span>
               <kbd className="hidden md:inline-flex">{isMac() ? '⌘K' : 'Ctrl K'}</kbd>
             </button>
             <MuteToggle />

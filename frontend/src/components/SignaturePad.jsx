@@ -1,7 +1,10 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { useT } from '../i18n/language'
 
 // Finger / mouse / stylus signature on a canvas. Exposes toBlob() and clear().
-const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, label = 'Customer signature' }, ref) {
+const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, label: labelProp }, ref) {
+  const { t } = useT()
+  const label = labelProp || t('pod.signature')
   const canvasRef = useRef(null)
   const drawing = useRef(false)
   const last = useRef(null)
@@ -86,7 +89,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
     <div className="signature-pad">
       <div className="flex-between mb-1">
         <span className="form-label mb-0">{label}</span>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={clear} disabled={empty}>Clear</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={clear} disabled={empty}>{t('pod.clear')}</button>
       </div>
       <canvas
         ref={canvasRef}
@@ -100,7 +103,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 180, onChange, 
         onPointerCancel={up}
         onPointerLeave={up}
       />
-      {empty && <p className="text-micro text-ink-400 mt-1">Ask the customer to sign above the line</p>}
+      {empty && <p className="text-micro text-ink-400 mt-1">{t('pod.signHint')}</p>}
     </div>
   )
 })

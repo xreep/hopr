@@ -8,26 +8,25 @@ import { formatClock } from '../utils/time'
 import { speak } from '../utils/speak'
 import MuteToggle from '../components/MuteToggle'
 import { HopMark } from '../components/icons'
+import { useT } from '../i18n/language'
+import { translateKnown } from '../i18n/strings'
+import { LanguageProvider, LanguageToggle } from '../components/LanguageProvider'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 const POLL_MS = 5000
 const MOVE_MS = 4800 // just under the poll interval: the marker keeps gliding between fixes
 const FRAME_MS = 33
 
-const HEADLINES = {
-  packed: () => 'Your order is packed',
-  on_the_way: d => `${d} is on the way`,
-  arriving: d => `${d} is arriving`,
-  delivered: () => 'Delivered',
-  failed: () => 'Delivery attempt unsuccessful',
-  cancelled: () => 'Delivery cancelled'
+export default function Track() {
+  return <LanguageProvider><TrackDelivery /></LanguageProvider>
 }
 
-export default function Track() {
+function TrackDelivery() {
   const { token } = useParams()
+  const { t, lang } = useT()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
-  usePageTitle('Track your delivery')
+  usePageTitle(t('track.pageTitle'))
   const [display, setDisplay] = useState(null) // { position, path }
   const [now, setNow] = useState(Date.now())
   const lastOk = useRef(0)
@@ -39,7 +38,7 @@ export default function Track() {
       const res = await fetch(`${API_BASE}/track/${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(res.status === 404 ? 'This tracking link is not valid.' : body.message || 'Tracking is temporarily unavailable')
+        setError(res.status === 404 ? 'track.invalid' : 'track.unavailable')
         return
       }
       lastOk.current = Date.now()
@@ -102,11 +101,13 @@ export default function Track() {
     const status = data?.status
     if (!status) return
     if (status === 'arriving' && lastStatus.current !== 'arriving') {
-      speak(`${data.driver?.firstName || 'Your driver'} is arriving with your delivery. Please be ready.`)
+      speak(t('track.say.arriving', { driver: data.driver?.firstName || t('track.yourDriver') }), { lang })
     } else if (status === 'delivered' && lastStatus.current && lastStatus.current !== 'delivered') {
-      speak('Your order has been delivered.')
+      speak(t('track.say.delivered'), { lang })
     }
     lastStatus.current = status
+    // Announce on status changes only, not when the language changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.status, data?.driver?.firstName])
 
   const stale = Boolean(data?.location) && (data.location.stale || now - lastOk.current > (data.staleAfterSec || 60) * 1000)
@@ -124,13 +125,13 @@ export default function Track() {
     return (
       <div className="track-page">
         <TrackHeader />
-        <div className="card m-4"><div className="card-body text-center"><p className="font-semibold">{error}</p><p className="text-sm text-muted mt-2">Check the link in your message, or contact the sender.</p></div></div>
+        <div className="card m-4"><div className="card-body text-center"><p className="font-semibold">{t(error)}</p><p className="text-sm text-muted mt-2">{t('track.checkLink')}</p></div></div>
       </div>
     )
   }
   if (!data) return <div className="track-page"><TrackHeader /><div className="page-loader"><span className="spinner" /></div></div>
 
-  const driverName = data.driver?.firstName || 'Your driver'
+  const driverName = data.driver?.firstName || t('track.yourDriver')
   const { delivery, eta, status } = data
 
   return (
@@ -139,30 +140,31 @@ export default function Track() {
       <div className="track-map">
         <MapView lines={mapData.lines} points={mapData.points} driver={mapData.driver}
           fitKey={`${status}-${Boolean(display?.position)}`} height="100%" />
-        {stale && <div className="track-stale" role="status"><span className="spinner spinner-sm" /> Updating location…</div>}
+        {stale && <div className="track-stale" role="status"><span className="spinner spinner-sm" /> {t('track.updating')}</div>}
       </div>
 
       <section className="track-sheet" aria-live="polite">
-        <p className="text-sm text-muted">Hi {delivery.customerFirstName}</p>
-        <h1 className="track-headline">{HEADLINES[status](driverName)}</h1>
+        <p className="text-sm text-muted">{t('track.hi', { name: delivery.customerFirstName })}</p>
+        <h1 className="track-headline">{t(`track.${status}`, { driver: driverName })}</h1>
         {status === 'on_the_way' && eta && (
           <p className="track-eta">
-            <span className="track-eta-value">{eta.minutes}<small>min</small></span>
-            <span>away. {eta.stopsBefore ? `${eta.stopsBefore} stop${eta.stopsBefore > 1 ? 's' : ''} before yours.` : 'You\'re next.'}</span>
+            <span className="track-eta-value">{eta.minutes}<small>{t('common.min')}</small></span>
+            <span>{t('track.away')} {eta.stopsBefore > 1 ? t('track.stopsBefore', { n: eta.stopsBefore }) : eta.stopsBefore === 1 ? t('track.oneStopBefore') : t('track.youreNext')}</span>
           </p>
         )}
-        {status === 'arriving' && <p className="track-eta"><span><strong>Less than {data.arrivingRadiusM} m away</strong>. Please be ready.</span></p>}
-        {status === 'packed' && <p className="track-eta"><span>Expected around <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></span></p>}
-        {status === 'delivered' && <p className="track-eta"><span>Delivered at <strong>{formatClock(delivery.completedAt)}</strong>. Thank you!</span></p>}
-        {status === 'failed' && <p className="track-eta">{delivery.failureReason}. We&apos;ll contact you to reschedule.</p>}
+        {status === 'arriving' && <p className="track-eta"><span><strong>{t('track.arrivingSoon', { m: data.arrivingRadiusM })}</strong>. {t('track.beReady')}</span></p>}
+        {status === 'packed' && <p className="track-eta"><span>{t('track.expected')} <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></span></p>}
+        {status === 'delivered' && <p className="track-eta"><span>{t('track.deliveredAt')} <strong>{formatClock(delivery.completedAt)}</strong>. {t('track.thanks')}</span></p>}
+        {status === 'failed' && <p className="track-eta">{t('track.reschedule', { reason: translateKnown(lang, 'fail', delivery.failureReason) })}</p>}
+        {data.demo && <p className="text-micro text-ink-400 mt-2">{t('track.demo', { n: data.demo.speedup })}</p>}
 
-        <ol className="track-timeline" aria-label="Delivery progress">
+        <ol className="track-timeline" aria-label={t('track.progress')}>
           {data.timeline.map((step, i) => {
             const current = step.done && !data.timeline[i + 1]?.done
             return (
               <li key={step.key} className={`${step.done ? 'done' : ''} ${current ? 'current' : ''}`} aria-current={current ? 'step' : undefined}>
                 <span className="track-step-dot" aria-hidden="true" />
-                <span className="track-step-label">{step.label}</span>
+                <span className="track-step-label">{t(`track.step.${step.key}`)}</span>
                 {step.at && <span className="text-micro text-ink-400">{formatClock(step.at)}</span>}
               </li>
             )
@@ -170,9 +172,9 @@ export default function Track() {
         </ol>
 
         <dl className="detail-list text-sm mt-4">
-          <dt>Delivering to</dt><dd>{delivery.address}</dd>
-          {(delivery.windowStart || delivery.windowEnd) && <><dt>Your slot</dt><dd>{delivery.windowStart || '…'} to {delivery.windowEnd || '…'}</dd></>}
-          {data.vehicle && <><dt>Vehicle</dt><dd>{data.vehicle}</dd></>}
+          <dt>{t('track.deliveringTo')}</dt><dd>{delivery.address}</dd>
+          {(delivery.windowStart || delivery.windowEnd) && <><dt>{t('track.slot')}</dt><dd>{t('track.slotRange', { from: delivery.windowStart || '…', to: delivery.windowEnd || '…' })}</dd></>}
+          {data.vehicle && <><dt>{t('track.vehicle')}</dt><dd>{translateKnown(lang, 'vehicle', data.vehicle)}</dd></>}
         </dl>
       </section>
     </div>
@@ -180,11 +182,13 @@ export default function Track() {
 }
 
 function TrackHeader({ deliveryId }) {
+  const { t } = useT()
   return (
     <header className="track-header">
       <span className="brand"><HopMark size={26} />Hopr</span>
       <span className="flex items-center gap-2">
-        {deliveryId && <span className="text-micro text-ink-400 whitespace-nowrap">Order {deliveryId}</span>}
+        {deliveryId && <span className="text-micro text-ink-400 whitespace-nowrap hidden sm:inline">{t('track.order', { id: deliveryId })}</span>}
+        <LanguageToggle />
         <MuteToggle />
       </span>
     </header>
