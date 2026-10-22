@@ -3,7 +3,7 @@ import Vehicle from '../models/Vehicle.js'
 import User from '../models/User.js'
 import TrafficIncident from '../models/TrafficIncident.js'
 import { planBatch, optimizeRoute, retimeSequence, OptimizationError } from './routeOptimizer.js'
-import { buildRouteGeometry } from './geometry.js'
+import { buildRouteGeometry, isRoadGeometry } from './geometry.js'
 import { DEFAULT_DEPOT, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
 
 const STOP_FIELDS = [
@@ -274,7 +274,7 @@ export async function recalculateRoute(route, { reason = 'manual', now = new Dat
     // Keep the travelled part of the polyline, replace the remainder
     const travelled = [route.depot.coordinates, ...done.map(s => s.coordinates)]
     route.geometry = { type: 'LineString', coordinates: [...travelled, ...geometry.coordinates] }
-    route.geometrySource = geometry.source === 'mapbox' && route.geometrySource === 'mapbox' ? 'mapbox' : 'estimated'
+    route.geometrySource = isRoadGeometry(geometry.source) && isRoadGeometry(route.geometrySource) ? geometry.source : 'estimated'
   }
   route.refreshProgress()
   return { route, previousFinish, newFinish, violations: route.violations }

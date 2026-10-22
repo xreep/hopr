@@ -101,7 +101,8 @@ export async function ensureDemoFleet(users) {
       await vehicle.save()
     }
     const driver = driverEmail ? users[driverEmail] : null
-    if (driver && !vehicle.driver) {
+    // Loading the demo restores its pairings, so each city's driver drives that city's vehicle
+    if (driver && String(vehicle.driver || '') !== String(driver._id)) {
       await Vehicle.updateMany({ driver: driver._id, _id: { $ne: vehicle._id } }, { driver: null })
       vehicle.driver = driver._id
       await vehicle.save()

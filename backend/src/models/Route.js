@@ -112,7 +112,7 @@ const routeSchema = new mongoose.Schema({
     type: { type: String, enum: ['LineString'], default: 'LineString' },
     coordinates: { type: [[Number]], default: [] }
   },
-  geometrySource: { type: String, enum: ['mapbox', 'estimated'], default: 'estimated' },
+  geometrySource: { type: String, enum: ['mapbox', 'osm', 'estimated'], default: 'estimated' },
   roadDistanceKm: Number,
   // Planned figures
   totalDistance: { type: Number, default: 0 },
