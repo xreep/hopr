@@ -66,3 +66,17 @@ describe('demo seeder', () => {
     expect((await api().post('/api/demo/seed').set(driver.auth)).status).toBe(403)
   })
 })
+
+describe('demo data on first start', () => {
+  it('loads the demo once into an empty database in demo mode, and never outside it', async () => {
+    const { seedDemoIfEmpty } = await import('../src/services/demo.js')
+    delete process.env.DEMO_MODE
+    expect(await seedDemoIfEmpty()).toBe(false)
+    expect(await User.countDocuments()).toBe(0)
+    process.env.DEMO_MODE = 'true'
+    expect(await seedDemoIfEmpty()).toBe(true)
+    expect(await Route.countDocuments({ isDemo: true })).toBe(5)
+    expect(await seedDemoIfEmpty()).toBe(false)
+    expect(await Route.countDocuments({ isDemo: true })).toBe(5)
+  })
+})

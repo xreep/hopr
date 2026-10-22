@@ -171,35 +171,30 @@ Backend and end-to-end tests run against an in-memory MongoDB, so no database se
 3. Network Access: allow `0.0.0.0/0` (Render's free plan has no fixed outbound IPs).
 4. Copy the connection string and add a database name, e.g. `.../hopr?retryWrites=true&w=majority`.
 
-### 2. API: Render web service (free)
+### 2. API: Render (free), from the blueprint
 
-1. New → Web Service → connect the GitHub repository.
-2. Root directory `backend`, build command `npm install`, start command `npm start`.
-3. Environment variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL` (the Vercel URL, set after step 3), `DEMO_MODE=true` if this is a public demo, and, optionally, `MAPBOX_TOKEN`. Do not set `PORT`.
-4. Health check path: `/api/health`.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/xreep/hopr)
+
+1. Use the button above, or in Render choose **New → Blueprint** and pick this repository. `render.yaml` sets up everything: Node 22, the free plan in Singapore (closest to India), the build and start commands, the health check, `NODE_ENV=production` and `DEMO_MODE=true`. It also has Render generate `JWT_SECRET` itself.
+2. Render asks for two values: `MONGODB_URI` (from step 1) and `FRONTEND_URL`. Put `https://example.com` in `FRONTEND_URL` for now; you will replace it after step 3.
+3. Apply. On its first start the API loads the demo data into the empty database. Note the address, e.g. `https://hopr-api.onrender.com`, and check `https://hopr-api.onrender.com/api/health`.
+
+For real use rather than a public demo, delete `DEMO_MODE` in the Render dashboard before the first start.
 
 The free plan sleeps after 15 minutes without traffic, and the next request takes up to about a minute; the app shows a "server is waking up" message while it waits. A free uptime monitor requesting `/api/health` every 10 minutes keeps it awake.
 
 ### 3. App: Vercel (free)
 
-1. Add New → Project → import the repository.
-2. Root directory `frontend`; framework preset Vite (build `npm run build`, output `dist`).
-3. Environment variables: `VITE_API_URL=https://<your-api>.onrender.com/api`.
-4. Deploy, then set `FRONTEND_URL` on Render to the Vercel URL and redeploy the API.
+1. In Vercel choose **Add New → Project** and import the repository.
+2. Set **Root Directory** to `frontend`. Vercel detects Vite (build `npm run build`, output `dist`).
+3. Add the environment variable `VITE_API_URL=https://<your-api>.onrender.com/api`, then deploy.
+4. Back in Render, set `FRONTEND_URL` to the Vercel address (e.g. `https://hopr.vercel.app`, no trailing slash). Render redeploys by itself.
 
-`frontend/vercel.json` rewrites every path to the app, so shared links such as `/track/<token>` open directly.
+`frontend/vercel.json` rewrites every path to the app, so shared links such as `/track/<token>` open directly. It also holds the website's security headers, including the Content Security Policy, which allows API calls to `*.onrender.com`; if the API lives elsewhere, add its origin to `connect-src`.
 
 ### 4. Demo data
 
-Seed the production database from your machine, pointing at Atlas:
-
-```bash
-MONGODB_URI="<your Atlas connection string>" npm run seed --workspace=backend
-```
-
-Then sign in as the fleet manager. With `DEMO_MODE=true`, **Load demo data** (Routes, or Admin) creates fresh demo routes in all five cities whenever you need them. Never seed the demo into a database with real customers: its passwords are public.
-
-The website's security headers, including the Content Security Policy, are in `frontend/vercel.json`. It allows API calls to `*.onrender.com`; if the API lives elsewhere, add its origin to `connect-src`.
+With `DEMO_MODE=true` the demo data loads by itself on first start. **Load demo data** (Routes, or Admin) creates fresh demo routes in all five cities whenever you need them. Never put demo data into a database with real customers: its passwords are public.
 
 ## Project structure
 
