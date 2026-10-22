@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import { PageLoader } from './components/ui'
 
 const Login = lazy(() => import('./pages/Login'))
+const Landing = lazy(() => import('./pages/Landing'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const RoutePlanner = lazy(() => import('./pages/RoutePlanner'))
 const RoutesPage = lazy(() => import('./pages/Routes'))
@@ -76,8 +77,9 @@ export default function App() {
         <Route path="/track/:token" element={<Track />} />
         {/* Living style guide, development builds only */}
         {import.meta.env.DEV && <Route path="/design-system" element={<DesignSystem />} />}
-        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+        {/* Public homepage; signed-in users go straight to their dashboard */}
+        <Route index element={<PublicRoute><Landing /></PublicRoute>} />
+        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="route-planner" element={guard(<RoutePlanner />, MANAGERS)} />
           <Route path="routes" element={guard(<RoutesPage />, MANAGERS)} />

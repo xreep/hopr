@@ -1,50 +1,15 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../utils/api'
-import Icon, { HopMark } from '../components/icons'
+import { HopMark } from '../components/icons'
+import DirectionSign from '../components/DirectionSign'
+import { DEMO_USERS, DEMO_MISSING } from '../utils/demo'
 import usePageTitle from '../hooks/usePageTitle'
 import PasswordInput from '../components/PasswordInput'
 
-const DEMO_USERS = {
-  admin: { email: 'admin@hopr.com', password: 'admin123', label: 'Admin' },
-  fleet_manager: { email: 'manager@hopr.com', password: 'manager123', label: 'Fleet manager' },
-  driver: { email: 'driver@hopr.com', password: 'driver123', label: 'Driver' }
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-// Demo hubs, listed the way a highway direction sign lists destinations. Each arrow
-// points the way the city lies from the centre of India.
-const DESTINATIONS = [
-  { city: 'New Delhi', hub: 'Okhla', angle: -90 },
-  { city: 'Kolkata', hub: 'Kasba', angle: 0 },
-  { city: 'Ranchi', hub: 'Kokar', angle: -45 },
-  { city: 'Mumbai', hub: 'MIDC Andheri', angle: 180 },
-  { city: 'Bengaluru', hub: 'Bommanahalli', angle: 90 }
-]
-
-function DirectionSign() {
-  return (
-    <div className="sign-board">
-      <h2 className="sign-title">Plan, dispatch and track deliveries across India.</h2>
-      <p className="sign-lede">
-        Routes ordered around traffic, delivery windows, priority and fuel. Drivers deliver with photo proof. Customers follow their parcel live.
-      </p>
-      <ul className="sign-destinations" aria-label="Demo hubs">
-        {DESTINATIONS.map(d => (
-          <li key={d.city}>
-            <span className="sign-arrow" style={{ transform: `rotate(${d.angle}deg)` }} aria-hidden="true"><Icon name="arrowRight" size={20} strokeWidth={2.5} /></span>
-            <span className="sign-city">{d.city}</span>
-            <span className="sign-hub">{d.hub}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="sign-note">Demo hubs</p>
-    </div>
-  )
-}
 
 export default function Login() {
   const { login, register } = useAuth()
@@ -98,7 +63,7 @@ export default function Login() {
       toast.success(`Signed in as the demo ${creds.label.toLowerCase()}`)
       navigate('/dashboard')
     } catch (error) {
-      setErrors({ form: error.response?.status === 401 ? 'Demo accounts aren\'t set up yet. Run "npm run seed" in backend/.' : errorMessage(error) })
+      setErrors({ form: error.response?.status === 401 ? DEMO_MISSING : errorMessage(error) })
     } finally {
       setLoading(false)
     }
@@ -112,10 +77,9 @@ export default function Login() {
   return (
     <div className="login-page">
       <section className="login-main" aria-label="Sign in">
-        <div className="flex items-center gap-2.5">
-          <HopMark size={32} />
-          <span className="brand">Hopr</span>
-        </div>
+        <Link to="/" className="brand" aria-label="Hopr home">
+          <HopMark size={32} />Hopr
+        </Link>
 
         <div className="login-form">
           <h1 className="text-h1 font-extrabold">{mode === 'login' ? 'Sign in' : 'Create a driver account'}</h1>
@@ -181,7 +145,8 @@ export default function Login() {
       </section>
 
       <aside className="login-aside" aria-label="About Hopr">
-        <DirectionSign />
+        <DirectionSign title="Plan, dispatch and track deliveries across India."
+          lede="Routes ordered around traffic, delivery windows, priority and fuel. Drivers deliver with photo proof. Customers follow their parcel live." />
       </aside>
     </div>
   )
