@@ -176,6 +176,7 @@ export default function AdminPanel() {
           <dl className="detail-list">
             <dt>Street maps</dt><dd>OpenFreeMap (OpenStreetMap data), no key needed</dd>
             <dt>Geocoding (server)</dt><dd>{config ? (config.geocoder === 'mapbox' ? 'Mapbox Geocoding API' : 'OpenStreetMap Photon (set MAPBOX_TOKEN on Render for Mapbox)') : '…'}</dd>
+            <dt>Email notifications</dt><dd>{config ? (config.email ? 'On (Resend)' : 'Off. Set RESEND_API_KEY and EMAIL_FROM on Render to send them') : '…'}</dd>
             <dt>Hubs</dt><dd>{config ? (config.hubs?.length ? config.hubs.map(h => h.name || h.address).join(', ') : 'None yet. Set a home hub on each vehicle.') : '…'}</dd>
             <dt>Fuel prices</dt><dd>Indian retail defaults; set FUEL_PRICE_* on the server for your state</dd>
           </dl>

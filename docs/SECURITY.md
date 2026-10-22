@@ -53,6 +53,10 @@ This is Hopr's threat model: what it protects, from whom, how, and what risk is 
 
 **Secrets.** Set `JWT_SECRET` (`openssl rand -hex 32`) and `MONGODB_URI` in Render's environment, never in the repository. Changing `JWT_SECRET` signs everyone out, which is the quickest response to a suspected leak. Restrict MongoDB Atlas network access to Render's outbound addresses where possible.
 
+**Email (optional).** Set `RESEND_API_KEY` and `EMAIL_FROM` on Render. Emails go to Resend for delivery, and contain names and addresses that managers can already see in the app. Demo accounts never get email.
+
+**Proof retention.** Photos and signatures are deleted after `PROOF_RETENTION_DAYS` (default 90), which limits how much personal data is held and keeps the free database from filling up.
+
 **Error tracking (optional).** Create a free Sentry project and set `SENTRY_DSN` on Render and `VITE_SENTRY_DSN` on Vercel. Without them, nothing is sent anywhere.
 
 **Uptime.** Point a free monitor such as UptimeRobot at `https://<your-api>.onrender.com/api/health` every 5 minutes. It also keeps the free Render instance from sleeping during the day.

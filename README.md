@@ -120,6 +120,8 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | `PORT` | no | Defaults to 5001 locally; Render sets it automatically |
 | `TRUST_PROXY` | no | Proxy hops to trust for client IPs; defaults to `1` in production |
 | `DEMO_MODE` | no | `true` for a public demo: turns on Load demo data, the demo morning and the demo sign-in buttons, and protects the demo accounts from being changed or locked out. Leave it unset for real use: the demo endpoints then do not exist |
+| `PROOF_RETENTION_DAYS` | no | Days to keep proof photos and signatures (default 90; 0 keeps them forever). The delivery record stays |
+| `RESEND_API_KEY`, `EMAIL_FROM` | no | Email notifications through Resend's free tier: route changes, maintenance alerts, the weekly report. Unset: no email is sent |
 | `SENTRY_DSN` | no | Report server errors to Sentry (free tier), without personal data. Unset: nothing is sent |
 | `MAPBOX_TOKEN` | no | Server-side Mapbox token; when set, Mapbox is tried first for geocoding and road directions, with OpenStreetMap as the fallback |
 | `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: typical Indian retail 97.90, 92.60, 91.50 and ₹10/kWh; set your state's prices) |

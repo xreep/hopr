@@ -16,6 +16,7 @@ import { haversineKm } from '../utils/geo.js'
 import User from '../models/User.js'
 import { recordLeg } from '../services/learnedTraffic.js'
 import { reportError } from '../services/monitoring.js'
+import * as notify from '../services/notify.js'
 
 const router = express.Router()
 router.param('id', objectIdParam)
@@ -142,6 +143,7 @@ router.post('/', authenticate, authorize('admin', 'fleet_manager'), [
       assignments: assignments.map(a => ({ driver: a?.driver || undefined }))
     })
     const routes = await Route.insertMany(docs)
+    for (const r of routes) if (r.driver) notify.inBackground(notify.routeAssigned(r, r.driver))
     res.status(201).json({ batchId, routes, totals: plan.totals })
   } catch (error) {
     sendError(res, error, 'Failed to create route')
@@ -251,6 +253,7 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
         route.assignedAt = undefined
       } else {
         await assertAssignableDriver(req.body.driver)
+        if (String(route.driver || '') !== String(req.body.driver)) notify.inBackground(notify.routeAssigned(route, req.body.driver))
         route.driver = req.body.driver
         route.assignedAt = new Date()
       }
@@ -343,6 +346,8 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
     await route.save()
     await recordCompletion(route, wasCompleted)
     if (status === 'completed') await recordLeg(route, stop).catch(() => null)
+    if (status === 'failed') notify.inBackground(notify.deliveryFailed(route, stop, req.user.role === 'driver' ? req.user.name : null))
+    if (!wasCompleted && route.status === 'completed') notify.inBackground(notify.routeCompleted(route))
 
     res.json({ route })
   } catch (error) {
@@ -415,6 +420,7 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
     await route.save()
     await recordCompletion(route, wasCompleted)
     await recordLeg(route, stop).catch(() => null) // teaches planning how long this leg really took
+    if (!wasCompleted && route.status === 'completed') notify.inBackground(notify.routeCompleted(route))
 
     res.json({ route: await populateRoute(Route.findById(route._id)) })
   } catch (error) {

@@ -6,6 +6,7 @@ import { validateRequest, pick } from '../middleware/validate.js'
 import { generateToken } from '../services/token.js'
 import { protectDemoAccount } from '../middleware/demo.js'
 import { demoMode, isDemoEmail } from '../services/demo.js'
+import * as notify from '../services/notify.js'
 
 const router = express.Router()
 
@@ -39,6 +40,7 @@ router.post('/register', [
       ...(needsApproval && { isActive: false, pendingApproval: true })
     })
     if (needsApproval) {
+      notify.inBackground(notify.driverAwaitingApproval(user))
       return res.status(201).json({ pendingApproval: true, message: 'Account created. A fleet manager needs to approve it before you can sign in.' })
     }
 

@@ -429,6 +429,16 @@ Drivers lose signal often, so the driver app does not depend on it:
 
 The driver's screens (dashboard, My deliveries, dialogs, sidebar and header) and the customer tracking page can be switched between English and Hindi. The choice is remembered on the device, and Hindi is the default when the browser prefers it. Strings live in `frontend/src/i18n/strings.js`; a test checks that every English string has a Hindi version with the same placeholders. Values the server stores in English, such as failure reasons and vehicle types, are translated for display only, so managers still read them in English. Manager screens are English only.
 
+### 7.10 Email notifications and proof retention
+
+- **Email** goes through Resend's HTTP API (free tier, 3,000 a month) when `RESEND_API_KEY` and `EMAIL_FROM` are set; otherwise nothing is sent. Each person's profile settings decide what they get:
+  - *Route changes*: drivers get new route assignments. Managers get failed deliveries (with the reason), finished routes, and new drivers waiting for approval.
+  - *Vehicle maintenance*: managers get one alert per service date, 3 days ahead.
+  - *Weekly report*: a Monday-morning summary of last week's figures.
+
+  Emails are sent in the background, one per person so addresses stay private. Demo routes and the shared demo accounts never get email. SMS is shown as unavailable, because SMS in India needs a registered (DLT) sender, which is not free.
+- **Proof retention**: a TTL index deletes proof photos and signatures `PROOF_RETENTION_DAYS` after upload (default 90; 0 keeps them forever), so the free 512 MB database does not fill up. The delivery record keeps its time, driver and note, and the app says when an image is no longer stored.
+
 ---
 
 ## 8. Authentication, roles and security
@@ -715,7 +725,7 @@ An end-to-end smoke test on the development servers passed every step: register,
 - The free OpenStreetMap services (OpenFreeMap tiles, Photon, OSRM) have fair-use limits. At larger scale, self-host them or set `MAPBOX_TOKEN`.
 - One depot per batch. Routes do not chain several trips per vehicle in a day.
 - Free hosting sleeps when idle (section 11).
-- Notifications are in-app and spoken. Email and SMS preferences are stored but not sent (no free provider is wired in).
+- Notifications are in-app, spoken and, when configured, by email. SMS is not offered (Indian SMS needs DLT sender registration).
 - Hindi covers the driver and customer screens; manager screens are English only.
 - Offline, a driver can work through routes already on the phone; new assignments and live GPS need signal. Photos waiting to send take space on the phone until they are sent.
 

@@ -1,4 +1,5 @@
 import express from 'express'
+import { emailEnabled } from '../services/notify.js'
 import { query } from 'express-validator'
 import axios from 'axios'
 import { authenticate, authorize } from '../middleware/auth.js'
@@ -109,7 +110,7 @@ router.get('/config', authenticate, managers, async (req, res) => {
     const hubs = [...new Map(based.map(v => [v.base.coordinates.join(), v.base])).values()]
       .map(({ name, address, coordinates }) => ({ name, address, coordinates }))
       .sort((a, b) => (a.name || a.address).localeCompare(b.name || b.address))
-    res.json({ centre: INDIA_CENTRE, hubs, geocoder: mapboxToken() ? 'mapbox' : 'osm' })
+    res.json({ centre: INDIA_CENTRE, hubs, geocoder: mapboxToken() ? 'mapbox' : 'osm', email: emailEnabled() })
   } catch (error) {
     console.error('Map config failed:', error)
     res.status(500).json({ message: 'Failed to load map settings' })
