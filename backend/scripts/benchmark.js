@@ -5,7 +5,7 @@
 //
 // Usage: npm run benchmark --workspace=backend   (writes docs/BENCHMARK.md)
 import { writeFileSync } from 'node:fs'
-import { bestSequence, evaluateSequence } from '../src/services/routeOptimizer.js'
+import { bestSequence, evaluateSequence, planBatch } from '../src/services/routeOptimizer.js'
 import { DEMO_CITIES } from '../src/data/indiaCities.js'
 import { haversineKm } from '../src/utils/geo.js'
 import { ROAD_CIRCUITY } from '../src/config/fleet.js'
@@ -176,5 +176,36 @@ for (const n of [15, 20, 30]) {
 }
 out('')
 out('Times are for the cost search on one route on the machine that ran the benchmark; the planner also runs a shorter shortest-distance search for the alternatives panel.')
+out('')
+
+// 4. Several vehicles: the sweep split alone against the split improved across vehicles
+out('## 4. Several vehicles')
+out('')
+out('Stops are first split between vans by a sweep around the hub. Hopr then moves and swaps stops between vans while the total cost drops, and optimises each van\'s route. The comparison is the same batch planned without the moves between vans.')
+out('')
+out('| Stops / vans | Batches | Cost saving from moves between vans | Distance saving | Better / same / worse | Stops moved (avg) | Planning time (avg) |')
+out('|---|---|---|---|---|---|---|')
+for (const [n, vans, count] of [[40, 2, 8], [60, 3, 6], [90, 4, 4]]) {
+  const rows = []
+  for (let k = 0; k < count; k++) {
+    const inst = instance(20000 * n + k, n)
+    const vehicles = Array.from({ length: vans }, () => ({ type: 'van' }))
+    const base = { depot: inst.depot, stops: inst.stops, vehicles, departureTime: DEPARTURE, includeAlternatives: false }
+    const sweep = planBatch({ ...base, interRoute: false })
+    const started = Date.now()
+    const hopr = planBatch({ ...base, interRoute: true })
+    const ms = Date.now() - started
+    rows.push({
+      cost: -pct(hopr.totals.operatingCost, sweep.totals.operatingCost),
+      km: -pct(hopr.totals.distanceKm, sweep.totals.distanceKm),
+      cmp: Math.sign(sweep.totals.operatingCost - hopr.totals.operatingCost),
+      moved: hopr.totals.movedBetweenRoutes,
+      ms
+    })
+  }
+  const better = rows.filter(r => r.cmp > 0 && r.cost > 0.01).length
+  const worse = rows.filter(r => r.cmp < 0 && r.cost < -0.01).length
+  out(`| ${n} / ${vans} | ${rows.length} | ${f1(mean(rows.map(r => r.cost)))}% | ${f1(mean(rows.map(r => r.km)))}% | ${better} / ${rows.length - better - worse} / ${worse} | ${f1(mean(rows.map(r => r.moved)))} | ${f1(mean(rows.map(r => r.ms)) / 1000)} s |`)
+}
 
 writeFileSync(new URL('../../docs/BENCHMARK.md', import.meta.url), `${lines.join('\n')}\n`)

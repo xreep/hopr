@@ -31,8 +31,18 @@ No exact answer is practical here, so the searches are compared with each other.
 
 | Stops | Instances | Saving vs previous search | Better / same / worse than previous | Saving vs nearest neighbour | Saving vs order as entered | Hopr time (avg / max) |
 |---|---|---|---|---|---|---|
-| 15 | 15 | 2.19% | 9 / 6 / 0 | 73.8% | 91.4% | 92 / 165 ms |
-| 20 | 15 | 3.85% | 10 / 5 / 0 | 76.8% | 92.8% | 293 / 459 ms |
-| 30 | 15 | 2.86% | 12 / 3 / 0 | 80.1% | 92.9% | 1493 / 2134 ms |
+| 15 | 15 | 2.19% | 9 / 6 / 0 | 73.8% | 91.4% | 90 / 163 ms |
+| 20 | 15 | 3.85% | 10 / 5 / 0 | 76.8% | 92.8% | 289 / 450 ms |
+| 30 | 15 | 2.86% | 12 / 3 / 0 | 80.1% | 92.9% | 1468 / 2109 ms |
 
 Times are for the cost search on one route on the machine that ran the benchmark; the planner also runs a shorter shortest-distance search for the alternatives panel.
+
+## 4. Several vehicles
+
+Stops are first split between vans by a sweep around the hub. Hopr then moves and swaps stops between vans while the total cost drops, and optimises each van's route. The comparison is the same batch planned without the moves between vans.
+
+| Stops / vans | Batches | Cost saving from moves between vans | Distance saving | Better / same / worse | Stops moved (avg) | Planning time (avg) |
+|---|---|---|---|---|---|---|
+| 40 / 2 | 8 | 3.8% | 5.2% | 7 / 1 / 0 | 2.3 | 1.2 s |
+| 60 / 3 | 6 | 1.5% | 1.5% | 4 / 2 / 0 | 2.5 | 1.7 s |
+| 90 / 4 | 4 | 4.1% | 1.1% | 4 / 0 / 0 | 6.8 | 3.4 s |

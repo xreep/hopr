@@ -20,7 +20,7 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
 | Planning six Delhi deliveries | The driver app, and customer tracking in Hindi |
 
 **How good is it?**
-- **Routing:** finds the optimal order on all 75 test routes of 6–9 stops, and the exact shortest path on 29 of 30 routes of 12–15 stops. On 15–30 stops it is 2–4% cheaper than the previous search and never worse ([benchmark](docs/BENCHMARK.md)).
+- **Routing:** finds the optimal order on all 75 test routes of 6–9 stops, and the exact shortest path on 29 of 30 routes of 12–15 stops. On 15–30 stops it is 2–4% cheaper than the previous search and never worse. With several vans, moving stops between them saves a further 1.5–4% ([benchmark](docs/BENCHMARK.md)).
 - **Lighthouse (production build):**
 
   | Page | Phone | Desktop |

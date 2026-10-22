@@ -254,3 +254,35 @@ describe('search strategies', () => {
     }
   })
 })
+
+describe('moving stops between vehicles', () => {
+  // Two vans and 24 stops scattered around the Ranchi hub
+  function batch(seed) {
+    let a = seed
+    const r = () => ((a = (a * 16807) % 2147483647) / 2147483647)
+    const [lng, lat] = RANCHI_HUB.coordinates
+    return {
+      depot: RANCHI_HUB,
+      departureTime: DEPART,
+      includeAlternatives: false,
+      vehicles: [{ type: 'van', capacity: 60 }, { type: 'van', capacity: 60 }],
+      stops: Array.from({ length: 24 }, (_, i) => ({
+        address: `Stop ${i + 1}`,
+        coordinates: [lng + (r() - 0.5) * 0.14, lat + (r() - 0.5) * 0.14],
+        packageWeightKg: 1 + Math.round(r() * 3)
+      }))
+    }
+  }
+
+  it('is never worse than the sweep split, and keeps every van within capacity', () => {
+    for (const seed of [3, 7, 11]) {
+      const input = batch(seed)
+      const sweep = planBatch({ ...input, interRoute: false })
+      const improved = planBatch(input)
+      expect(improved.totals.operatingCost).toBeLessThanOrEqual(sweep.totals.operatingCost + 1e-6)
+      expect(improved.totals.stops).toBe(24)
+      expect(improved.routes.flatMap(r => r.stops.map(s => s.address)).sort()).toEqual(input.stops.map(s => s.address).sort())
+      for (const route of improved.routes) expect(route.totals.loadKg).toBeLessThanOrEqual(60)
+    }
+  })
+})

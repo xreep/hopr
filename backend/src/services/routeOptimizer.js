@@ -11,8 +11,9 @@
 // The previous search (constructions + 2-opt + single relocate) is kept as the
 // 'baseline' strategy so the benchmark can compare the two.
 //
-// Batch: stops are split across vehicles with a capacity-aware angular sweep
-// around the depot, then each vehicle's route is optimised independently.
+// Batch: stops are split across vehicles with a capacity-aware angular sweep around the
+// depot, improved across vehicles (stops moved or swapped between them while the total
+// cost drops), then each vehicle's route is optimised.
 
 import { haversineKm, isValidCoordinate, angleFrom } from '../utils/geo.js'
 import { formatIST, hhmmToMinutes, istMinutesOfDay, istHour, addMinutes, isHHMM } from '../utils/time.js'
@@ -659,8 +660,106 @@ export function partitionStops(depot, stops, vehicles) {
 
 // Total search budget for a whole batch, so batch planning stays well under 10 s
 export const BATCH_TIME_BUDGET_MS = 7000
+// Of which: moving stops between vehicles after the sweep split
+export const INTER_ROUTE_BUDGET_MS = 2000
 
-export function planBatch({ depot, stops, vehicles, ...options } = {}) {
+// Quick order for a subset of stops: greedy cheapest append, then local search
+function orderSubset(ctx, indices, deadline) {
+  const left = new Set(indices)
+  const order = []
+  while (left.size) {
+    let best = -1
+    let bestCost = Infinity
+    for (const c of left) {
+      order.push(c)
+      const { cost } = simulate(ctx, order)
+      order.pop()
+      if (cost < bestCost - 1e-9) {
+        bestCost = cost
+        best = c
+      }
+    }
+    order.push(best)
+    left.delete(best)
+  }
+  return localSearch(ctx, order, 'cost', deadline, { extended: false })
+}
+
+// Cheapest place to put stop s into an order
+function bestInsertion(ctx, order, s) {
+  let best = { cost: Infinity, order: null }
+  for (let p = 0; p <= order.length; p++) {
+    const candidate = [...order.slice(0, p), s, ...order.slice(p)]
+    const { cost } = simulate(ctx, candidate)
+    if (cost < best.cost - 1e-9) best = { cost, order: candidate }
+  }
+  return best
+}
+
+// Cluster first, then improve across routes: move a stop to another vehicle, or swap two
+// stops between vehicles, whenever the combined cost of the two routes drops. Each
+// vehicle gets a context over all the batch's stops, so any stop can be priced in any
+// vehicle; capacity and the per-route stop limit always hold. A vehicle can end up empty,
+// which means the batch needs one vehicle fewer.
+function improveAcrossRoutes(contexts, clusters, weights, deadline) {
+  const routes = clusters.map((c, k) => (c.length ? orderSubset(contexts[k], c, deadline) : { order: [], cost: 0 }))
+  const load = routes.map(r => r.order.reduce((sum, i) => sum + weights[i], 0))
+  const fits = (k, extraKg, extraStops = 1) => routes[k].order.length + extraStops <= MAX_STOPS_PER_ROUTE && load[k] + extraKg <= contexts[k].vehicle.capacityKg
+  const without = (k, i) => {
+    const order = routes[k].order.filter(x => x !== i)
+    return { order, cost: simulate(contexts[k], order).cost }
+  }
+  let moved = 0
+  let improved = true
+  while (improved && Date.now() < deadline) {
+    improved = false
+    // Relocate one stop
+    for (let a = 0; a < routes.length && !improved; a++) {
+      for (const i of routes[a].order) {
+        if (improved || Date.now() >= deadline) break
+        const fromA = without(a, i)
+        for (let b = 0; b < routes.length && !improved; b++) {
+          if (b === a || !fits(b, weights[i])) continue
+          const intoB = bestInsertion(contexts[b], routes[b].order, i)
+          if (fromA.cost + intoB.cost < routes[a].cost + routes[b].cost - 1e-6) {
+            routes[a] = fromA
+            routes[b] = intoB
+            load[a] -= weights[i]
+            load[b] += weights[i]
+            moved++
+            improved = true
+          }
+        }
+      }
+    }
+    // Swap two stops between vehicles
+    for (let a = 0; a < routes.length && !improved; a++) {
+      for (let b = a + 1; b < routes.length && !improved; b++) {
+        for (const i of routes[a].order) {
+          if (improved || Date.now() >= deadline) break
+          for (const j of routes[b].order) {
+            const dA = weights[j] - weights[i]
+            if (load[a] + dA > contexts[a].vehicle.capacityKg || load[b] - dA > contexts[b].vehicle.capacityKg) continue
+            const intoA = bestInsertion(contexts[a], routes[a].order.filter(x => x !== i), j)
+            const intoB = bestInsertion(contexts[b], routes[b].order.filter(x => x !== j), i)
+            if (intoA.cost + intoB.cost < routes[a].cost + routes[b].cost - 1e-6) {
+              routes[a] = intoA
+              routes[b] = intoB
+              load[a] += dA
+              load[b] -= dA
+              moved++
+              improved = true
+              break
+            }
+          }
+        }
+      }
+    }
+  }
+  return { clusters: routes.map(r => r.order), moved }
+}
+
+export function planBatch({ depot, stops, vehicles, interRoute = true, ...options } = {}) {
   const computeStarted = Date.now()
   if (!Array.isArray(vehicles) || vehicles.length < 1) {
     throw new OptimizationError('Select at least one vehicle', 400)
@@ -678,24 +777,55 @@ export function planBatch({ depot, stops, vehicles, ...options } = {}) {
     throw new OptimizationError(`Total load ${round(totalLoad)} kg exceeds fleet capacity ${totalCapacity} kg. Add a vehicle or a larger one.`)
   }
 
-  const clusters = vehicles.length === 1
+  let clusters = vehicles.length === 1
     ? [normalized.map((_, i) => i)]
     : partitionStops(resolvedDepot, normalized, resolvedVehicles)
 
-  const routes = []
-  const nonEmpty = clusters.filter(c => c.length).length || 1
-  // Each route gets an equal share of the batch budget (search + alternatives)
-  const perRouteBudget = Math.min(OPTIMIZER_TIME_BUDGET_MS, Math.floor(BATCH_TIME_BUDGET_MS / nonEmpty / 2))
-  clusters.forEach((indices, k) => {
-    if (!indices.length) return
-    routes.push(optimizeRoute({
-      timeBudgetMs: perRouteBudget,
-      ...options,
+  const sweepClusters = clusters
+  let movedBetweenRoutes = 0
+  if (interRoute && vehicles.length > 1) {
+    const contexts = resolvedVehicles.map(vehicle => buildContext({
       depot: resolvedDepot,
-      vehicle: vehicles[k],
-      stops: indices.map(i => normalized[i])
+      stops: normalized,
+      vehicle,
+      departureTime: options.departureTime,
+      trafficEnabled: options.trafficEnabled ?? true,
+      incidents: options.incidents || [],
+      returnToDepot: options.returnToDepot || false,
+      fuelPrices: options.fuelPrices || defaultFuelPrices(),
+      learnedFactors: options.learnedFactors
     }))
-  })
+    const result = improveAcrossRoutes(contexts, clusters, normalized.map(s => s.packageWeightKg), Date.now() + INTER_ROUTE_BUDGET_MS)
+    clusters = result.clusters
+    movedBetweenRoutes = result.moved
+  }
+
+  // Vehicles whose stops changed are also optimised with their original stops, so the
+  // batch keeps whichever split the full search makes cheaper: never worse than the sweep
+  const sameStops = (a, b) => a.length === b.length && a.every(i => b.includes(i))
+  const changed = clusters.map((c, k) => !sameStops(c, sweepClusters[k]))
+  const searches = clusters.filter(c => c.length).length + changed.filter(Boolean).length || 1
+  // Each search gets an equal share of what is left of the batch budget (search + alternatives)
+  const remaining = Math.max(1000, BATCH_TIME_BUDGET_MS - (Date.now() - computeStarted))
+  const perRouteBudget = Math.min(OPTIMIZER_TIME_BUDGET_MS, Math.floor(remaining / searches / 2))
+  const solve = (indices, k, extra = {}) => (indices.length
+    ? optimizeRoute({ timeBudgetMs: perRouteBudget, ...options, ...extra, depot: resolvedDepot, vehicle: vehicles[k], stops: indices.map(i => normalized[i]) })
+    : null)
+  const costOf = results => results.reduce((sum, r) => sum + (r ? r.totals.operatingCost : 0), 0)
+
+  let results = clusters.map((c, k) => solve(c, k))
+  if (changed.some(Boolean)) {
+    const keys = changed.flatMap((c, k) => (c ? [k] : []))
+    const sweepResults = keys.map(k => solve(sweepClusters[k], k, { includeAlternatives: false }))
+    if (costOf(sweepResults) < costOf(keys.map(k => results[k])) - 1e-6) {
+      keys.forEach((k, n) => {
+        results[k] = options.includeAlternatives === false ? sweepResults[n] : solve(sweepClusters[k], k)
+      })
+      clusters = sweepClusters
+      movedBetweenRoutes = 0
+    }
+  }
+  const routes = results.filter(Boolean)
 
   const sum = key => round(routes.reduce((acc, r) => acc + r.totals[key], 0), 2)
   return {
@@ -707,7 +837,9 @@ export function planBatch({ depot, stops, vehicles, ...options } = {}) {
       totalMinutes: routes.reduce((max, r) => Math.max(max, r.totals.totalMinutes), 0),
       fuelCost: round(routes.reduce((acc, r) => acc + r.totals.fuel.cost, 0), 2),
       co2Kg: round(routes.reduce((acc, r) => acc + r.totals.fuel.co2Kg, 0), 2),
-      violations: routes.reduce((acc, r) => acc + r.violations.length, 0)
+      violations: routes.reduce((acc, r) => acc + r.violations.length, 0),
+      operatingCost: routes.reduce((acc, r) => acc + r.totals.operatingCost, 0),
+      movedBetweenRoutes
     },
     computeMs: Date.now() - computeStarted
   }

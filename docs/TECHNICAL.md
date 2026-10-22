@@ -265,9 +265,12 @@ This is a deliberate trade-off, documented rather than "fixed":
 `planBatch` handles several vehicles at once:
 
 1. **Partition**: a capacity-aware angular sweep around the depot. Stops are sorted by bearing, starting after the widest empty sector, then each vehicle is filled in turn up to an even share of stops, without exceeding its capacity or 30 stops.
-2. Each vehicle's stops are optimised independently, as in 4.3.
-3. A batch heavier than the whole fleet is rejected with a clear message.
-4. The batch budget is 7 s. The largest batch, 300 stops on 10 vehicles, plans in about 480 ms on the test machine.
+2. **Improvement across vehicles** (up to 2 s): each vehicle gets a cost model over all the batch's stops, so any stop can be priced in any vehicle. The engine then moves a stop to another vehicle, or swaps two stops between vehicles, whenever the combined cost of the two routes drops. Each move is priced by inserting the stop at its cheapest position, and capacity and the 30-stop limit always hold. A vehicle may end up empty, which means the batch needs one vehicle fewer.
+3. Each vehicle's stops are then optimised as in 4.3. Any vehicle whose stops changed is also optimised with its original stops, and the batch keeps whichever is cheaper, so the result is never worse than the sweep alone.
+4. A batch heavier than the whole fleet is rejected with a clear message.
+5. The batch budget is 7 s. The largest batch, 300 stops on 10 vehicles, uses about 6.5 s of it on the test machine; typical batches of 40–90 stops take 1–3.5 s.
+
+On the benchmark (section 4 of [BENCHMARK.md](BENCHMARK.md)), moving stops between vehicles makes batches of 40–90 stops on 2–4 vans 1.5–4% cheaper and up to 5% shorter. It was better on 15 of 18 batches, the same on 3, and never worse.
 
 ### 4.6 Re-timing without re-sequencing
 
