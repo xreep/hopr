@@ -50,6 +50,13 @@ describe('outbox', () => {
     expect(store.items).toHaveLength(1)
   })
 
+  it('drops updates older than a week without sending them', async () => {
+    await queueUpdate('u1', { kind: 'start', routeId: 'r1', at: new Date(Date.now() - 8 * 86400000).toISOString() })
+    expect(await flushOutbox('u1')).toEqual({ sent: 0, dropped: 1, remaining: 0 })
+    expect(api.patch).not.toHaveBeenCalled()
+    expect(store.items).toEqual([])
+  })
+
   it('tells a lost connection apart from a refusal', () => {
     expect(isNetworkError(new Error('Network Error'))).toBe(true)
     expect(isNetworkError(httpError(503))).toBe(true)

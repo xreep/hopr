@@ -10,6 +10,7 @@ import { errorMessage } from '../utils/api'
 import { DEMO_USERS, DEMO_MISSING } from '../utils/demo'
 import { pointAlong, slicePolyline, stopsAlongKm } from '../utils/geo'
 import useMediaQuery from '../hooks/useMediaQuery'
+import useDemoMode from '../hooks/useDemoMode'
 import ROUTE from '../data/landingRoute.json'
 
 // The public homepage. The hero is the product doing its job: the New Delhi demo route,
@@ -171,6 +172,7 @@ export default function Landing() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
+  const demo = useDemoMode() === true
 
   useEffect(() => {
     document.title = 'Hopr: delivery route planning for India'
@@ -195,6 +197,10 @@ export default function Landing() {
       {busy ? <><span className="spinner" /> Opening the demo</> : 'Try the demo'}
     </button>
   )
+  // The demo is offered only when the server runs as a public demo
+  const actions = (size = '') => (demo
+    ? <>{demoButton(size)}<Link to="/login" className={`btn btn-outline ${size}`}>Sign in</Link></>
+    : <Link to="/login" className={`btn btn-primary ${size}`}>Sign in</Link>)
 
   return (
     <div className="landing">
@@ -206,8 +212,7 @@ export default function Landing() {
           <a href="#india">Coverage</a>
         </nav>
         <div className="flex items-center gap-2">
-          <Link to="/login" className="btn btn-ghost">Sign in</Link>
-          {demoButton()}
+          {demo ? <><Link to="/login" className="btn btn-ghost">Sign in</Link>{demoButton()}</> : actions()}
         </div>
       </header>
 
@@ -219,11 +224,8 @@ export default function Landing() {
               Hopr puts your stops in the best order for traffic, delivery windows and fuel, gives each route to the right driver,
               and lets customers watch their parcel arrive.
             </p>
-            <div className="flex flex-wrap gap-2 mt-7">
-              {demoButton('btn-lg')}
-              <Link to="/login" className="btn btn-outline btn-lg">Sign in</Link>
-            </div>
-            <p className="text-small text-ink-400 mt-3">The demo opens as a fleet manager with routes in five cities. Nothing to install.</p>
+            <div className="flex flex-wrap gap-2 mt-7">{actions('btn-lg')}</div>
+            {demo && <p className="text-small text-ink-400 mt-3">The demo opens as a fleet manager with routes in five cities. Nothing to install.</p>}
           </div>
           <HeroDrive />
         </section>
@@ -309,10 +311,7 @@ export default function Landing() {
 
         <section className="landing-cta">
           <h2 className="landing-h2">See it plan, dispatch and drive</h2>
-          <div className="flex flex-wrap gap-2 mt-5">
-            {demoButton('btn-lg')}
-            <Link to="/login" className="btn btn-outline btn-lg">Sign in</Link>
-          </div>
+          <div className="flex flex-wrap gap-2 mt-5">{actions('btn-lg')}</div>
         </section>
       </main>
 

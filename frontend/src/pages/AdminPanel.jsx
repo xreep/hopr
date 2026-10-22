@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard } from '../components/ui'
 import { formatDate } from '../utils/time'
 import DemoSeedButton from '../components/DemoSeedButton'
+import useDemoMode from '../hooks/useDemoMode'
 import Icon from '../components/icons'
 import { useConfirm } from '../components/ConfirmDialog'
 
@@ -14,6 +15,7 @@ const initialFormData = { name: '', email: '', password: '', role: 'driver', pho
 
 export default function AdminPanel() {
   const { user: me } = useAuth()
+  const demo = useDemoMode()
   const [users, setUsers] = useState(null)
   const [config, setConfig] = useState(null)
   const [editing, setEditing] = useState(null) // null | 'new' | user
@@ -120,7 +122,7 @@ export default function AdminPanel() {
         <StatCard label="Drivers" value={list.filter(u => u.role === 'driver').length} hint={`${list.filter(u => u.isActive).length} active accounts in total`} />
       </div>
 
-      <div className="card mb-6">
+      {demo && <div className="card mb-6">
         <div className="card-body flex-between flex-wrap gap-3">
           <div>
             <p className="text-h3 font-bold">Demo data</p>
@@ -128,7 +130,7 @@ export default function AdminPanel() {
           </div>
           <DemoSeedButton className="btn btn-secondary" />
         </div>
-      </div>
+      </div>}
 
       <div className="card">
         <div className="card-header flex flex-wrap gap-2">

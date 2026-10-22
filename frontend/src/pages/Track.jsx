@@ -38,7 +38,7 @@ function TrackDelivery() {
       const res = await fetch(`${API_BASE}/track/${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(res.status === 404 ? 'track.invalid' : 'track.unavailable')
+        setError(res.status === 404 ? 'track.invalid' : res.status === 410 ? 'track.expired' : 'track.unavailable')
         return
       }
       lastOk.current = Date.now()

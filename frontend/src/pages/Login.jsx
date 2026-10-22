@@ -7,6 +7,7 @@ import { HopMark } from '../components/icons'
 import DirectionSign from '../components/DirectionSign'
 import { DEMO_USERS, DEMO_MISSING } from '../utils/demo'
 import usePageTitle from '../hooks/usePageTitle'
+import useDemoMode from '../hooks/useDemoMode'
 import PasswordInput from '../components/PasswordInput'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -15,6 +16,7 @@ export default function Login() {
   const { login, register } = useAuth()
   const navigate = useNavigate()
   const [mode, setMode] = useState('login')
+  const demo = useDemoMode() === true
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '' })
   usePageTitle(mode === 'login' ? 'Sign in' : 'Create account')
   const [loading, setLoading] = useState(false)
@@ -129,7 +131,7 @@ export default function Login() {
               : <>Already have an account? <button type="button" className="link-button" onClick={() => switchMode('login')}>Sign in</button></>}
           </p>
 
-          <div className="login-demo">
+          {demo && <div className="login-demo">
             <p className="text-small font-semibold text-ink-300 mb-2">Explore with a demo account</p>
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(DEMO_USERS).map(([role, creds]) => (
@@ -138,7 +140,7 @@ export default function Login() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
         </div>
 
         <p className="text-micro text-ink-400">Route optimisation for last-mile delivery in India</p>

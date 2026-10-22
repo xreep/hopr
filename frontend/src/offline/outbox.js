@@ -50,6 +50,10 @@ const retryLater = error => {
   return !status || status === 401 || status === 408 || status === 429 || status >= 500
 }
 
+// Updates still unsent after a week are stale (the manager has long since dealt with the
+// stop) and only keep customer details on the phone: they are dropped
+const MAX_AGE_MS = 7 * 86400000
+
 let flushing = null
 export function flushOutbox(userId) {
   flushing ??= (async () => {
@@ -58,6 +62,12 @@ export function flushOutbox(userId) {
       const items = await outboxList(userId)
       for (let i = 0; i < items.length; i++) {
         try {
+          if (Date.now() - new Date(items[i].at).getTime() > MAX_AGE_MS) {
+            result.dropped++
+            await outboxRemove(items[i].id)
+            changed()
+            continue
+          }
           await sendUpdate(items[i])
           result.sent++
         } catch (error) {
