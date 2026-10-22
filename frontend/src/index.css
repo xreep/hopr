@@ -451,6 +451,9 @@
   .fleet-map { position: relative; border-right: 1px solid var(--h-line); min-width: 0; }
   .fleet-map .map-container { border-radius: 0; }
   .fleet-empty { position: absolute; top: 0.75rem; left: 0.75rem; padding: 0.3rem 0.6rem; border-radius: 4px; background: #FFFFFF; border: 1px solid var(--h-line); color: var(--h-ink-2); font-size: 0.8rem; font-weight: 600; z-index: 2; }
+  .fleet-back { cursor: pointer; color: var(--h-blue); }
+  .fleet-back:hover { text-decoration: underline; }
+  .demo-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 1.25rem; background: #FFF8E1; border-bottom: 1px solid var(--h-line); border-left: 4px solid var(--h-yellow); }
   .fleet-side { display: flex; flex-direction: column; min-width: 0; max-height: 460px; }
   .fleet-side .card-body { overflow-y: auto; flex: 1; padding-top: 0.25rem; padding-bottom: 0.25rem; }
   @media (max-width: 1100px) {

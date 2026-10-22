@@ -12,7 +12,7 @@ const router = express.Router()
 
 // Active drivers with no active route and no planned route already assigned,
 // paired with the vehicle they drive
-async function availableCandidates() {
+export async function availableCandidates() {
   const drivers = await User.find({ role: 'driver', isActive: true }).select('name lastLocation').lean()
   const busy = new Set((await Route.distinct('driver', { status: { $in: ['planned', 'active'] }, driver: { $ne: null } })).map(String))
   const free = drivers.filter(d => !busy.has(String(d._id)))

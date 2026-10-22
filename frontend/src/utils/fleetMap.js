@@ -40,3 +40,15 @@ export function buildFleetMap(routes, focus = null, { focusOnly = true } = {}) {
     }))
   }
 }
+
+// Before anyone is on the road: the day's planned routes, one hue each, and the hubs
+// the fleet is based at
+export function buildPlanMap(routes, hubs = []) {
+  const depots = [...hubs, ...routes.map(r => r.depot).filter(d => d?.coordinates?.length === 2)]
+  return {
+    lines: routes.map((r, i) => ({ id: r._id, coordinates: r.geometry?.coordinates || [], color: ROUTE_COLORS[i % ROUTE_COLORS.length], width: 3 })),
+    points: [...new Map(depots.map(d => [d.coordinates.join(), d])).values()]
+      .map(d => ({ id: `hub-${d.coordinates.join()}`, coordinates: d.coordinates, label: 'H', variant: 'depot', title: d.name || d.address })),
+    drivers: []
+  }
+}

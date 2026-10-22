@@ -151,7 +151,12 @@ const routeSchema = new mongoose.Schema({
     _id: false
   }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  isDemo: { type: Boolean, default: false }
+  isDemo: { type: Boolean, default: false },
+  // Demo morning: a simulated drive (demo routes only), see services/simulation.js
+  simulation: {
+    startedAt: Date,
+    speedup: Number
+  }
 }, {
   timestamps: true
 })

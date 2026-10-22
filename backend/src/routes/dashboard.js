@@ -6,6 +6,7 @@ import TrafficIncident from '../models/TrafficIncident.js'
 import { authenticate } from '../middleware/auth.js'
 import { isOnTime, driverPerformance, pct } from '../services/metrics.js'
 import { istMinutesOfDay } from '../utils/time.js'
+import { simulatingFilter, SIM_SPEEDUP } from '../services/simulation.js'
 
 const router = express.Router()
 
@@ -62,7 +63,7 @@ router.get('/', authenticate, async (req, res) => {
       })
     }
 
-    const [activeRoutes, todaysRoutes, unassigned, needsRecalc, incidents, vehicleStats, drivers, recent, users] = await Promise.all([
+    const [activeRoutes, todaysRoutes, unassigned, needsRecalc, incidents, vehicleStats, drivers, recent, users, demoWaiting, demoRunning] = await Promise.all([
       Route.find({ status: 'active' }).select('-geometry -alternatives').populate('driver', 'name').populate('vehicle', 'vehicleId name'),
       Route.find({ $or: [{ plannedStart: { $gte: today } }, { completedAt: { $gte: today } }, { status: 'active' }] })
         .select('status stops plannedStart startedAt createdAt').lean(),
@@ -73,7 +74,9 @@ router.get('/', authenticate, async (req, res) => {
       User.countDocuments({ role: 'driver', isActive: true }),
       Route.find().select('-geometry -alternatives -stops').sort({ createdAt: -1 }).limit(6)
         .populate('driver', 'name').populate('vehicle', 'vehicleId name'),
-      req.user.role === 'admin' ? User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]) : null
+      req.user.role === 'admin' ? User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]) : null,
+      Route.countDocuments({ isDemo: true, status: 'planned' }),
+      Route.countDocuments(simulatingFilter())
     ])
 
     const stopsToday = todaysRoutes.flatMap(r => r.stops.map(s => ({ s, r })))
@@ -103,6 +106,8 @@ router.get('/', authenticate, async (req, res) => {
       },
       users: users ? Object.fromEntries(users.map(u => [u._id, u.count])) : undefined,
       liveRoutes: activeRoutes.map(liveSummary),
+      // Demo morning: planned demo routes that can be driven, and drives running now
+      demo: { waiting: demoWaiting, running: demoRunning, speedup: SIM_SPEEDUP },
       recentRoutes: recent
     })
   } catch (error) {
