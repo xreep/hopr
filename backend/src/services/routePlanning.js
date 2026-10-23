@@ -139,6 +139,8 @@ export async function routeDocsFromPlan(plan, { name, createdBy, assignments = [
       geometry: { type: 'LineString', coordinates: geometry.coordinates },
       geometrySource: geometry.source,
       roadDistanceKm: geometry.distanceKm ?? undefined,
+      // Mapbox driving-traffic drive time at planning (live traffic), when Mapbox is on
+      liveTrafficDriveMin: geometry.source === 'mapbox' ? geometry.durationMin ?? undefined : undefined,
       createdBy,
       isDemo,
       ...plannedFields(result)

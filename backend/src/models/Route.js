@@ -116,6 +116,7 @@ const routeSchema = new mongoose.Schema({
   },
   geometrySource: { type: String, enum: ['mapbox', 'osm', 'estimated'], default: 'estimated' },
   roadDistanceKm: Number,
+  liveTrafficDriveMin: Number,
   // Planned figures
   totalDistance: { type: Number, default: 0 },
   estimatedTime: { type: Number, default: 0 },

@@ -127,7 +127,7 @@ export default function RouteDetail() {
               <thead><tr><th></th><th>Planned</th><th>Actual</th></tr></thead>
               <tbody>
                 <tr><td>Distance</td><td>{formatKm(route.totalDistance)}{route.roadDistanceKm ? <div className="text-xs text-muted">road {formatKm(route.roadDistanceKm)}</div> : null}</td><td>{route.actualDistance > 0 ? formatKm(route.actualDistance) : '-'}</td></tr>
-                <tr><td>Duration</td><td>{formatDuration(route.estimatedTime)}</td><td>{route.actualTime ? formatDuration(route.actualTime) : route.startedAt ? `running ${formatDuration((Date.now() - new Date(route.startedAt)) / 60000)}` : '-'}</td></tr>
+                <tr><td>Duration</td><td>{formatDuration(route.estimatedTime)}{route.liveTrafficDriveMin ? <div className="text-xs text-muted">driving {formatDuration(route.liveTrafficDriveMin)} in live traffic (Mapbox)</div> : null}</td><td>{route.actualTime ? formatDuration(route.actualTime) : route.startedAt ? `running ${formatDuration((Date.now() - new Date(route.startedAt)) / 60000)}` : '-'}</td></tr>
                 <tr><td>Fuel</td><td>{route.fuelEstimate} {route.fuelUnit}, {formatINR(route.fuelCost)}</td><td>—</td></tr>
                 <tr><td>Deliveries</td><td>{route.stops.length}</td><td>{route.stops.filter(s => s.status === 'completed').length} delivered, {route.stops.filter(s => s.status === 'failed').length} failed</td></tr>
               </tbody>
