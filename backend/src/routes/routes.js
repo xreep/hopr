@@ -146,7 +146,7 @@ router.post('/', authenticate, authorize('admin', 'fleet_manager'), [
     if (new Set(driverIds.map(String)).size !== driverIds.length) {
       return res.status(400).json({ message: 'A driver can only be assigned one route per batch' })
     }
-    for (const id of driverIds) await assertAssignableDriver(id)
+    for (const id of driverIds) await assertAssignableDriver(id, req.body.departureTime || new Date())
 
     const plan = await planFromRequest(req.body)
     const { batchId, docs } = await routeDocsFromPlan(plan, {
@@ -264,7 +264,7 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
         route.driver = undefined
         route.assignedAt = undefined
       } else {
-        await assertAssignableDriver(req.body.driver)
+        await assertAssignableDriver(req.body.driver, route.plannedStart)
         if (String(route.driver || '') !== String(req.body.driver)) notify.inBackground(notify.routeAssigned(route, req.body.driver))
         route.driver = req.body.driver
         route.assignedAt = new Date()

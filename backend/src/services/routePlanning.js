@@ -6,6 +6,7 @@ import { planBatch, optimizeRoute, retimeSequence, OptimizationError } from './r
 import { learnedFactors } from './learnedTraffic.js'
 import { buildRouteGeometry, isRoadGeometry } from './geometry.js'
 import { DEFAULT_DEPOT, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
+import { isOffOn, offReason } from './availability.js'
 
 const STOP_FIELDS = [
   'address', 'coordinates', 'customerName', 'customerPhone', 'priority', 'windowStart', 'windowEnd',
@@ -266,9 +267,11 @@ export async function reorderPlannedRoute(route, stopIds) {
   return route
 }
 
-export async function assertAssignableDriver(driverId) {
+// `day`: when the route runs, so a driver on a day off cannot be given it
+export async function assertAssignableDriver(driverId, day = null) {
   const driver = await User.findOne({ _id: driverId, role: 'driver', isActive: true })
   if (!driver) throw new OptimizationError('Driver not found or inactive', 400)
+  if (day && isOffOn(driver, day)) throw new OptimizationError(offReason(driver, day), 400)
   return driver
 }
 

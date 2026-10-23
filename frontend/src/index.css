@@ -743,3 +743,10 @@
     .print-sheet td:last-child { width: 24%; }
   }
 }
+
+@layer components {
+  .day-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.25rem 0.2rem 0.65rem; border: 1px solid var(--h-line); border-radius: 999px; font-size: 0.8125rem; font-weight: 600; }
+  .day-chip button { display: inline-flex; padding: 0.2rem; border-radius: 999px; color: var(--h-ink-3); }
+  .day-chip button:hover { background: var(--h-line); }
+  .day-chip svg { width: 0.9rem; height: 0.9rem; }
+}

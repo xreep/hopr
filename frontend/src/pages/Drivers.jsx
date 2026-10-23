@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
-import { StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } from '../components/ui'
+import { StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion, Modal } from '../components/ui'
+import DaysOffEditor from '../components/DaysOffEditor'
 import { formatKm, initials } from '../utils/format'
 import { relativeTime } from '../utils/time'
 import Icon from '../components/icons'
@@ -12,6 +13,7 @@ export default function Drivers() {
   const [vehicles, setVehicles] = useState([])
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(null)
+  const [daysOffFor, setDaysOffFor] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +49,18 @@ export default function Drivers() {
       toast.error(errorMessage(err))
     } finally {
       setBusy(null)
+    }
+  }
+
+  const saveDaysOff = async daysOff => {
+    try {
+      const res = await api.put(`/drivers/${daysOffFor._id}/days-off`, { daysOff })
+      toast.success(`Days off saved for ${daysOffFor.name}`)
+      load()
+      return res.data.daysOff
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to save days off'))
+      throw err
     }
   }
 
@@ -128,7 +142,10 @@ export default function Drivers() {
                     <td className="nd-tabular">{d.avgDeliveryMinutes === null ? '—' : `${Math.round(d.avgDeliveryMinutes)} min`}</td>
                     <td>{formatKm(d.distanceKm)}</td>
                     <td className="text-micro text-ink-300 whitespace-nowrap">{relativeTime(d.lastLocation?.updatedAt)}</td>
-                    <td className="text-right">
+                    <td className="text-right whitespace-nowrap">
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => setDaysOffFor(d)}>
+                        Days off{d.daysOff?.length ? ` (${d.daysOff.length})` : ''}
+                      </button>
                       <button type="button" className={`btn btn-sm ${d.pendingApproval ? 'btn-secondary' : 'btn-ghost'}`} disabled={busy === d._id} onClick={() => toggleActive(d)}>
                         {d.pendingApproval ? 'Approve' : d.isActive ? 'Deactivate' : 'Activate'}
                       </button>
@@ -140,6 +157,13 @@ export default function Drivers() {
           </TableRegion>
         )}
       </div>
+      {daysOffFor && (
+        <Modal title={`Days off: ${daysOffFor.name}`} labelledBy="days-off-modal" onClose={() => setDaysOffFor(null)}
+          footer={<button type="button" className="btn btn-secondary" onClick={() => setDaysOffFor(null)}>Done</button>}>
+          <p className="text-small text-ink-300 mb-3">Auto-dispatch skips {daysOffFor.name} on these days, and they can&apos;t be assigned a route that runs on one.</p>
+          <DaysOffEditor days={daysOffFor.daysOff || []} onSave={saveDaysOff} idPrefix="driver-days-off" />
+        </Modal>
+      )}
     </div>
   )
 }

@@ -40,6 +40,8 @@ const userSchema = new mongoose.Schema({
   // A self-registered driver waits here (inactive) until a manager approves them
   pendingApproval: { type: Boolean, default: false },
   weeklyReportSentAt: Date,
+  // Days off (IST dates, YYYY-MM-DD): auto-dispatch and assignment skip the driver on these
+  daysOff: { type: [String], default: undefined },
   lastLogin: {
     type: Date
   },

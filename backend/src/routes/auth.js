@@ -7,6 +7,7 @@ import { generateToken } from '../services/token.js'
 import { protectDemoAccount } from '../middleware/demo.js'
 import { demoMode, isDemoEmail } from '../services/demo.js'
 import * as notify from '../services/notify.js'
+import { daysOffValidators, normalizeDaysOff } from '../services/availability.js'
 
 // The signed-in user's own account, without lockout and session-revocation internals
 // (failedAttempts, lockUntil, tokenVersion)
@@ -18,6 +19,7 @@ const accountView = user => ({
   phone: user.phone,
   address: user.address,
   isActive: user.isActive,
+  daysOff: user.daysOff || [],
   notifications: user.notifications,
   createdAt: user.createdAt,
   lastLogin: user.lastLogin
@@ -206,6 +208,18 @@ router.put('/password', authenticate, ownAccount, [
     res.json({ message: 'Password updated successfully. Please log in again.' })
   } catch (error) {
     res.status(500).json({ message: 'Failed to update password' })
+  }
+})
+
+// A driver's own days off
+router.put('/days-off', authenticate, ownAccount, [...daysOffValidators, validateRequest], async (req, res) => {
+  try {
+    if (req.user.role !== 'driver') return res.status(403).json({ message: 'Only drivers have days off' })
+    const user = await User.findByIdAndUpdate(req.user.id, { $set: { daysOff: normalizeDaysOff(req.body.daysOff) } }, { new: true })
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({ daysOff: user.daysOff })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update days off' })
   }
 })
 

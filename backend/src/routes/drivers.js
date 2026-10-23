@@ -7,6 +7,7 @@ import { authenticate, authorize } from '../middleware/auth.js'
 import { protectDemoAccount } from '../middleware/demo.js'
 import { validateRequest, escapeRegex, objectIdParam } from '../middleware/validate.js'
 import { driverPerformance } from '../services/metrics.js'
+import { daysOffValidators, normalizeDaysOff } from '../services/availability.js'
 
 const router = express.Router()
 router.param('id', objectIdParam)
@@ -141,6 +142,24 @@ router.patch('/:id/status', authenticate, authorize('admin', 'fleet_manager'), p
     res.json({ driver })
   } catch (error) {
     res.status(500).json({ message: 'Failed to update driver status' })
+  }
+})
+
+// A manager sets a driver's days off
+router.put('/:id/days-off', authenticate, authorize('admin', 'fleet_manager'), protectDemoAccount(), [
+  ...daysOffValidators,
+  validateRequest
+], async (req, res) => {
+  try {
+    const driver = await User.findOneAndUpdate(
+      { _id: req.params.id, role: 'driver' },
+      { $set: { daysOff: normalizeDaysOff(req.body.daysOff) } },
+      { new: true }
+    )
+    if (!driver) return res.status(404).json({ message: 'Driver not found' })
+    res.json({ daysOff: driver.daysOff })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update days off' })
   }
 })
 
