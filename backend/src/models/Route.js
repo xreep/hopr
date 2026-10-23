@@ -106,6 +106,8 @@ const routeSchema = new mongoose.Schema({
   plannedStart: Date,
   startedAt: Date,
   completedAt: Date,
+  // Set once the completion is added to the vehicle's lifetime totals (recordCompletion)
+  completionRecorded: { type: Boolean, default: false },
   returnToDepot: { type: Boolean, default: false },
   trafficEnabled: { type: Boolean, default: true },
   trafficImpactFactor: { type: Number, default: 1 },

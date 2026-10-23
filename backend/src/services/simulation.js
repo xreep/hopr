@@ -132,11 +132,10 @@ export async function advanceRoute(route, now = new Date()) {
   const next = route.stops.find(s => s.status === 'pending')
   if (next && !route.stops.some(s => s.status === 'in_progress')) next.status = 'in_progress'
 
-  const wasCompleted = route.status === 'completed'
   route.refreshProgress()
   if (route.status === 'completed') route.simulation = undefined
   await route.save()
-  await recordCompletion(route, wasCompleted)
+  await recordCompletion(route)
   if (route.driver) await User.updateOne({ _id: route.driver }, { $set: { lastLocation: { coordinates, updatedAt: now } } })
   return state
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { api, createUser, planBody, createRoute, completeStop } from './helpers.js'
+import { recordCompletion } from '../src/routes/routes.js'
 import { useTestDb } from './db.js'
 import Route from '../src/models/Route.js'
 import Vehicle from '../src/models/Vehicle.js'
@@ -203,6 +204,32 @@ describe('route assignment and driver workflow', () => {
     expect(last.body.route.stops[4].status).toBe('completed')
     expect(last.body.route.status).toBe('completed')
     expect(last.body.route.completedAt).toBeTruthy()
+  })
+
+  it('adds a completed route to its vehicle\'s lifetime totals exactly once', async () => {
+    const manager = await createUser('fleet_manager')
+    const driver = await createUser('driver')
+    const van = await vehicle()
+    const route = await createRoute(manager.auth, { assignments: [{ driver: driver.user._id }] })
+    await api().patch(`/api/routes/${route._id}`).set(manager.auth).send({ vehicle: van._id }).expect(200)
+    await api().patch(`/api/routes/${route._id}/start`).set(driver.auth).expect(200)
+    const stops = (await Route.findById(route._id)).stops
+    for (const stop of stops.slice(0, -1)) await completeStop(driver.auth, route._id, stop._id).expect(200)
+
+    // The last delivery sent twice at once (a double tap, or the offline outbox retrying)
+    const last = stops.at(-1)._id
+    const results = await Promise.all([completeStop(driver.auth, route._id, last), completeStop(driver.auth, route._id, last)])
+    expect(results.some(r => r.status === 200)).toBe(true)
+    // Two requests that both saw the route complete: only one may record it
+    const [a, b] = await Promise.all([Route.findById(route._id), Route.findById(route._id)])
+    await Promise.all([recordCompletion(a), recordCompletion(b)])
+
+    const done = await Route.findById(route._id)
+    const after = await Vehicle.findById(van._id)
+    expect(done.status).toBe('completed')
+    const km = done.actualDistance > 0 ? done.actualDistance : done.totalDistance
+    expect(after.totalDistance).toBeCloseTo(Math.round(km * 100) / 100, 2)
+    expect(after.totalFuelConsumed).toBeCloseTo(done.fuelEstimate, 5)
   })
 
   it('pushes back remaining ETAs when a delay is reported', async () => {
