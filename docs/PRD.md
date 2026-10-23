@@ -154,7 +154,7 @@ Status: ✅ built and tested.
 |---|---|---|---|
 | NFR-1 | Fast route computation | Under 10 s for batch planning | About 50 ms for 30 stops; about 480 ms for 300 stops on 10 vehicles |
 | NFR-2 | Secure authentication | Industry-standard practice | bcrypt, JWT with revocation, lockout, layered rate limits, input validation, role checks on every endpoint, 0 known vulnerabilities |
-| NFR-3 | High availability | 99% uptime | Vercel and Atlas are highly available; Render's free plan sleeps when idle. The app explains wake-up delays; an uptime ping or a paid plan closes the gap |
+| NFR-3 | High availability | 99% uptime | Vercel and Atlas are highly available; Render's free plan sleeps when idle. The app explains wake-up delays; an UptimeRobot check every 5 minutes keeps it awake, with a public status page |
 | NFR-4 | Scalable architecture | Grows with the fleet | Stateless API, indexed queries, routing engine as pure functions; shared cache and rate-limit store needed only when running several instances |
 | NFR-5 | Responsive UI | Mobile and desktop | Every page verified at 375 px and up to 1440 px |
 | NFR-6 | Accessibility | Usable by keyboard and screen reader | Visible focus, skip link, labelled controls, dialog focus handling, reduced motion respected |
@@ -205,7 +205,7 @@ All six appear in Analytics with the previous period for comparison. Delivered-t
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Free API server sleeps when idle | First request after idle takes up to a minute | The app explains the delay; uptime ping; paid plan when budget allows |
+| Free API server sleeps when idle | First request after idle takes up to a minute | UptimeRobot pings `/api/health` every 5 minutes; the app explains any delay; paid plan when budget allows |
 | Simulated traffic differs from a given day | ETAs off on unusual days | Incidents, recalculation and delay reports; live ETAs from GPS for customers |
 | Geocoding quality in smaller towns | Wrong pin for an address | Results limited to India and ranked near the hub, curated places, and the planner shows every pin on a street map before optimising |
 | Drivers without data coverage | Gaps in live tracking | Stale-location state on the tracking page; a failed action shows an error so the driver can try again |
