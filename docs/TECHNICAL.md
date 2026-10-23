@@ -377,6 +377,12 @@ capacity fit = load ÷ capacity (vehicles that are too small are excluded)
 
 The driver's position is their last GPS fix if it is under 12 hours old, else their vehicle's home hub, else (unknown) the route's own hub. A driver more than 75 km from the route's start is in another city and is never offered the route; the preview says why (for example "Pooja Kumari is 990 km away (based at Hopr Hub, Okhla)"). Matching is greedy best-pair: one route per driver and per vehicle, with deterministic tie-breaks. The manager sees a preview ("Route A → Driver X", score and reasons) and confirms. On confirm every pair is re-validated, so a stale preview cannot double-book anyone.
 
+**Days off.** Drivers mark days off on their profile and managers on the Drivers page (IST dates). Auto-dispatch never offers a driver for a route that runs on one of their days off, and says so in the preview; manual assignment refuses it.
+
+**Manual stop order.** On a planned route a manager can move stops up or down ("the customer called, go there first"). The route is re-timed in that order with its vehicle and departure, and distance, fuel and the road line follow it. The route is marked `manualOrder`, and recalculating asks before letting the optimizer choose the order again.
+
+**Printed route sheet.** "Print route sheet" on Route Detail prints the manifest alone: sequence, customer, address, notes, phone, window, ETA, parcel and a column for a signature or reason, for drivers without a smartphone or signal.
+
 ### 7.2 Driver workflow
 
 Starting a route forecasts the ETAs (4.6). The driver panel shows:
@@ -454,6 +460,7 @@ The driver's screens (dashboard, My deliveries, dialogs, sidebar and header) and
 - **Lockout**: five failed logins lock the account for 15 minutes. The sixth attempt is refused with 429, even with the right password.
 - **Session storage**: the token lives in `localStorage` (a documented trade-off: simple, and no CSRF surface, at the cost of XSS exposure, mitigated by React's escaping and helmet's headers). Only a 401 ends a session in the browser; a rate limit or network failure shows a retry screen instead of signing the user out.
 - **Registration**: public sign-up always creates a driver, whatever role is sent. Only admins create admins and fleet managers.
+- **Forgot password**: "Forgot password?" on sign-in emails a reset link. The token is 32 random bytes, stored only as a SHA-256 hash, valid for one hour and one use. The request answers the same whether or not the account exists, and is limited to 3 emails an hour per address on top of the auth limit. Resetting signs out every session and clears a lockout. When email is not configured the page says so and points to an admin reset.
 
 ### 8.2 Roles
 
@@ -521,6 +528,9 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | PUT | `/profile` | signed in | Update `name`, `email`, `phone`, `address` |
 | PUT | `/password` | signed in | Body: `currentPassword`, `newPassword`. Every session, including this one, is signed out and must log in again |
 | PUT | `/notifications` | signed in | Notification preferences |
+| PUT | `/days-off` | driver | Body: `daysOff[]` of `YYYY-MM-DD` (IST). Past days and duplicates are dropped |
+| POST | `/forgot-password` | public | Body: `email`. Always 200 with the same message; emails a one-hour reset link when the account exists |
+| POST | `/reset-password` | public | Body: `token`, `password`. 400 for an invalid, used or expired link; signs out every session |
 
 ### Routes (`/api/routes`)
 
@@ -532,6 +542,7 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | GET | `/driver/assigned` | driver | The driver's planned and active routes |
 | GET | `/:id` | manager or the route's driver | Full route with stops, proof, geometry |
 | PATCH | `/:id` | manager | Rename, assign or unassign `driver` and `vehicle` (a planned route is re-timed for a new vehicle), cancel or restore (`status`) |
+| PATCH | `/:id/order` | manager | Planned routes only. Body: `order[]`, every stop id once. Re-times the route in that order (distance, fuel, road line) and sets `manualOrder`; recalculating clears it |
 | PATCH | `/:id/start` | the route's driver or a manager | Start: status `active`, ETAs forecast from now. `at?` for a start made offline (7.8) |
 | PATCH | `/:id/stops/:stopId/status` | the route's driver or a manager | `in_progress`, `completed` (managers only without proof) or `failed` with `reason`; `at?` as above |
 | POST | `/:id/stops/:stopId/complete` | the route's driver or a manager | Proof of delivery, `multipart/form-data`: `photo?`, `signature?`, `note?`, `at?`; at least one image |
@@ -567,6 +578,7 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | GET | `/available` | manager | Active drivers, marking those already on a route |
 | GET | `/:id` | manager | One driver with metrics |
 | PATCH | `/:id/status` | manager | Activate or deactivate a driver |
+| PUT | `/:id/days-off` | manager | Set a driver's days off (as `PUT /api/auth/days-off`) |
 
 ### Live operations
 
@@ -678,7 +690,7 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 164 tests, in-memory MongoDB
+npm test --workspace=backend    # 172 tests, in-memory MongoDB
 npm test --workspace=frontend   # 54 tests, jsdom
 npm run test:e2e                # 16 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
@@ -690,12 +702,12 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 | Area | Tests | Highlights |
 |---|---|---|
 | Routing engine | 27 | Exactly optimal up to 8 stops and on a 9-stop case, never worse than the previous search, the same plan every time; brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation, overnight and next-day windows, still late after recalculation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
-| Auth | 10 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit |
+| Auth | 14 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit; `/me` without lockout internals; forgot password (same answer for unknown emails, one-use one-hour link, sessions revoked, per-address limit) |
 | Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
-| Routes and workflow | 16 | Planning API, batches, assignment, end-to-end driver workflow, a completion counted once under duplicate requests, delays, recalculation, incidents, re-timing on vehicle change and on start |
-| Auto-dispatch | 10 | Proximity, stale GPS fallback, home hub position, never another city, capacity fit and exact score formula, global matching, preview and confirm with re-validation |
+| Routes and workflow | 17 | Planning API, batches, assignment, end-to-end driver workflow, a completion counted once under duplicate requests, manual stop order, delays, recalculation, incidents, re-timing on vehicle change and on start |
+| Auto-dispatch | 12 | Proximity, stale GPS fallback, home hub position, never another city, capacity fit and exact score formula, global matching, preview and confirm with re-validation; days off in scoring, preview and manual assignment |
 | Proof of delivery | 9 | Photo, signature and note; type sniffing; 5 MB limit; privacy; deletion with the route |
-| Tracking | 10 | GPS pings and odometer filtering, dedicated rate limit, public page states, privacy |
+| Tracking | 11 | GPS pings and odometer filtering (fixes without an accuracy do not count), dedicated rate limit, public page states, privacy |
 | Analytics | 9 | Every KPI formula, empty data, period comparison, CSV safety |
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |

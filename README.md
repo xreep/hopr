@@ -30,7 +30,7 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
   | Customer tracking | 76–91 / 100 / 100 / private | |
 
   Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs. Tracking links are kept out of search engines on purpose. On phones the homepage loads its street map on the first touch or scroll, saving mobile data.
-- **Tests:** 218 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
+- **Tests:** 226 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
 
 ## What it does
 
@@ -38,7 +38,8 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
 - Plan a batch: type addresses (India-wide autocomplete, nearest the hub first) or upload a CSV, then set priority, delivery window and weight per stop
 - Choose vehicles: fleet vehicles, or a type (motorbike, van, truck, electric van) and a count
 - Optimise: sequence, ETAs in IST, fuel and CO₂, window violations, savings against the order as entered, and alternatives
-- Dispatch: assign by hand, or auto-dispatch with a preview of every pairing
+- Adjust: move stops up or down on a planned route ("the customer called"), re-timed at once; print the route sheet for drivers on paper
+- Dispatch: assign by hand, or auto-dispatch with a preview of every pairing; drivers on a day off are never offered
 - Monitor: a live fleet map on the dashboard and live monitor; report congestion or road closures; recalculate affected routes
 - Analyse: the six KPIs from the spec over 7, 30 or 90 days or a year, compared with the previous period, plus a CSV export
 - Manage vehicles, drivers and, as admin, users and roles
@@ -52,6 +53,7 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
 - Built for phones, with an action dock at the bottom of the screen; installable to the home screen
 - Works without signal: deliveries, photos and signatures are saved on the phone and sent when the connection returns, recorded at the time they happened
 - English or Hindi, including spoken announcements
+- Mark days off; reset a forgotten password by email
 
 **Customers**
 - A tracking link per delivery, no login needed: the driver moving smoothly along the road, a live "N min away" ETA, and an Arriving alert within 500 m, in English or Hindi
@@ -155,7 +157,7 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 164 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
+npm test --workspace=backend    # 172 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
 npm test --workspace=frontend   # 54 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 npx playwright install chromium # once, for the end-to-end tests
 npm run test:e2e                # 16 browser tests at desktop and phone sizes, including accessibility checks
