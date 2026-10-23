@@ -16,7 +16,7 @@
 // cost drops), then each vehicle's route is optimised.
 
 import { haversineKm, isValidCoordinate, angleFrom } from '../utils/geo.js'
-import { formatIST, hhmmToMinutes, istMinutesOfDay, istHour, addMinutes, isHHMM } from '../utils/time.js'
+import { formatIST, hhmmToMinutes, istMinutesOfDay, istHour, addMinutes, isHHMM, windowMinutes } from '../utils/time.js'
 import { timeOfDayFactor, legIncidentEffect, trafficLevel } from './traffic.js'
 import { estimateFuel } from './fuel.js'
 import {
@@ -81,8 +81,9 @@ export function normalizeStops(stops, { maxStops = MAX_STOPS_PER_ROUTE } = {}) {
         throw new OptimizationError(`Stop ${i + 1}: ${key} must be HH:MM (24h)`, 400)
       }
     }
-    if (stop.windowStart && stop.windowEnd && hhmmToMinutes(stop.windowEnd) <= hhmmToMinutes(stop.windowStart)) {
-      throw new OptimizationError(`Stop ${i + 1}: delivery window must end after it starts`, 400)
+    // An end before the start is an overnight window (22:00-02:00); only an empty one is invalid
+    if (stop.windowStart && stop.windowEnd && hhmmToMinutes(stop.windowEnd) === hhmmToMinutes(stop.windowStart)) {
+      throw new OptimizationError(`Stop ${i + 1}: delivery window cannot start and end at the same time`, 400)
     }
     return {
       ...stop,
@@ -97,7 +98,7 @@ export function normalizeStops(stops, { maxStops = MAX_STOPS_PER_ROUTE } = {}) {
 }
 
 // Precomputes everything the simulation needs so the local search inner loop is cheap.
-function buildContext({ depot, stops, vehicle, departureTime, trafficEnabled, incidents, returnToDepot, fuelPrices, learnedFactors }) {
+function buildContext({ depot, stops, vehicle, departureTime, windowAnchor, trafficEnabled, incidents, returnToDepot, fuelPrices, learnedFactors }) {
   const points = [depot.coordinates, ...stops.map(s => s.coordinates)]
   const n = points.length
   const closures = (incidents || []).filter(i => i.type === 'closure')
@@ -133,10 +134,8 @@ function buildContext({ depot, stops, vehicle, departureTime, trafficEnabled, in
   }
   const factorAt = t => hourFactors[Math.min(71, Math.max(0, Math.floor((t - firstHourStart) / 60)))]
 
-  const windows = stops.map(s => ({
-    start: s.windowStart ? hhmmToMinutes(s.windowStart) - depMinOfDay : null,
-    end: s.windowEnd ? hhmmToMinutes(s.windowEnd) - depMinOfDay : null
-  }))
+  const anchor = windowAnchor ? new Date(windowAnchor) : departure
+  const windows = stops.map(s => windowMinutes(s.windowStart, s.windowEnd, departure, anchor))
 
   const fuelProbe = estimateFuel(1, vehicle, fuelPrices)
   return {
@@ -517,6 +516,7 @@ export function optimizeRoute({
   stops,
   vehicle,
   departureTime,
+  windowAnchor,
   trafficEnabled = true,
   incidents = [],
   returnToDepot = false,
@@ -533,6 +533,7 @@ export function optimizeRoute({
     stops: normalized,
     vehicle: resolveVehicle(vehicle),
     departureTime,
+    windowAnchor,
     trafficEnabled,
     incidents,
     returnToDepot,

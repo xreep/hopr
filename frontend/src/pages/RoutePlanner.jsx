@@ -130,7 +130,8 @@ export default function RoutePlanner() {
   const filledStops = stops.filter(s => s.address.trim())
   const unlocated = filledStops.filter(s => !s.coordinates)
   const maxStops = MAX_STOPS_PER_ROUTE * vehiclesInPlan
-  const windowErrors = stops.filter(s => s.windowStart && s.windowEnd && s.windowEnd <= s.windowStart)
+  // An end before the start is an overnight window (22:00-02:00); only an empty one is invalid
+  const windowErrors = stops.filter(s => s.windowStart && s.windowEnd && s.windowEnd === s.windowStart)
 
   const importStops = async (incoming) => {
     const blankOnly = stops.every(s => !s.address.trim())
@@ -184,7 +185,7 @@ export default function RoutePlanner() {
     if (!depot.coordinates) return toast.error('Choose the hub the route starts from')
     if (filledStops.length < 1) return toast.error('Add at least one delivery address')
     if (unlocated.length) return toast.error(`Pick a suggestion for ${unlocated.length} address(es) so they can be located`)
-    if (windowErrors.length) return toast.error('A delivery window ends before it starts')
+    if (windowErrors.length) return toast.error('A delivery window starts and ends at the same time')
     if (filledStops.length > maxStops) return toast.error(`At most ${MAX_STOPS_PER_ROUTE} stops per vehicle. Add vehicles or remove stops.`)
     if (vehicleMode === 'fleet' && !selectedVehicles.length && fleet.length) return toast.error('Select at least one vehicle')
     setOptimizing(true)
@@ -443,7 +444,8 @@ export default function RoutePlanner() {
 }
 
 function StopEditor({ index, stop, near, onChange, onRemove }) {
-  const invalidWindow = stop.windowStart && stop.windowEnd && stop.windowEnd <= stop.windowStart
+  const invalidWindow = stop.windowStart && stop.windowEnd && stop.windowEnd === stop.windowStart
+  const overnight = stop.windowStart && stop.windowEnd && stop.windowEnd < stop.windowStart
   return (
     <div className={`stop-editor ${stop.coordinates ? 'is-located' : ''}`}>
       <div className="stop-editor-head">
@@ -482,7 +484,8 @@ function StopEditor({ index, stop, near, onChange, onRemove }) {
           <input type="number" min="0" step="0.1" className="form-input" aria-label={`Stop ${index + 1} package weight in kg`} value={stop.packageWeightKg} onChange={e => onChange({ packageWeightKg: e.target.value })} />
         </label>
       </div>
-      {invalidWindow && <p className="form-error">The window has to end after it starts</p>}
+      {invalidWindow && <p className="form-error">The window has to start and end at different times</p>}
+      {overnight && <p className="text-micro text-ink-400">Overnight: ends at {stop.windowEnd} the next day</p>}
       <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => onChange({ expanded: !stop.expanded })} aria-expanded={stop.expanded}>
         {stop.expanded ? 'Hide phone, size and notes' : 'Add phone, size and notes'}
       </button>

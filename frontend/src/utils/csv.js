@@ -83,7 +83,8 @@ export function csvToStops(text) {
       notes: get('notes'),
       coordinates: Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : null
     })
-    if (windowStart && windowEnd && windowEnd <= windowStart) errors.push(`Row ${i + 2}: window end must be after start`)
+    // An end before the start is an overnight window (22:00-02:00); only an empty one is an error
+    if (windowStart && windowEnd && windowEnd === windowStart) errors.push(`Row ${i + 2}: the window starts and ends at the same time`)
   })
   return { stops, errors }
 }

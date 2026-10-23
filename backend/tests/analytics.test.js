@@ -31,6 +31,18 @@ describe('KPI definitions', () => {
     expect(r.stops.map(s => isOnTime(s, r))).toEqual([true, false, true, false])
   })
 
+  it('judges windows on the day they are next open from the route start', () => {
+    // Starts 23:00 IST on the 15th: a 09:00-12:00 window is the next morning's
+    const night = baseRoute({ plannedStart: at('2026-10-15T17:30:00Z'), startedAt: at('2026-10-15T17:30:00Z') })
+    const nextMorning = { status: 'completed', windowStart: '09:00', windowEnd: '12:00', completedAt: at('2026-10-16T05:00:00Z') }
+    expect(isOnTime(nextMorning, night)).toBe(true)
+    // Overnight 22:00-02:00 window, delivered 01:30 IST the next day
+    const evening = baseRoute({ plannedStart: at('2026-10-15T15:30:00Z'), startedAt: at('2026-10-15T15:30:00Z') })
+    const overnight = { status: 'completed', windowStart: '22:00', windowEnd: '02:00', completedAt: at('2026-10-15T20:00:00Z') }
+    expect(isOnTime(overnight, evening)).toBe(true)
+    expect(isOnTime({ ...overnight, completedAt: at('2026-10-15T21:00:00Z') }, evening)).toBe(false)
+  })
+
   it('computes every spec KPI from deliveries', () => {
     const k = computeKpis([baseRoute()], 2)
     expect(k.totalDeliveries).toBe(3)

@@ -45,6 +45,31 @@ export function istDateAt(base, hhmm) {
   return new Date(base.getTime() + (target - offsetFromMidnight) * 60000)
 }
 
+// A delivery window as minutes from `ref` to its start and end (either may be null).
+// The window is taken on the day it is next open from `anchor`, the route's planned
+// departure: an overnight window (22:00-02:00) ends the next day, leaving at 01:00 is
+// already inside last night's one, and a window that closed before the departure (leave
+// 23:00, window 09:00-12:00) is the next morning's. Anchoring on the planned departure,
+// not `ref`, keeps a window missed while the route was out as missed on recalculation.
+export function windowMinutes(windowStart, windowEnd, ref, anchor = ref) {
+  const dep = istMinutesOfDay(anchor)
+  let start = windowStart ? hhmmToMinutes(windowStart) - dep : null
+  let end = windowEnd ? hhmmToMinutes(windowEnd) - dep : null
+  if (start !== null && end !== null) {
+    if (end <= start) end += DAY_MIN
+    if (start > 0 && end - DAY_MIN > 0) {
+      start -= DAY_MIN
+      end -= DAY_MIN
+    }
+  }
+  if (end !== null && end < 0) {
+    end += DAY_MIN
+    if (start !== null) start += DAY_MIN
+  }
+  const shift = (anchor.getTime() - ref.getTime()) / 60000
+  return { start: start === null ? null : start + shift, end: end === null ? null : end + shift }
+}
+
 export function addMinutes(date, minutes) {
   return new Date(date.getTime() + minutes * 60000)
 }

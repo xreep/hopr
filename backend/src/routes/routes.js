@@ -90,12 +90,23 @@ function canAccess(user, route) {
 }
 
 // Roll actual distance and fuel into the vehicle's lifetime totals once
-async function recordCompletion(route, wasCompleted) {
-  if (wasCompleted || route.status !== 'completed' || !route.vehicle) return
-  const km = route.actualDistance > 0 ? route.actualDistance : route.totalDistance
-  await Vehicle.findByIdAndUpdate(route.vehicle._id || route.vehicle, {
-    $inc: { totalDistance: Math.round(km * 100) / 100, totalFuelConsumed: route.fuelEstimate || 0 }
-  })
+// Adds a completed route to its vehicle's lifetime totals. Two requests can both finish
+// the last stop (a double tap, or the offline outbox retrying), so the route is claimed
+// atomically first and only the request that wins counts it. Returns whether this one did.
+async function recordCompletion(route) {
+  if (route.status !== 'completed') return false
+  const claimed = await Route.updateOne(
+    { _id: route._id, status: 'completed', completionRecorded: { $ne: true } },
+    { $set: { completionRecorded: true } }
+  )
+  if (claimed.modifiedCount !== 1) return false
+  if (route.vehicle) {
+    const km = route.actualDistance > 0 ? route.actualDistance : route.totalDistance
+    await Vehicle.findByIdAndUpdate(route.vehicle._id || route.vehicle, {
+      $inc: { totalDistance: Math.round(km * 100) / 100, totalFuelConsumed: route.fuelEstimate || 0 }
+    })
+  }
+  return true
 }
 
 async function loadAccessibleRoute(req, res) {
@@ -326,7 +337,6 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
       route.startedAt = at
     }
 
-    const wasCompleted = route.status === 'completed'
     const { status } = req.body
     stop.status = status
     if (status === 'completed') {
@@ -344,10 +354,10 @@ router.patch('/:id/stops/:stopId/status', authenticate, [
     }
     route.refreshProgress()
     await route.save()
-    await recordCompletion(route, wasCompleted)
+    const justCompleted = await recordCompletion(route)
     if (status === 'completed') await recordLeg(route, stop).catch(() => null)
     if (status === 'failed') notify.inBackground(notify.deliveryFailed(route, stop, req.user.role === 'driver' ? req.user.name : null))
-    if (!wasCompleted && route.status === 'completed') notify.inBackground(notify.routeCompleted(route))
+    if (justCompleted) notify.inBackground(notify.routeCompleted(route))
 
     res.json({ route })
   } catch (error) {
@@ -403,7 +413,6 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
       route.status = 'active'
       route.startedAt = now
     }
-    const wasCompleted = route.status === 'completed'
     stop.status = 'completed'
     stop.completedAt = now
     if (sentLate(now)) stop.receivedAt = new Date()
@@ -418,9 +427,9 @@ router.post('/:id/stops/:stopId/complete', authenticate, proofUpload, [
     if (next && !route.stops.some(s => s.status === 'in_progress')) next.status = 'in_progress'
     route.refreshProgress()
     await route.save()
-    await recordCompletion(route, wasCompleted)
+    const justCompleted = await recordCompletion(route)
     await recordLeg(route, stop).catch(() => null) // teaches planning how long this leg really took
-    if (!wasCompleted && route.status === 'completed') notify.inBackground(notify.routeCompleted(route))
+    if (justCompleted) notify.inBackground(notify.routeCompleted(route))
 
     res.json({ route: await populateRoute(Route.findById(route._id)) })
   } catch (error) {
