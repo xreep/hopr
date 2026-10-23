@@ -7,6 +7,7 @@
 // one route per driver and per vehicle, deterministic tie-breaks.
 import { haversineKm } from '../utils/geo.js'
 import { DEFAULT_DEPOT } from '../config/fleet.js'
+import { isOffOn, offReason } from './availability.js'
 
 export const WEIGHTS = Object.freeze({ proximity: 0.6, fit: 0.4, typeMatch: 0.05 })
 export const PROXIMITY_HALF_KM = 3
@@ -28,6 +29,8 @@ export function driverOrigin(driver, depot, now = Date.now(), vehicle = null) {
 export function scoreCandidate({ route, driver, vehicle, now = Date.now() }) {
   const start = route.depot?.coordinates?.length === 2 ? route.depot.coordinates : DEFAULT_DEPOT.coordinates
   const load = route.loadKg || 0
+  const day = route.plannedStart || now
+  if (isOffOn(driver, day)) return { feasible: false, reason: offReason(driver, day) }
   if (!vehicle) return { feasible: false, reason: `${driver.name} has no vehicle` }
   if (load > vehicle.capacity) {
     return { feasible: false, reason: `${vehicle.name} (${vehicle.capacity} kg) cannot carry ${load} kg` }

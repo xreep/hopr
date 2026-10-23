@@ -77,6 +77,14 @@ describe('auto-dispatch scoring', () => {
     expect(unassigned).toEqual([])
   })
 
+  it('never offers a driver on their day off', () => {
+    const r = route('A', 100, { plannedStart: new Date(NOW) }) // 16 Oct 2026, 10:30 IST
+    const off = scoreCandidate({ route: r, driver: { name: 'Ravi', daysOff: ['2026-10-16'] }, vehicle: van(1), now: NOW })
+    expect(off.feasible).toBe(false)
+    expect(off.reason).toBe('Ravi is off on 16 Oct')
+    expect(scoreCandidate({ route: r, driver: { name: 'Ravi', daysOff: ['2026-10-17'] }, vehicle: van(1), now: NOW }).feasible).toBe(true)
+  })
+
   it('explains routes it cannot place', () => {
     const { assignments, unassigned } = planDispatch([route('huge', 3000)], [{ driver: { _id: 'd1', name: 'Ravi' }, vehicle: van('ace', 750) }], { now: NOW })
     expect(assignments).toEqual([])
@@ -161,6 +169,33 @@ describe('auto-dispatch API', () => {
     const preview = await api().post('/api/dispatch/preview').set(manager.auth)
     expect(preview.body.availableDrivers).toBe(0)
     expect(preview.body.unassigned[0].reason).toBe('No available drivers')
+  })
+
+  it('keeps drivers off routes on the days they marked off', async () => {
+    const { manager, ravi, pooja } = await fleet()
+    const day = new Date(Date.now() + 2 * 86400000)
+    const key = new Date(day.getTime() + 330 * 60000).toISOString().slice(0, 10)
+    const tomorrowish = new Date(day.getTime() - 86400000 + 330 * 60000).toISOString().slice(0, 10)
+
+    // A driver marks their own days off: sorted, de-duplicated, past days dropped
+    const set = await api().put('/api/auth/days-off').set(ravi.auth).send({ daysOff: [key, '2020-01-01', tomorrowish, key] })
+    expect(set.status).toBe(200)
+    expect(set.body.daysOff).toEqual([tomorrowish, key])
+    expect((await api().put('/api/auth/days-off').set(ravi.auth).send({ daysOff: ['16/10/2026'] })).status).toBe(400)
+    expect((await api().put('/api/auth/days-off').set(manager.auth).send({ daysOff: [key] })).status).toBe(403)
+    // A manager can set them for a driver
+    const byManager = await api().put(`/api/drivers/${pooja.user._id}/days-off`).set(manager.auth).send({ daysOff: [key] })
+    expect(byManager.status).toBe(200)
+    expect(byManager.body.daysOff).toEqual([key])
+
+    // Neither is offered for a route on that day, and neither can be assigned to it
+    const planned = await createRoute(manager.auth, { departureTime: day.toISOString() })
+    const preview = await api().post('/api/dispatch/preview').set(manager.auth)
+    expect(preview.body.assignments).toHaveLength(0)
+    expect(preview.body.unassigned[0].reason).toMatch(/is off on/)
+    const assign = await api().patch(`/api/routes/${planned._id}`).set(manager.auth).send({ driver: ravi.user._id })
+    expect(assign.status).toBe(400)
+    expect(assign.body.message).toMatch(/Ravi Kumar is off on/)
   })
 
   it('is manager-only', async () => {

@@ -1,4 +1,6 @@
+import crypto from 'node:crypto'
 import express from 'express'
+import rateLimit from 'express-rate-limit'
 import { body } from 'express-validator'
 import User from '../models/User.js'
 import { authenticate } from '../middleware/auth.js'
@@ -7,6 +9,7 @@ import { generateToken } from '../services/token.js'
 import { protectDemoAccount } from '../middleware/demo.js'
 import { demoMode, isDemoEmail } from '../services/demo.js'
 import * as notify from '../services/notify.js'
+import { daysOffValidators, normalizeDaysOff } from '../services/availability.js'
 
 // The signed-in user's own account, without lockout and session-revocation internals
 // (failedAttempts, lockUntil, tokenVersion)
@@ -18,6 +21,7 @@ const accountView = user => ({
   phone: user.phone,
   address: user.address,
   isActive: user.isActive,
+  daysOff: user.daysOff || [],
   notifications: user.notifications,
   createdAt: user.createdAt,
   lastLogin: user.lastLogin
@@ -206,6 +210,77 @@ router.put('/password', authenticate, ownAccount, [
     res.json({ message: 'Password updated successfully. Please log in again.' })
   } catch (error) {
     res.status(500).json({ message: 'Failed to update password' })
+  }
+})
+
+// Forgot password. The answer is the same whether or not the account exists, so the
+// form cannot be used to find out who has one. The emailed token is 256 random bits,
+// stored only as a SHA-256 hash, valid for an hour and for one use.
+const RESET_TOKEN_MS = 60 * 60 * 1000
+const hashToken = token => crypto.createHash('sha256').update(token).digest('hex')
+const RESET_SENT = 'If an account uses that email, a link to reset the password is on its way. It works for an hour.'
+// Stops anyone flooding one inbox: 3 reset emails an hour per address (on top of the auth limit)
+const resetEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: req => `reset:${String(req.body?.email || '').trim().toLowerCase()}`,
+  message: { message: 'Too many reset emails for this address. Try again in an hour.' }
+})
+
+router.post('/forgot-password', resetEmailLimiter, [
+  body('email').isEmail().withMessage('Enter a valid email').normalizeEmail(),
+  validateRequest
+], async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.email, isActive: true })
+    // The shared demo accounts' addresses are not real inboxes
+    if (user && !isDemoEmail(user.email)) {
+      const token = crypto.randomBytes(32).toString('base64url')
+      user.resetTokenHash = hashToken(token)
+      user.resetTokenExpires = new Date(Date.now() + RESET_TOKEN_MS)
+      await user.save()
+      notify.inBackground(notify.passwordReset(user, token))
+    }
+    res.json({ message: RESET_SENT, emailEnabled: notify.emailEnabled() })
+  } catch (error) {
+    res.status(500).json({ message: 'Could not start the password reset' })
+  }
+})
+
+router.post('/reset-password', [
+  body('token').isString().isLength({ min: 20, max: 200 }).withMessage('This reset link is invalid or has expired'),
+  body('password').isLength({ min: 6, max: 128 }).withMessage('Password must be 6-128 characters'),
+  validateRequest
+], async (req, res) => {
+  try {
+    const user = await User.findOne({ resetTokenHash: hashToken(req.body.token), resetTokenExpires: { $gt: new Date() } })
+      .select('+password +resetTokenHash +resetTokenExpires')
+    if (!user) return res.status(400).json({ message: 'This reset link is invalid or has expired. Ask for a new one.' })
+    user.password = req.body.password
+    user.resetTokenHash = undefined
+    user.resetTokenExpires = undefined
+    // A new password unlocks the account and signs every device out (H11)
+    user.failedAttempts = 0
+    user.lockUntil = undefined
+    user.tokenVersion += 1
+    await user.save()
+    res.json({ message: 'Password changed. Sign in with your new password.' })
+  } catch (error) {
+    res.status(500).json({ message: 'Could not reset the password' })
+  }
+})
+
+// A driver's own days off
+router.put('/days-off', authenticate, ownAccount, [...daysOffValidators, validateRequest], async (req, res) => {
+  try {
+    if (req.user.role !== 'driver') return res.status(403).json({ message: 'Only drivers have days off' })
+    const user = await User.findByIdAndUpdate(req.user.id, { $set: { daysOff: normalizeDaysOff(req.body.daysOff) } }, { new: true })
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({ daysOff: user.daysOff })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update days off' })
   }
 })
 

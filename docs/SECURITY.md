@@ -27,6 +27,7 @@ This is Hopr's threat model: what it protects, from whom, how, and what risk is 
 |---|---|---|---|
 | Spoofing | Guessing a password | bcrypt hashes; 20 attempts per 15 min per IP; the account locks after 5 failures | A slow, distributed guessing attack; use long passwords |
 | Spoofing | Forging a session token | HS256 only (pinned when signing and verifying); `JWT_SECRET` required in production; tokens are revoked when the password changes | A stolen token stays valid until it expires (7 days; see 4) |
+| Spoofing | Taking over an account through "forgot password" | The emailed token is 32 random bytes, stored only as a SHA-256 hash, valid for one hour and one use; resetting revokes every session and clears the lockout; the request answers the same whether or not the account exists; 3 reset emails an hour per address on top of the auth limit; demo accounts get none | Anyone who can read the user's inbox can reset the password |
 | Spoofing | A manager signing in as the demo admin | Demo endpoints exist only with `DEMO_MODE=true`, so the known accounts cannot be created through the API | None known |
 | Tampering | Changing another driver's deliveries | Every route and stop endpoint checks that the driver owns the route; field whitelists stop mass assignment | None known |
 | Tampering | Backdating a delivery from the offline app | The time is trusted only within 24 hours and never in the future; late updates also keep `receivedAt`, which the route page shows | A driver can shift a time by up to 24 h, visibly |
@@ -45,6 +46,8 @@ This is Hopr's threat model: what it protects, from whom, how, and what risk is 
 ## 4. Accepted risks
 
 - **Session token in `localStorage`, valid for 7 days.** It is simpler than cookies across the Vercel and Render domains and suits drivers on shared phones. The Content Security Policy is the main defence. Changing a password revokes all of that user's tokens.
+- **Registration says when an email is already taken** (400 "Email already registered"). It tells a visitor that an address has an account; the sign-in and password-reset forms do not. Accepted because sign-ups are drivers a manager must approve.
+- **Driver times trusted within 24 hours.** The offline app records when a delivery happened, so a driver can shift a time by up to a day; the late arrival is visible as `receivedAt` on the route page.
 - **Rate limits held in memory.** That is correct for one instance on Render's free tier. With several instances, move them to a shared store such as Redis.
 - **Demo passwords are public** on a demo deployment. That is the point of a demo; never load demo data into a database with real customers.
 - **Free OpenStreetMap services** (map tiles, search, routing) have fair-use limits. For heavy use, self-host them or set `MAPBOX_TOKEN`.

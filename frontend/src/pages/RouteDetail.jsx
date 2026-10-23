@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { errorMessage } from '../utils/api'
@@ -8,6 +9,7 @@ import usePageTitle from '../hooks/usePageTitle'
 import MapView from '../components/MapView'
 import { StatusBadge, PageLoader, EmptyState } from '../components/ui'
 import AuthImage from '../components/AuthImage'
+import { useConfirm } from '../components/ConfirmDialog'
 import Icon from '../components/icons'
 import { formatDuration, formatINR, formatKm, initials } from '../utils/format'
 import { formatClock, formatDateTime, relativeTime } from '../utils/time'
@@ -23,6 +25,7 @@ export default function RouteDetail() {
   const [drivers, setDrivers] = useState([])
   usePageTitle(route?.name || 'Route')
   const [busy, setBusy] = useState(false)
+  const confirm = useConfirm()
 
   const load = useCallback(async () => {
     try {
@@ -54,7 +57,23 @@ export default function RouteDetail() {
     }
   }
 
-  const recalculate = () => act(() => api.post(`/routes/${id}/recalculate`, { reason: 'Manual recalculation' }), res => {
+  const recalculate = async () => {
+    if (route.manualOrder && !(await confirm({
+      title: 'Replace your stop order?',
+      message: 'You put these stops in order by hand. Recalculating lets Hopr choose the order again.',
+      confirmLabel: 'Recalculate'
+    }))) return
+    return reoptimize()
+  }
+
+  // Moves one stop up or down; the server re-times the route in the new order
+  const moveStop = (index, offset) => {
+    const order = route.stops.map(s => s._id)
+    ;[order[index], order[index + offset]] = [order[index + offset], order[index]]
+    return act(() => api.patch(`/routes/${id}/order`, { order }), 'Stop order updated and ETAs re-timed')
+  }
+
+  const reoptimize = () => act(() => api.post(`/routes/${id}/recalculate`, { reason: 'Manual recalculation' }), res => {
     const before = new Date(res.data.previousFinish).getTime()
     const after = new Date(res.data.newFinish).getTime()
     const diff = Math.round((after - before) / 60000)
@@ -82,6 +101,7 @@ export default function RouteDetail() {
   const done = route.stops.filter(s => s.status === 'completed' || s.status === 'failed').length
   const isOwnerDriver = user?.role === 'driver' && route.driver?._id === user._id
   const canRecalculate = (isManager || isOwnerDriver) && ['planned', 'active'].includes(route.status) && done < route.stops.length
+  const canReorder = isManager && route.status === 'planned' && route.stops.length > 1
 
   return (
     <div>
@@ -92,6 +112,7 @@ export default function RouteDetail() {
           <p className="page-subtitle flex flex-wrap items-center gap-x-2 gap-y-1"><span className="route-plate">{route.routeId}</span>Batch {route.batchId}, planned for {formatDateTime(route.plannedStart)}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <button type="button" className="btn btn-ghost" onClick={() => window.print()}><Icon name="print" />Print route sheet</button>
           {canRecalculate && <button type="button" className="btn btn-secondary" onClick={recalculate} disabled={busy}><Icon name="refresh" />Recalculate remaining stops</button>}
           {isOwnerDriver && route.status === 'planned' && (
             <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act(() => api.patch(`/routes/${id}/start`), 'Route started')}><Icon name="play" />Start route</button>
@@ -161,11 +182,17 @@ export default function RouteDetail() {
       <div className="card">
         <div className="card-header flex-between">
           <h3 className="font-semibold">Stops ({done}/{route.stops.length} done)</h3>
+          {route.manualOrder && <span className="text-micro text-ink-400">Order set by hand</span>}
         </div>
         <ol className="timeline card-body">
-          {route.stops.map(s => <StopRow key={s._id} stop={s} route={route} isManager={isManager} onChanged={load} />)}
+          {route.stops.map((s, i) => (
+            <StopRow key={s._id} stop={s}
+              reorder={canReorder ? { up: i > 0 ? () => moveStop(i, -1) : null, down: i < route.stops.length - 1 ? () => moveStop(i, 1) : null, busy } : null} />
+          ))}
         </ol>
       </div>
+
+      <PrintSheet route={route} />
 
       {route.recalculations?.length > 0 && (
         <div className="card mt-6">
@@ -181,7 +208,42 @@ export default function RouteDetail() {
   )
 }
 
-function StopRow({ stop }) {
+// The route manifest on paper, for drivers without a smartphone or signal. Hidden on
+// screen; "Print route sheet" prints only this (see @media print in index.css).
+function PrintSheet({ route }) {
+  return createPortal(
+    <section className="print-sheet" aria-hidden="true">
+      <h1>{route.name} <span>{route.routeId}</span></h1>
+      <p>
+        Planned for {formatDateTime(route.plannedStart)} · from {route.depot?.name || 'the hub'}
+        {route.driver?.name ? ` · driver ${route.driver.name}` : ''}
+        {route.vehicle ? ` · ${route.vehicle.name} (${route.vehicle.licensePlate})` : ''}
+        {' · '}{formatKm(route.totalDistance)}, about {formatDuration(route.estimatedTime)}
+      </p>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Customer and address</th><th>Phone</th><th>Window</th><th>ETA</th><th>Parcel</th><th>Signature or reason</th></tr>
+        </thead>
+        <tbody>
+          {route.stops.map(s => (
+            <tr key={s._id}>
+              <td>{s.sequence}</td>
+              <td><strong>{s.customerName || s.address.split(',')[0]}</strong><br />{s.address}{s.notes ? <><br /><em>Note: {s.notes}</em></> : null}</td>
+              <td>{s.customerPhone || ''}</td>
+              <td>{s.windowStart || s.windowEnd ? `${s.windowStart || '…'} to ${s.windowEnd || '…'}` : ''}</td>
+              <td>{formatClock(s.estimatedArrival)}</td>
+              <td>{s.packageWeightKg > 0 ? `${s.packageWeightKg} kg` : ''}{s.priority !== 'standard' ? ` ${s.priority}` : ''}</td>
+              <td></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>,
+    document.body
+  )
+}
+
+function StopRow({ stop, reorder }) {
   const etaDiff = stop.plannedArrival && stop.estimatedArrival
     ? Math.round((new Date(stop.estimatedArrival) - new Date(stop.plannedArrival)) / 60000)
     : 0
@@ -191,7 +253,15 @@ function StopRow({ stop }) {
       <div className="min-w-0 flex-1">
         <div className="flex-between gap-2 flex-wrap">
           <p className="font-medium">{stop.customerName || stop.address.split(',')[0]} <span className="text-micro text-ink-400 font-normal">{stop.deliveryId}</span></p>
-          <StatusBadge status={stop.status} />
+          <div className="flex items-center gap-1">
+            {reorder && (
+              <>
+                <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={reorder.up} disabled={!reorder.up || reorder.busy} aria-label={`Move stop ${stop.sequence} earlier`}><Icon name="arrowUp" /></button>
+                <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={reorder.down} disabled={!reorder.down || reorder.busy} aria-label={`Move stop ${stop.sequence} later`}><Icon name="arrowDown" /></button>
+              </>
+            )}
+            <StatusBadge status={stop.status} />
+          </div>
         </div>
         <p className="text-sm text-secondary">{stop.address}</p>
         <div className="flex flex-wrap gap-2 mt-1 text-xs items-center">

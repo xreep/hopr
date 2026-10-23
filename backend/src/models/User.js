@@ -40,6 +40,8 @@ const userSchema = new mongoose.Schema({
   // A self-registered driver waits here (inactive) until a manager approves them
   pendingApproval: { type: Boolean, default: false },
   weeklyReportSentAt: Date,
+  // Days off (IST dates, YYYY-MM-DD): auto-dispatch and assignment skip the driver on these
+  daysOff: { type: [String], default: undefined },
   lastLogin: {
     type: Date
   },
@@ -56,6 +58,10 @@ const userSchema = new mongoose.Schema({
   lockUntil: {
     type: Date
   },
+  // Forgot password: SHA-256 of the emailed one-time token and when it stops working.
+  // The token itself is never stored.
+  resetTokenHash: { type: String, select: false },
+  resetTokenExpires: { type: Date, select: false },
   // H11: Token version for invalidation on password change
   tokenVersion: {
     type: Number,

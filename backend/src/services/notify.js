@@ -57,6 +57,25 @@ async function emailPeople(filter, topic, subject, lines) {
 
 const toManagers = (topic, subject, lines) => emailPeople({ role: { $in: MANAGERS } }, topic, subject, lines)
 
+// Account ---------------------------------------------------------------------------
+
+// Sent whatever the notification settings say: the person asked for it
+export function passwordReset(user, token) {
+  return sendEmail({
+    to: user.email,
+    subject: 'Reset your Hopr password',
+    text: [
+      `Hello ${user.name},`,
+      '',
+      'Someone asked to reset the password for your Hopr account. To choose a new one, open this link within an hour:',
+      '',
+      `${appUrl()}/reset-password?token=${token}`,
+      '',
+      'If it was not you, ignore this email: your password stays as it is.'
+    ].join('\n')
+  })
+}
+
 // Route changes ---------------------------------------------------------------------
 
 export function routeAssigned(route, driverId) {

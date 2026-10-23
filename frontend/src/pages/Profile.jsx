@@ -6,6 +6,7 @@ import Icon from '../components/icons'
 import { initials } from '../utils/format'
 import { formatDate, formatDateTime } from '../utils/time'
 import PasswordInput from '../components/PasswordInput'
+import DaysOffEditor from '../components/DaysOffEditor'
 
 const ROLE_LABELS = { admin: 'Admin', fleet_manager: 'Fleet manager', driver: 'Driver' }
 
@@ -35,6 +36,18 @@ export default function Profile() {
     email: true, sms: false, push: true, routeUpdates: true, maintenanceAlerts: true, weeklyReports: false,
     ...(user?.notifications || {})
   })
+
+  const saveDaysOff = async daysOff => {
+    try {
+      const res = await api.put('/auth/days-off', { daysOff })
+      updateUser({ daysOff: res.data.daysOff })
+      toast.success('Days off saved')
+      return res.data.daysOff
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to save days off'))
+      throw err
+    }
+  }
 
   const saveProfile = async e => {
     e.preventDefault()
@@ -153,6 +166,16 @@ export default function Profile() {
           </div>
         </form>
       </div>
+
+      {user?.role === 'driver' && (
+        <section className="card mt-5" aria-labelledby="days-off-title">
+          <div className="card-header flex items-center gap-2"><Icon name="clock" /><h3 id="days-off-title">Days off</h3></div>
+          <div className="card-body">
+            <p className="text-small text-ink-300 mb-3">You won&apos;t be given routes on these days.</p>
+            <DaysOffEditor days={user.daysOff || []} onSave={saveDaysOff} />
+          </div>
+        </section>
+      )}
 
       <section className="card mt-5" aria-labelledby="notify-title">
         <div className="card-header flex items-center gap-2"><Icon name="bell" /><h3 id="notify-title">Notifications</h3></div>

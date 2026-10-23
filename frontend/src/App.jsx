@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import { PageLoader } from './components/ui'
 
 const Login = lazy(() => import('./pages/Login'))
+const PasswordReset = lazy(() => import('./pages/PasswordReset'))
 const Landing = lazy(() => import('./pages/Landing'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const RoutePlanner = lazy(() => import('./pages/RoutePlanner'))
@@ -73,6 +74,8 @@ export default function App() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><PasswordReset /></PublicRoute>} />
+        <Route path="/reset-password" element={<PasswordReset />} />
         {/* Public customer tracking: the token in the link is the only credential */}
         <Route path="/track/:token" element={<Track />} />
         {/* Living style guide, development builds only */}

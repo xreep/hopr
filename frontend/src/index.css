@@ -721,3 +721,32 @@
     .eta-learning > div + div { border-left: 0; border-top: 1px solid var(--h-line); }
   }
 }
+
+/* Route sheet (Route Detail, "Print route sheet"): rendered straight into <body>, hidden on
+   screen, and the only thing on paper */
+@layer components {
+  .print-sheet { display: none; }
+  @media print {
+    @page { margin: 12mm; }
+    body { background: #fff; }
+    body > *:not(.print-sheet) { display: none !important; }
+    .print-sheet { display: block; color: #000; font-size: 10.5pt; line-height: 1.35; }
+    .print-sheet h1 { font-size: 16pt; font-weight: 800; margin: 0 0 3pt; }
+    .print-sheet h1 span { margin-left: 6pt; font-size: 10.5pt; font-weight: 600; }
+    .print-sheet p { margin: 0 0 9pt; }
+    .print-sheet table { width: 100%; border-collapse: collapse; }
+    .print-sheet thead { display: table-header-group; }
+    .print-sheet th, .print-sheet td { border: 1px solid #000; padding: 4pt 5pt; text-align: left; vertical-align: top; }
+    .print-sheet th { font-size: 9pt; }
+    .print-sheet tr { break-inside: avoid; }
+    .print-sheet td:first-child { width: 4%; font-weight: 800; }
+    .print-sheet td:last-child { width: 24%; }
+  }
+}
+
+@layer components {
+  .day-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.25rem 0.2rem 0.65rem; border: 1px solid var(--h-line); border-radius: 999px; font-size: 0.8125rem; font-weight: 600; }
+  .day-chip button { display: inline-flex; padding: 0.2rem; border-radius: 999px; color: var(--h-ink-3); }
+  .day-chip button:hover { background: var(--h-line); }
+  .day-chip svg { width: 0.9rem; height: 0.9rem; }
+}

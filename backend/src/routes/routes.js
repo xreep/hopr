@@ -7,7 +7,8 @@ import { proofUpload, sniffImageType } from '../middleware/upload.js'
 import { authenticate, authorize, isManager } from '../middleware/auth.js'
 import { validateRequest, pick, objectIdParam } from '../middleware/validate.js'
 import {
-  planFromRequest, routeDocsFromPlan, assertAssignableDriver, recalculateRoute, applyVehicle, forecastFromStart
+  planFromRequest, routeDocsFromPlan, assertAssignableDriver, recalculateRoute, applyVehicle, forecastFromStart,
+  reorderPlannedRoute
 } from '../services/routePlanning.js'
 import { OptimizationError } from '../services/routeOptimizer.js'
 import { VEHICLE_TYPES, PRIORITIES, MAX_STOPS_PER_BATCH, MAX_VEHICLES_PER_BATCH } from '../config/fleet.js'
@@ -145,7 +146,7 @@ router.post('/', authenticate, authorize('admin', 'fleet_manager'), [
     if (new Set(driverIds.map(String)).size !== driverIds.length) {
       return res.status(400).json({ message: 'A driver can only be assigned one route per batch' })
     }
-    for (const id of driverIds) await assertAssignableDriver(id)
+    for (const id of driverIds) await assertAssignableDriver(id, req.body.departureTime || new Date())
 
     const plan = await planFromRequest(req.body)
     const { batchId, docs } = await routeDocsFromPlan(plan, {
@@ -263,7 +264,7 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
         route.driver = undefined
         route.assignedAt = undefined
       } else {
-        await assertAssignableDriver(req.body.driver)
+        await assertAssignableDriver(req.body.driver, route.plannedStart)
         if (String(route.driver || '') !== String(req.body.driver)) notify.inBackground(notify.routeAssigned(route, req.body.driver))
         route.driver = req.body.driver
         route.assignedAt = new Date()
@@ -282,6 +283,23 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
     res.json({ route: await populateRoute(Route.findById(route._id)) })
   } catch (error) {
     sendError(res, error, 'Failed to update route')
+  }
+})
+
+// Put a planned route's stops in a manager's own order and re-time them
+router.patch('/:id/order', authenticate, authorize('admin', 'fleet_manager'), [
+  body('order').isArray({ min: 1, max: 100 }).withMessage('Provide the stops in their new order'),
+  body('order.*').isMongoId().withMessage('Invalid stop'),
+  validateRequest
+], async (req, res) => {
+  try {
+    const route = await Route.findById(req.params.id)
+    if (!route) return res.status(404).json({ message: 'Route not found' })
+    await reorderPlannedRoute(route, req.body.order)
+    await route.save()
+    res.json({ route: await populateRoute(Route.findById(route._id)) })
+  } catch (error) {
+    sendError(res, error, 'Failed to reorder stops')
   }
 })
 

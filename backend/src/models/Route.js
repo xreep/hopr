@@ -108,6 +108,8 @@ const routeSchema = new mongoose.Schema({
   completedAt: Date,
   // Set once the completion is added to the vehicle's lifetime totals (recordCompletion)
   completionRecorded: { type: Boolean, default: false },
+  // The stop order was set by hand on Route Detail rather than by the optimizer
+  manualOrder: { type: Boolean, default: false },
   returnToDepot: { type: Boolean, default: false },
   trafficEnabled: { type: Boolean, default: true },
   trafficImpactFactor: { type: Number, default: 1 },
