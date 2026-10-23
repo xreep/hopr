@@ -246,6 +246,8 @@ export async function recalculateRoute(route, { reason = 'manual', now = new Dat
     stops: remaining.map(s => ({ ...pickStop(s.toObject ? s.toObject() : s), _stopId: s._id.toString() })),
     vehicle: vehicleDoc ? vehicleDoc.toObject() : { type: route.vehicleType },
     departureTime: now,
+    // Windows stay on the route's own day, so one missed while out on the road shows as late
+    windowAnchor: route.plannedStart || route.startedAt || now,
     trafficEnabled: route.trafficEnabled !== false,
     incidents,
     learnedFactors: await learnedFactors(route.depot?.coordinates, now),

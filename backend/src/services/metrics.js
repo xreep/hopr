@@ -1,16 +1,20 @@
 // KPI definitions shared by analytics, the dashboard and driver performance.
 // Every figure is derived from recorded deliveries — nothing is simulated.
-import { istDateAt } from '../utils/time.js'
+import { addMinutes, windowMinutes } from '../utils/time.js'
 
 export const ON_TIME_GRACE_MIN = 15
 
 const isTerminal = s => s.status === 'completed' || s.status === 'failed'
 
-// The latest acceptable completion time for a stop: its window end (IST, on the
-// route's service day) or, without a window, the promised ETA plus a grace period.
+// The latest acceptable completion time for a stop: its window end (IST, on the day the
+// window is next open from the route's start, see windowMinutes) or, without a window,
+// the promised ETA plus a grace period.
 export function promiseFor(stop, route) {
   const day = route.plannedStart || route.startedAt || route.createdAt
-  if (stop.windowEnd && day) return istDateAt(new Date(day), stop.windowEnd)
+  if (stop.windowEnd && day) {
+    const start = new Date(day)
+    return addMinutes(start, windowMinutes(stop.windowStart, stop.windowEnd, start).end)
+  }
   const planned = stop.plannedArrival || stop.estimatedArrival
   if (planned) return new Date(new Date(planned).getTime() + ON_TIME_GRACE_MIN * 60000)
   return null

@@ -30,6 +30,23 @@ describe('stopTiming', () => {
     expect(stopTiming(stop, ist('06:00')).window).toBe('Window opens at 11:00')
   })
 
+  it('handles an overnight window across midnight', () => {
+    // Route starts 21:00 IST on the 21st, ETA 23:30, window 22:00 to 02:00
+    const start = new Date(ist('21:00')).toISOString()
+    const late = { estimatedArrival: new Date(ist('23:30')).toISOString(), windowStart: '22:00', windowEnd: '02:00' }
+    expect(stopTiming(late, ist('23:00'), 'en', start)).toMatchObject({ window: 'Window open until 02:00', windowState: 'open' })
+    const afterMidnight = new Date('2026-10-22T00:30:00+05:30').getTime()
+    expect(stopTiming(late, afterMidnight, 'en', start)).toMatchObject({ windowState: 'open' })
+    const closed = new Date('2026-10-22T02:30:00+05:30').getTime()
+    expect(stopTiming(late, closed, 'en', start)).toMatchObject({ window: 'Window closed at 02:00', windowState: 'closed' })
+  })
+
+  it('takes a morning window as the next day on a route that starts at night', () => {
+    const start = new Date(ist('23:00')).toISOString()
+    const night = { estimatedArrival: new Date(ist('23:20')).toISOString(), windowStart: '09:00', windowEnd: '12:00' }
+    expect(stopTiming(night, ist('23:10'), 'en', start)).toMatchObject({ window: 'Window opens at 09:00', windowState: 'upcoming' })
+  })
+
   it('copes with stops that have no window or no ETA', () => {
     expect(stopTiming({ estimatedArrival: stop.estimatedArrival }, ist('10:00')).window).toBeNull()
     expect(stopTiming({}, ist('10:00'))).toMatchObject({ eta: '--:--', relative: null })

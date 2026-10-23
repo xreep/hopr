@@ -87,6 +87,50 @@ describe('route optimizer — sequencing', () => {
   })
 })
 
+describe('route optimizer — windows across midnight', () => {
+  const base = { depot: RANCHI_HUB, vehicle: van, trafficEnabled: false }
+  const AT_23 = '2026-10-15T17:30:00.000Z' // 23:00 IST on the 15th
+  const AT_01 = '2026-10-15T19:30:00.000Z' // 01:00 IST on the 16th
+
+  it('takes a morning window as the next day when the route leaves at night', () => {
+    const stops = [{ ...L.lalpurChowk, windowStart: '09:00', windowEnd: '12:00' }]
+    const result = optimizeRoute({ ...base, stops, departureTime: AT_23 })
+    expect(result.violations).toEqual([])
+    expect(result.stops[0].windowStatus).toBe('early')
+    expect(result.stops[0].waitMinutes).toBeGreaterThan(9 * 60)
+  })
+
+  it('accepts an overnight window and waits for it to open', () => {
+    const stops = [{ ...L.lalpurChowk, windowStart: '22:00', windowEnd: '02:00' }]
+    const result = optimizeRoute({ ...base, stops, departureTime: DEPART })
+    expect(result.violations).toEqual([])
+    expect(result.stops[0].windowStatus).toBe('early')
+    expect(result.stops[0].waitMinutes).toBeGreaterThan(11 * 60)
+  })
+
+  it('is already inside an overnight window when leaving after midnight', () => {
+    const stops = [{ ...L.lalpurChowk, windowStart: '22:00', windowEnd: '02:00' }]
+    const result = optimizeRoute({ ...base, stops, departureTime: AT_01 })
+    expect(result.violations).toEqual([])
+    expect(result.stops[0].windowStatus).toBe('on_time')
+  })
+
+  it('keeps same-day windows unchanged, including ones already open', () => {
+    const stops = [{ ...L.lalpurChowk, windowStart: '09:00', windowEnd: '12:00' }]
+    const result = optimizeRoute({ ...base, stops, departureTime: DEPART })
+    expect(result.stops[0].windowStatus).toBe('on_time')
+    expect(result.stops[0].waitMinutes).toBe(0)
+  })
+
+  it('still reports a missed window as late when recalculating after it closed', () => {
+    // Planned for 10:00, recalculated at 12:30: today's 09:00-12:00 window is missed, not tomorrow's
+    const stops = [{ ...L.lalpurChowk, windowStart: '09:00', windowEnd: '12:00' }]
+    const result = optimizeRoute({ ...base, stops, departureTime: '2026-10-15T07:00:00.000Z', windowAnchor: DEPART })
+    expect(result.violations).toHaveLength(1)
+    expect(result.stops[0].windowStatus).toBe('late')
+  })
+})
+
 describe('route optimizer — traffic', () => {
   const stops = fiveStops
   it('takes longer in the 18:00 evening peak than at 03:00', () => {
@@ -144,7 +188,10 @@ describe('validation and performance', () => {
   it('rejects invalid coordinates and malformed windows', () => {
     expect(() => optimizeRoute({ stops: [{ address: 'x', coordinates: [200, 10] }] })).toThrow(OptimizationError)
     expect(() => optimizeRoute({ stops: [{ ...L.doranda, windowStart: '9am' }] })).toThrow(/HH:MM/)
-    expect(() => optimizeRoute({ stops: [{ ...L.doranda, windowStart: '12:00', windowEnd: '11:00' }] })).toThrow(/end after/)
+    expect(() => optimizeRoute({ stops: [{ ...L.doranda, windowStart: '25:00', windowEnd: '11:00' }] })).toThrow(/HH:MM/)
+    expect(() => optimizeRoute({ stops: [{ ...L.doranda, windowStart: '11:00', windowEnd: '11:00' }] })).toThrow(/same time/)
+    // An end before the start is an overnight window, not an error
+    expect(() => optimizeRoute({ stops: [{ ...L.doranda, windowStart: '22:00', windowEnd: '02:00' }] })).not.toThrow()
   })
 
   it('optimizes 30 stops well under the 10 s budget', () => {

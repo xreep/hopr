@@ -22,4 +22,11 @@ describe('csv', () => {
     expect(stops[0]).toMatchObject({ windowStart: '09:00', windowEnd: '11:30', coordinates: null })
     expect(csvToStops('name\nx').errors[0]).toMatch(/address/)
   })
+
+  it('accepts an overnight window and rejects an empty one', () => {
+    const overnight = csvToStops('address,window start,window end\nLalpur Chowk Ranchi,22:00,02:00\n')
+    expect(overnight.errors).toEqual([])
+    expect(overnight.stops[0]).toMatchObject({ windowStart: '22:00', windowEnd: '02:00' })
+    expect(csvToStops('address,window start,window end\nLalpur Chowk Ranchi,10:00,10:00\n').errors[0]).toMatch(/same time/)
+  })
 })

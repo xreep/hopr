@@ -85,7 +85,7 @@ function DriverDeliveries() {
   const [picking, setPicking] = useState(false)
   const currentIndex = route ? route.stops.findIndex(s => s.status === 'pending' || s.status === 'in_progress') : -1
   const currentStop = currentIndex >= 0 ? route.stops[currentIndex] : null
-  const timing = currentStop ? stopTiming(currentStop, Date.now(), lang) : null
+  const timing = currentStop ? stopTiming(currentStop, Date.now(), lang, route.plannedStart) : null
 
   const applyRoute = updated => {
     setRoutes(prev => {
