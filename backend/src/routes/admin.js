@@ -1,12 +1,14 @@
 import express from 'express'
 import { body, query } from 'express-validator'
 import User from '../models/User.js'
+import ContactMessage from '../models/ContactMessage.js'
 import { authenticate, authorize } from '../middleware/auth.js'
 import { protectDemoAccount } from '../middleware/demo.js'
 import { validateRequest, pick, escapeRegex, objectIdParam } from '../middleware/validate.js'
 
 const router = express.Router()
 router.param('id', objectIdParam)
+router.param('messageId', objectIdParam)
 
 const ROLES = ['admin', 'fleet_manager', 'driver']
 
@@ -171,6 +173,29 @@ router.delete('/users/:id', authenticate, authorize('admin'), protectDemoAccount
     res.json({ message: 'User deleted' })
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete user' })
+  }
+})
+
+// Messages from the website's contact form, newest first
+router.get('/messages', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const messages = await ContactMessage.find().sort({ createdAt: -1 }).limit(100).lean()
+    res.json({ messages })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch messages' })
+  }
+})
+
+router.patch('/messages/:messageId', authenticate, authorize('admin'), [
+  body('handled').isBoolean().withMessage('handled must be boolean'),
+  validateRequest
+], async (req, res) => {
+  try {
+    const message = await ContactMessage.findByIdAndUpdate(req.params.messageId, { handled: req.body.handled }, { new: true })
+    if (!message) return res.status(404).json({ message: 'Message not found' })
+    res.json({ message })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update message' })
   }
 })
 

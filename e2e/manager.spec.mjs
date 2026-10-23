@@ -7,10 +7,10 @@ const DELIVERIES = `address,customer,phone,priority,window start,window end,weig
 "Lajpat Nagar Central Market, New Delhi, Delhi 110024",Simran Kaur,,standard,,,2,,28.5677,77.2433
 `
 
-test('a visitor opens the demo from the homepage', async ({ page }) => {
+test('a visitor opens the live preview from the homepage', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Delivery routes that follow India’s roads'.replace('’', "'"))
-  await page.getByRole('button', { name: 'Try the demo' }).first().click()
+  await page.getByRole('button', { name: 'Try the live preview' }).first().click()
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Sanjay')
 })
@@ -36,4 +36,16 @@ test('a fleet manager plans a route from a spreadsheet, saves it and auto-dispat
   await expect(assign).toBeEnabled()
   await assign.click()
   await expect(page.getByText(/assigned/i).first()).toBeVisible()
+})
+
+test('every link in the website footer opens a page', async ({ page }) => {
+  await page.goto('/pricing')
+  const footer = page.getByRole('contentinfo')
+  const paths = await footer.locator('a[href^="/"]').evaluateAll(links => links.map(a => a.getAttribute('href')))
+  expect(paths.length).toBeGreaterThan(8)
+  for (const path of paths) {
+    await page.goto(path)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.getByText('Page not found')).toHaveCount(0)
+  }
 })

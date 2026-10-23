@@ -20,6 +20,7 @@ import demoRoutes from './routes/demo.js'
 import uploadRoutes from './routes/uploads.js'
 import trackRoutes from './routes/track.js'
 import dispatchRoutes from './routes/dispatch.js'
+import contactRoutes from './routes/contact.js'
 
 const app = express()
 
@@ -136,6 +137,7 @@ app.use('/api/vehicles', vehicleRoutes)
 app.use('/api/drivers', driverRoutes)
 app.use('/api/analytics', analyticsRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/contact', contactRoutes)
 app.use('/api/map', mapRoutes)
 app.use('/api/incidents', incidentRoutes)
 app.use('/api/dashboard', dashboardRoutes)

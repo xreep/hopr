@@ -2,3 +2,5 @@
 User-agent: *
 Disallow: /track/
 Allow: /
+
+Sitemap: https://hopr-one.vercel.app/sitemap.xml

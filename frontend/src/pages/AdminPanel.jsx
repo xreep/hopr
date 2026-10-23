@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } from '../components/ui'
 import { formatDate } from '../utils/time'
 import DemoSeedButton from '../components/DemoSeedButton'
+import WebsiteInbox from '../components/WebsiteInbox'
 import useDemoMode from '../hooks/useDemoMode'
 import { MAP_PROVIDER } from '../config'
 import Icon from '../components/icons'
@@ -170,6 +171,8 @@ export default function AdminPanel() {
           </TableRegion>
         )}
       </div>
+
+      <WebsiteInbox />
 
       <div className="card mt-6">
         <div className="card-header"><h3>System configuration</h3></div>

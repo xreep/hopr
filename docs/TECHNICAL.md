@@ -448,6 +448,10 @@ The driver's screens (dashboard, My deliveries, dialogs, sidebar and header) and
   Emails are sent in the background, one per person so addresses stay private. Demo routes and the shared demo accounts never get email. SMS is shown as unavailable, because SMS in India needs a registered (DLT) sender, which is not free.
 - **Proof retention**: a TTL index deletes proof photos and signatures `PROOF_RETENTION_DAYS` after upload (default 90; 0 keeps them forever), so the free 512 MB database does not fill up. The delivery record keeps its time, driver and note, and the app says when an image is no longer stored.
 
+### 7.11 Public website
+
+Besides the homepage, the app serves public pages that need no sign-in: Product, Use cases, Pricing, Security, About, Contact, FAQ, Changelog, Privacy policy and Terms of use (`frontend/src/pages/site/`). They share one header and footer (`SiteLayout.jsx`) and open with a direction-sign title in the road-sign design. Plans, prices, releases and outside links live in `frontend/src/data/site.js`. The contact form (`POST /api/contact`) stores each message for a year and emails it to the admins, or to `CONTACT_EMAIL` when set, with replies going to the sender; admins read and mark them on the Admin page, so nothing is lost while email is off. It has a hidden field that only bots fill in, and limits of 20 messages an hour per network and 5 per sender. `og-image.png` and the Open Graph tags give shared links a preview card, and `sitemap.xml` lists the public pages.
+
 ---
 
 ## 8. Authentication, roles and security
@@ -601,6 +605,9 @@ Base path `/api`. All bodies are JSON unless noted. "Manager" means admin or fle
 | POST | `/api/admin/users` | admin | Create a user with any role |
 | GET / PUT / DELETE | `/api/admin/users/:id` | admin | Read, update (a password reset signs the user out), delete |
 | PATCH | `/api/admin/users/:id/status` | admin | Activate or deactivate |
+| GET | `/api/admin/messages` | admin | The latest 100 contact-form messages |
+| PATCH | `/api/admin/messages/:id` | admin | Body: `handled` |
+| POST | `/api/contact` | public | Website contact form: `name`, `email`, `company?`, `fleetSize?`, `topic` (`demo`, `question`, `support`, `data_request`), `message`. 201 |
 | GET | `/api/demo/status` | public | `{ enabled }`: whether the server runs in demo mode (the web app shows its demo buttons only then) |
 | POST | `/api/demo/seed` | manager, demo mode | Idempotent demo data: accounts, a driver and vehicle based at a hub in each of five cities, and a fresh five-stop route with windows in each city (Ranchi assigned to the demo driver, the rest waiting for auto-dispatch) |
 | POST | `/api/demo/simulate` | manager, demo mode | Demo morning (7.7): dispatch and drive the planned demo routes at 20 times real time. 409 when none are waiting |
@@ -690,9 +697,9 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 172 tests, in-memory MongoDB
+npm test --workspace=backend    # 176 tests, in-memory MongoDB
 npm test --workspace=frontend   # 54 tests, jsdom
-npm run test:e2e                # 16 Playwright tests in a real browser
+npm run test:e2e                # 17 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
 ```
@@ -711,6 +718,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 | Analytics | 9 | Every KPI formula, empty data, period comparison, CSV safety |
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
+| Website contact form | 4 | Stored and emailed to admins with the sender as reply-to, validation, bots dropped quietly, admin-only inbox, per-sender limit |
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
 | Learned travel times | 6 | Leg timing against the plan, breaks and detours ignored, gradual and bounded correction, slower drives lead to later ETAs, demo drives never teach it, arrival accuracy |
 | Email, retention, approval, cross-van moves | 12 | Emails follow each person's settings and never reach demo accounts, one maintenance alert per date, Monday report once, nothing without a key; images expire after 90 days and the record stays; sign-ups wait for approval outside demo mode; moving stops between vans is never worse and keeps capacity; weekday and Sunday learning |
@@ -724,7 +732,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 - a driver delivering with a drawn signature
 - a delivery made offline, held on the phone and sent on reconnect
 - customer tracking switched to Hindi, and an unknown tracking link
-- axe accessibility checks (WCAG 2.1 AA) on the homepage, sign-in, tracking, every manager screen and the driver panel. Any serious or critical issue fails the run.
+- axe accessibility checks (WCAG 2.1 AA) on the homepage, sign-in, forgot password, every public website page, tracking, every manager screen and the driver panel; and every footer link opens a page. Any serious or critical issue fails the run.
 
 Lighthouse on the production build (phone, then desktop; performance, accessibility, best practices and SEO):
 - homepage: 88–93/100/100/100 and 100/100/100/100 (phone performance varies between runs; on phones the street map loads on the first touch or scroll)

@@ -4,7 +4,7 @@
 
 Route optimization for last-mile delivery anywhere in India. Fleet managers plan multi-stop, multi-vehicle routes that account for traffic, delivery windows, priority and fuel; dispatch them to drivers; and watch them live. Drivers deliver with photo and signature proof. Customers follow their parcel on a live tracking link.
 
-- **Live app**: [hopr-one.vercel.app](https://hopr-one.vercel.app). Choose **Try the demo** to open it as the fleet manager, with routes in five cities.
+- **Live app**: [hopr-one.vercel.app](https://hopr-one.vercel.app). Choose **Try the live preview** to open it as the fleet manager, with routes in five cities. The site also has [product](https://hopr-one.vercel.app/product), [pricing](https://hopr-one.vercel.app/pricing), [security](https://hopr-one.vercel.app/security) and [FAQ](https://hopr-one.vercel.app/faq) pages.
   - API: [hopr-api.onrender.com/api/health](https://hopr-api.onrender.com/api/health). It runs on Render's free plan, which sleeps after 15 quiet minutes; an UptimeRobot check every 5 minutes keeps it awake.
   - Status: [stats.uptimerobot.com/NK50eDGlfC](https://stats.uptimerobot.com/NK50eDGlfC), the API's uptime and any outages.
 - **Technical documentation**: [docs/TECHNICAL.md](docs/TECHNICAL.md), covering architecture, data models, the routing algorithm, traffic, fuel, security, the full API reference, NFRs and tests
@@ -30,7 +30,7 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
   | Customer tracking | 76–91 / 100 / 100 / private | |
 
   Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs. Tracking links are kept out of search engines on purpose. On phones the homepage loads its street map on the first touch or scroll, saving mobile data.
-- **Tests:** 226 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
+- **Tests:** 230 unit and API tests, plus 17 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen and every public page. All of them run on every pull request.
 
 ## What it does
 
@@ -124,7 +124,8 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | `TRUST_PROXY` | no | Proxy hops to trust for client IPs; defaults to `1` in production |
 | `DEMO_MODE` | no | `true` for a public demo: turns on Load demo data, the demo morning and the demo sign-in buttons, and protects the demo accounts from being changed or locked out. Leave it unset for real use: the demo endpoints then do not exist |
 | `PROOF_RETENTION_DAYS` | no | Days to keep proof photos and signatures (default 90; 0 keeps them forever). The delivery record stays |
-| `RESEND_API_KEY`, `EMAIL_FROM` | no | Email notifications through Resend's free tier: route changes, maintenance alerts, the weekly report. Unset: no email is sent |
+| `RESEND_API_KEY`, `EMAIL_FROM` | no | Email through Resend's free tier: route changes, maintenance alerts, the weekly report, password reset links and website messages. Unset: no email is sent |
+| `CONTACT_EMAIL` | no | Where website contact-form messages are emailed. Unset: every admin. Messages are always kept on the Admin page |
 | `SENTRY_DSN` | no | Report server errors to Sentry (free tier), without personal data. Unset: nothing is sent |
 | `MAPBOX_TOKEN` | no | Mapbox token for the server: address search through Mapbox Geocoding and road routes through Mapbox Directions with live traffic (`driving-traffic`), with OpenStreetMap as the fallback |
 | `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: typical Indian retail 97.90, 92.60, 91.50 and ₹10/kWh; set your state's prices) |
@@ -157,7 +158,7 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 172 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
+npm test --workspace=backend    # 176 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
 npm test --workspace=frontend   # 54 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 npx playwright install chromium # once, for the end-to-end tests
 npm run test:e2e                # 16 browser tests at desktop and phone sizes, including accessibility checks

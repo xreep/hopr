@@ -3,8 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import MapView, { SchematicMap } from '../components/MapView'
 import DirectionSign from '../components/DirectionSign'
+import { SiteHeader, SiteFooter } from '../components/SiteLayout'
 import { StatCard } from '../components/ui'
-import Icon, { HopMark } from '../components/icons'
+import Icon from '../components/icons'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../utils/api'
 import { DEMO_USERS, DEMO_MISSING } from '../utils/demo'
@@ -124,7 +125,7 @@ function HeroDrive() {
           ? <MapView lines={map.lines} points={map.points} driver={{ coordinates: position, initials: 'PK' }} fitKey="landing" height="100%" />
           : <SchematicMap lines={map.lines} points={map.points} driver={{ coordinates: position, initials: 'PK' }} fitKey="landing" height="100%" />}
       </div>
-      <aside className="landing-sheet" aria-label="Route sheet, New Delhi demo route">
+      <aside className="landing-sheet" aria-label="Route sheet, a sample New Delhi route">
         <div className="landing-sheet-head">
           <div>
             <p className="font-bold">New Delhi morning run</p>
@@ -151,7 +152,7 @@ function HeroDrive() {
             )
           })}
         </ol>
-        <p className="landing-sheet-foot">{finished ? 'All five delivered, back on the road tomorrow' : 'Demo route, driven 20 times faster than real time'}</p>
+        <p className="landing-sheet-foot">{finished ? 'All five delivered, back on the road tomorrow' : 'Sample route, driven 20 times faster than real time'}</p>
       </aside>
     </div>
   )
@@ -191,7 +192,7 @@ export default function Landing() {
     try {
       const { email, password } = DEMO_USERS.fleet_manager
       await login(email, password)
-      toast.success('Signed in as the demo fleet manager')
+      toast.success('Opened the live preview as a fleet manager')
       navigate('/dashboard')
     } catch (error) {
       toast.error(error.response?.status === 401 ? DEMO_MISSING : errorMessage(error, 'Could not open the demo'))
@@ -202,27 +203,17 @@ export default function Landing() {
 
   const demoButton = (size = '') => (
     <button type="button" className={`btn btn-primary ${size}`} onClick={tryDemo} disabled={busy}>
-      {busy ? <><span className="spinner" /> Opening the demo</> : 'Try the demo'}
+      {busy ? <><span className="spinner" /> Opening the live preview</> : 'Try the live preview'}
     </button>
   )
-  // The demo is offered only when the server runs as a public demo
+  // The live preview is offered only when the server runs as a public demo
   const actions = (size = '') => (demo
-    ? <>{demoButton(size)}<Link to="/login" className={`btn btn-outline ${size}`}>Sign in</Link></>
-    : <Link to="/login" className={`btn btn-primary ${size}`}>Sign in</Link>)
+    ? <>{demoButton(size)}<Link to="/contact?topic=demo" className={`btn btn-outline ${size}`}>Book a demo</Link></>
+    : <><Link to="/contact?topic=demo" className={`btn btn-primary ${size}`}>Book a demo</Link><Link to="/login" className={`btn btn-outline ${size}`}>Sign in</Link></>)
 
   return (
     <div className="landing">
-      <header className="landing-header">
-        <Link to="/" className="brand" aria-label="Hopr home"><HopMark size={30} />Hopr</Link>
-        <nav aria-label="Sections" className="landing-nav">
-          <a href="#how-it-works">How it works</a>
-          <a href="#screens">For drivers and customers</a>
-          <a href="#india">Coverage</a>
-        </nav>
-        <div className="flex items-center gap-2">
-          {demo ? <><Link to="/login" className="btn btn-ghost">Sign in</Link>{demoButton()}</> : actions()}
-        </div>
-      </header>
+      <SiteHeader />
 
       <main>
         <section className="landing-hero">
@@ -233,7 +224,7 @@ export default function Landing() {
               and lets customers watch their parcel arrive.
             </p>
             <div className="flex flex-wrap gap-2 mt-7">{actions('btn-lg')}</div>
-            {demo && <p className="text-small text-ink-400 mt-3">The demo opens as a fleet manager with routes in five cities. Nothing to install.</p>}
+            {demo && <p className="text-small text-ink-400 mt-3">The live preview opens as a fleet manager with routes in five cities. Nothing to install.</p>}
           </div>
           <HeroDrive />
         </section>
@@ -305,16 +296,16 @@ export default function Landing() {
 
         <section id="india" className="landing-section landing-india">
           <div>
-            <h2 className="landing-h2">Works anywhere in India, with no map bill</h2>
+            <h2 className="landing-h2">Works anywhere in India</h2>
             <p className="text-body-lg text-ink-300 mt-3 max-w-[52ch]">
-              Street maps, address search and road routing come from OpenStreetMap, so there is no paid map key. Address search covers the whole
-              country and ranks places near your hub first. Fuel costs use Indian retail prices you can set for your state.
+              Address search covers the whole country and ranks places near your hub first. Road routes use live traffic, and roads you report
+              closed are driven around. Fuel costs use Indian retail prices you can set for your state.
             </p>
             <p className="text-body-lg text-ink-300 mt-3 max-w-[52ch]">
-              The demo has a hub, a driver and a morning route in each of five cities. Run a demo morning from the dashboard and all five drive at once.
+              The live preview has a hub, a driver and a morning route in each of five cities. Run a demo morning from the dashboard and all five drive at once.
             </p>
           </div>
-          <DirectionSign title="Five demo hubs" note={null} as="h3" />
+          <DirectionSign title="Hubs in the live preview" note={null} as="h3" />
         </section>
 
         <section className="landing-cta">
@@ -323,11 +314,7 @@ export default function Landing() {
         </section>
       </main>
 
-      <footer className="landing-footer">
-        <span className="brand text-base"><HopMark size={22} />Hopr</span>
-        <span>Route optimisation for last-mile delivery in India</span>
-        <span>Map data &copy; OpenStreetMap contributors</span>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }

@@ -151,7 +151,7 @@ export default function Login() {
           </div>}
         </div>
 
-        <p className="text-micro text-ink-400">Route optimisation for last-mile delivery in India</p>
+        <p className="flex gap-4 text-micro text-ink-400"><Link to="/privacy">Privacy policy</Link><Link to="/terms">Terms of use</Link><Link to="/contact">Contact</Link></p>
       </main>
 
       <aside className="login-aside" aria-label="About Hopr">
