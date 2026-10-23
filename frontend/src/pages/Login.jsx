@@ -110,7 +110,10 @@ export default function Login() {
               {errors.email && <p id="email-error" className="form-error" role="alert">{errors.email}</p>}
             </div>
             <div className="form-group">
-              <label htmlFor="password" className="form-label">Password</label>
+              <div className="flex-between gap-2">
+                <label htmlFor="password" className="form-label">Password</label>
+                {mode === 'login' && <Link to="/forgot-password" className="text-small">Forgot password?</Link>}
+              </div>
               <PasswordInput id="password" className={errors.password ? 'error' : ''} value={form.password}
                 onChange={e => set('password', e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} disabled={loading}
                 aria-invalid={!!errors.password} aria-describedby={errors.password ? 'password-error' : undefined} />

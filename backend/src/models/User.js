@@ -58,6 +58,10 @@ const userSchema = new mongoose.Schema({
   lockUntil: {
     type: Date
   },
+  // Forgot password: SHA-256 of the emailed one-time token and when it stops working.
+  // The token itself is never stored.
+  resetTokenHash: { type: String, select: false },
+  resetTokenExpires: { type: Date, select: false },
   // H11: Token version for invalidation on password change
   tokenVersion: {
     type: Number,
