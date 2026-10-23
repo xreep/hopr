@@ -127,13 +127,13 @@ hopr/
 
 ### 2.4 Map integration
 
-Hopr works across India with no paid key. Mapbox is optional and only used on the server.
+Hopr works across India with no paid key, and uses Mapbox when tokens are set: `MAPBOX_TOKEN` on the server and `VITE_MAPBOX_TOKEN` (a public `pk.` token) in the web app. One Mapbox public token works for both.
 
-| Capability | Default (free, no key) | With `MAPBOX_TOKEN` on the server |
+| Capability | Default (free, no key) | With Mapbox tokens |
 |---|---|---|
-| Map in the browser | MapLibre GL with OpenFreeMap tiles (OpenStreetMap data), English place names; a simplified SVG map if WebGL or the tiles are unavailable | Same |
+| Map in the browser | MapLibre GL with OpenFreeMap tiles (OpenStreetMap data), English place names; a simplified SVG map if WebGL or the tiles are unavailable | Mapbox street tiles (Static Tiles API, light style) in the same map |
 | Address search | OpenStreetMap Photon, limited to India | Mapbox Geocoding, limited to India, falling back to Photon |
-| Road geometry | OSRM, the public routing service FOSSGIS runs for openstreetmap.org | Mapbox Directions, falling back to OSRM |
+| Road geometry | OSRM, the public routing service FOSSGIS runs for openstreetmap.org | Mapbox Directions with the `driving-traffic` profile, so routes and drive times reflect live traffic; the live drive time is saved with each route (`liveTrafficDriveMin`) and shown on the route page. Falls back to OSRM |
 | Neither available | Straight legs × 1.35 circuity factor (typical for Indian city grids), drawn dashed | |
 
 Address searches pass the batch's hub (`near=lng,lat`), so nearby places rank first while results can still come from anywhere in India. Curated places (the demo hubs and delivery points in Delhi, Mumbai, Bengaluru, Kolkata and Ranchi) lead when they match every word typed; a bare city or state name is left to the geocoder. Results are de-duplicated (same label, or within 30 m) and cached in memory for 24 hours; road geometry is cached too. Requests to the public OpenStreetMap services carry an identifying User-Agent and stay well within their fair-use policies.
@@ -283,7 +283,8 @@ On the benchmark (section 4 of [BENCHMARK.md](BENCHMARK.md)), moving stops betwe
 
 The spec suggests shortest-path algorithms (Dijkstra / A*) and multi-stop sequencing logic. Hopr splits the problem the same way:
 
-- **Shortest path between two points** is a road-network problem. OSRM (or Mapbox Directions when configured) solves it on the real OpenStreetMap road graph; when neither answers, Hopr uses the circuity estimate.
+- **Shortest path between two points** is a road-network problem. OSRM (or Mapbox Directions when configured) solves it on the real OpenStreetMap road graph, using contraction hierarchies, a Dijkstra-family method; when neither answers, Hopr uses the circuity estimate.
+- **Shortest path around reported closures** is computed by Hopr itself with **A\*** on a visibility graph (5.2), with **Dijkstra** kept for comparison: both find the same path, and A* explores less.
 - **Multi-stop sequencing** is a travelling-salesman problem with time windows (TSPTW), which Dijkstra and A* do not solve. Hopr solves small routes exactly and larger ones with construction plus iterated local search (2-opt, Or-opt, swaps), the standard practical approach at this size; the benchmark measures how close it gets.
 
 ---
@@ -307,7 +308,7 @@ The morning peak (school and office traffic) and the evening peak are the heavie
 Managers report incidents on the Live monitor (a point, a radius and a duration):
 
 - **Congestion** multiplies the travel time of any leg passing through the zone by its severity (default 1.8).
-- **Closure** forces a detour around the zone: extra distance and time on every leg that crosses it.
+- **Closure** forces a detour around the zone, with extra distance and time on every leg that crosses it. The detour is a real shortest path, not a rule of thumb. The closed circles become obstacles in a visibility graph whose nodes are the leg's two ends plus 16 points just outside each circle, with an edge wherever the straight line stays clear of every closure. **A\*** (heuristic: straight-line distance to the end, which never overestimates) finds the shortest way round. Several closures on one leg are handled together. Tests check the result against the exact geometry (two tangents and an arc, within 1%), and check that **Dijkstra** (the same search without the heuristic) finds exactly the same path while A* settles fewer nodes (`services/shortestPath.js`). A stop inside a closed area has no way round, so it is charged half of the circle instead.
 
 When an incident is reported, every planned or active route crossing it is flagged `needsRecalculation` and shown on the dashboard and monitor.
 
@@ -675,7 +676,7 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 150 tests, in-memory MongoDB
+npm test --workspace=backend    # 157 tests, in-memory MongoDB
 npm test --workspace=frontend   # 51 tests, jsdom
 npm run test:e2e                # 16 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
@@ -699,6 +700,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
 | Learned travel times | 6 | Leg timing against the plan, breaks and detours ignored, gradual and bounded correction, slower drives lead to later ETAs, demo drives never teach it, arrival accuracy |
 | Email, retention, approval, cross-van moves | 12 | Emails follow each person's settings and never reach demo accounts, one maintenance alert per date, Monday report once, nothing without a key; images expire after 90 days and the record stays; sign-ups wait for approval outside demo mode; moving stops between vans is never worse and keeps capacity; weekday and Sunday learning |
+| Shortest paths and Mapbox | 6 | A* around closures within 1% of the exact geometry, A* and Dijkstra agree with A* exploring less, no way round from inside a closure, real detours charged to legs, Mapbox `driving-traffic` requested and its drive time kept |
 | Offline updates | 3 | Time it happened trusted only within a day and never in the future, start, failure and delivery recorded at those times, repeat refused |
 | Frontend | 51 | Tracking animation never teleports, geo helpers, CSV import, speech (including Hindi), stop timing, session retry on 429, confirm dialog, error boundary, command palette, image cache, every Hindi string present, offline outbox order, retry rules and week-old updates dropped, updates applied on the phone |
 
