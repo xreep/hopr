@@ -8,6 +8,21 @@ import { protectDemoAccount } from '../middleware/demo.js'
 import { demoMode, isDemoEmail } from '../services/demo.js'
 import * as notify from '../services/notify.js'
 
+// The signed-in user's own account, without lockout and session-revocation internals
+// (failedAttempts, lockUntil, tokenVersion)
+const accountView = user => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  phone: user.phone,
+  address: user.address,
+  isActive: user.isActive,
+  notifications: user.notifications,
+  createdAt: user.createdAt,
+  lastLogin: user.lastLogin
+})
+
 const router = express.Router()
 
 // H4: fields a user may change on their own profile
@@ -108,17 +123,7 @@ router.post('/login', [
 
     res.json({
       token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        address: user.address,
-        notifications: user.notifications,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin
-      }
+      user: accountView(user)
     })
   } catch (error) {
     // H10: Handle locked account error
@@ -135,7 +140,7 @@ router.get('/me', authenticate, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' })
     }
-    res.json({ user })
+    res.json({ user: accountView(user) })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch user' })
   }

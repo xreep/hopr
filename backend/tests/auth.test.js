@@ -37,6 +37,8 @@ describe('auth', () => {
     expect(res.status).toBe(200)
     expect(res.body.user.email).toBe(newUser.email)
     expect(res.body.user.password).toBeUndefined()
+    // Lockout and session-revocation internals stay on the server
+    for (const field of ['tokenVersion', 'failedAttempts', 'lockUntil', '__v']) expect(res.body.user[field]).toBeUndefined()
   })
 
   it('rejects /me without a token (401)', async () => {
