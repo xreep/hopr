@@ -686,7 +686,6 @@
 
   .landing-india { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 3rem; align-items: center; }
   .landing-cta { max-width: 1320px; margin: 0 auto; padding: clamp(2.5rem, 6vw, 4.5rem) clamp(1rem, 4vw, 3rem); border-top: 1px solid var(--h-line); }
-  .landing-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 2rem; padding: 1.25rem clamp(1rem, 4vw, 3rem); background: var(--h-surface); border-top: 1px solid var(--h-line); font-size: 0.8125rem; color: var(--h-ink-3); }
 
   @media (max-width: 1024px) {
     .landing-nav { display: none; }
@@ -749,4 +748,104 @@
   .day-chip button { display: inline-flex; padding: 0.2rem; border-radius: 999px; color: var(--h-ink-3); }
   .day-chip button:hover { background: var(--h-line); }
   .day-chip svg { width: 0.9rem; height: 0.9rem; }
+}
+
+/* Public website pages (SiteLayout.jsx): the homepage header and footer, a direction-sign
+   page title, then plain left-aligned reading text */
+@layer components {
+  .landing-nav a.is-current { color: var(--h-ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; text-decoration-color: var(--h-green); }
+
+  .site-menu { display: none; position: relative; }
+  .site-menu summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 1px solid var(--h-line); border-radius: 8px; cursor: pointer; }
+  .site-menu summary::-webkit-details-marker { display: none; }
+  .site-menu summary span, .site-menu summary span::before, .site-menu summary span::after { display: block; width: 1.1rem; height: 2px; background: var(--h-ink); position: relative; content: ''; }
+  .site-menu summary span::before { position: absolute; top: -6px; }
+  .site-menu summary span::after { position: absolute; top: 6px; }
+  .site-menu nav { position: absolute; right: 0; top: calc(100% + 0.5rem); display: grid; min-width: 12rem; padding: 0.4rem; background: var(--h-surface); border: 1px solid var(--h-line); border-radius: 10px; box-shadow: var(--h-shadow); }
+  .site-menu nav a { padding: 0.6rem 0.75rem; border-radius: 6px; color: var(--h-ink); font-weight: 600; text-decoration: none; }
+  .site-menu nav a:hover { background: var(--h-hover); }
+
+  .site-head { max-width: 1320px; margin: 0 auto; padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem) 0; }
+  .site-sign {
+    max-width: 760px; padding: 2rem 2.25rem; border-radius: 14px; color: #FFFFFF; background: var(--h-green);
+    box-shadow: inset 0 0 0 6px var(--h-green), inset 0 0 0 9px #FFFFFF;
+  }
+  .site-sign h1 { font-weight: 800; font-size: clamp(1.875rem, 4vw, 2.75rem); line-height: 1.08; letter-spacing: -0.02em; }
+  .site-sign p { margin-top: 0.75rem; font-size: 1.0625rem; line-height: 1.6rem; color: #E6F2EA; max-width: 52ch; }
+
+  .site-body { max-width: 1320px; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) clamp(1rem, 4vw, 3rem) clamp(3rem, 7vw, 5rem); }
+  .site-prose { max-width: 68ch; }
+  .site-prose h2 { font-weight: 800; font-size: 1.5rem; line-height: 1.25; letter-spacing: -0.01em; margin: 2.5rem 0 0.75rem; }
+  .site-prose h2:first-child { margin-top: 0; }
+  .site-prose h3 { font-weight: 700; font-size: 1.125rem; margin: 1.75rem 0 0.5rem; }
+  .site-prose p, .site-prose li { font-size: 1.0625rem; line-height: 1.75rem; color: var(--h-ink-2); }
+  .site-prose p + p { margin-top: 0.9rem; }
+  .site-prose ul { list-style: disc; padding-left: 1.25rem; margin-top: 0.5rem; }
+  .site-prose li + li { margin-top: 0.35rem; }
+  .site-prose a:not(.btn), .site-aside a { color: var(--h-blue); text-decoration: underline; text-underline-offset: 3px; }
+  .site-prose strong { color: var(--h-ink); }
+  .site-updated { font-size: 0.875rem; color: var(--h-ink-3); margin-bottom: 2rem; }
+
+  /* A feature with its real screen beside it */
+  .site-feature { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: clamp(1.5rem, 4vw, 3.5rem); align-items: center; padding: clamp(2rem, 5vw, 3.5rem) 0; border-top: 1px solid var(--h-line); }
+  .site-feature:first-child { border-top: 0; padding-top: 0; }
+  .site-feature.is-phone { grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr); }
+  .site-feature img { width: 100%; height: auto; border: 1px solid var(--h-line); border-radius: 12px; background: var(--h-surface); }
+  .site-feature.is-phone img { max-width: 300px; justify-self: center; border-radius: 22px; }
+  .site-feature h2 { font-weight: 800; font-size: clamp(1.375rem, 2.4vw, 1.875rem); line-height: 1.2; letter-spacing: -0.015em; }
+  .site-feature ul { margin-top: 1rem; display: grid; gap: 0.55rem; }
+  .site-feature li { position: relative; padding-left: 1.5rem; font-size: 1rem; line-height: 1.6rem; color: var(--h-ink-2); }
+  .site-feature li::before { content: ''; position: absolute; left: 0; top: 0.6rem; width: 0.65rem; height: 0.65rem; border-radius: 2px; background: var(--h-green); }
+
+  /* Pricing: each plan as a sign plate; the beta notice as a yellow warning plate */
+  .site-beta { display: flex; gap: 1rem; align-items: flex-start; max-width: 760px; padding: 1.25rem 1.5rem; border-radius: 10px; background: var(--h-yellow); color: var(--h-ink); box-shadow: inset 0 0 0 3px var(--h-yellow), inset 0 0 0 5px var(--h-ink); margin-bottom: 2.5rem; }
+  .site-beta strong { font-weight: 800; font-size: 1.125rem; }
+  .site-plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  .site-plan { display: flex; flex-direction: column; padding: 1.75rem; background: var(--h-surface); border: 1px solid var(--h-line); border-radius: 12px; }
+  .site-plan.is-featured { border: 2px solid var(--h-green); }
+  .site-plan h2 { font-weight: 800; font-size: 1.375rem; }
+  .site-price { margin-top: 0.75rem; font-weight: 800; font-size: 2.25rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .site-price small { font-size: 0.9375rem; font-weight: 600; color: var(--h-ink-3); letter-spacing: 0; }
+  .site-plan ul { margin: 1.25rem 0 1.5rem; display: grid; gap: 0.6rem; flex: 1; }
+  .site-plan li { position: relative; padding-left: 1.5rem; font-size: 0.9375rem; line-height: 1.45rem; color: var(--h-ink-2); }
+  .site-plan li::before { content: ''; position: absolute; left: 0.1rem; top: 0.35rem; width: 0.45rem; height: 0.8rem; border: solid var(--h-green); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+
+  .site-faq details { border-top: 1px solid var(--h-line); }
+  .site-faq details:last-child { border-bottom: 1px solid var(--h-line); }
+  .site-faq summary { display: flex; justify-content: space-between; gap: 1rem; padding: 1.1rem 0; font-weight: 700; font-size: 1.0625rem; cursor: pointer; list-style: none; }
+  .site-faq summary::-webkit-details-marker { display: none; }
+  .site-faq summary::after { content: '+'; font-weight: 800; font-size: 1.25rem; line-height: 1; color: var(--h-green); }
+  .site-faq details[open] summary::after { content: '\2212'; }
+  .site-faq details > div { padding-bottom: 1.25rem; }
+
+  .site-release { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem 0; border-top: 1px solid var(--h-line); }
+  .site-release time { font-weight: 700; color: var(--h-ink-3); font-variant-numeric: tabular-nums; }
+  .site-release h2 { margin: 0 0 0.5rem; font-size: 1.25rem; }
+
+  .site-two { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+  .site-aside { padding: 1.5rem; background: var(--h-surface); border: 1px solid var(--h-line); border-radius: 12px; }
+  .site-aside h2 { font-weight: 800; font-size: 1.125rem; }
+  .site-aside p { margin-top: 0.5rem; font-size: 0.9375rem; line-height: 1.5rem; color: var(--h-ink-2); }
+  .site-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+  .site-footer { background: var(--h-surface); border-top: 1px solid var(--h-line); padding: 2.5rem clamp(1rem, 4vw, 3rem) 1.5rem; font-size: 0.875rem; color: var(--h-ink-3); }
+  .site-footer-grid { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); gap: 2rem; }
+  .site-footer h2 { font-weight: 700; font-size: 0.875rem; color: var(--h-ink); margin-bottom: 0.6rem; }
+  .site-footer ul { display: grid; gap: 0.45rem; }
+  .site-footer a { color: var(--h-ink-2); text-decoration: none; }
+  .site-footer a:hover { color: var(--h-ink); text-decoration: underline; text-underline-offset: 3px; }
+  .site-footer-base { max-width: 1320px; margin: 2rem auto 0; padding-top: 1.25rem; border-top: 1px solid var(--h-line); font-size: 0.8125rem; }
+
+  @media (max-width: 1024px) {
+    .site-menu { display: block; }
+    .site-feature, .site-feature.is-phone, .site-two { grid-template-columns: minmax(0, 1fr); }
+    .site-plans { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
+    .site-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .site-footer-grid > div:first-child { grid-column: 1 / -1; }
+  }
+  @media (max-width: 640px) {
+    .site-sign { padding: 1.4rem 1.5rem; box-shadow: inset 0 0 0 4px var(--h-green), inset 0 0 0 6px #FFFFFF; }
+    .site-release { grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+    .landing-header .btn-primary { padding-inline: 0.85rem; }
+  }
 }

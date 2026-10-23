@@ -6,6 +6,17 @@ import { PageLoader } from './components/ui'
 
 const Login = lazy(() => import('./pages/Login'))
 const PasswordReset = lazy(() => import('./pages/PasswordReset'))
+// Public website pages
+const SiteProduct = lazy(() => import('./pages/site/Product'))
+const SiteUseCases = lazy(() => import('./pages/site/UseCases'))
+const SitePricing = lazy(() => import('./pages/site/Pricing'))
+const SiteSecurity = lazy(() => import('./pages/site/Security'))
+const SiteAbout = lazy(() => import('./pages/site/About'))
+const SiteContact = lazy(() => import('./pages/site/Contact'))
+const SiteFaq = lazy(() => import('./pages/site/Faq'))
+const SiteChangelog = lazy(() => import('./pages/site/Changelog'))
+const SitePrivacy = lazy(() => import('./pages/site/Privacy'))
+const SiteTerms = lazy(() => import('./pages/site/Terms'))
 const Landing = lazy(() => import('./pages/Landing'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const RoutePlanner = lazy(() => import('./pages/RoutePlanner'))
@@ -76,6 +87,16 @@ export default function App() {
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><PasswordReset /></PublicRoute>} />
         <Route path="/reset-password" element={<PasswordReset />} />
+        <Route path="/product" element={<SiteProduct />} />
+        <Route path="/use-cases" element={<SiteUseCases />} />
+        <Route path="/pricing" element={<SitePricing />} />
+        <Route path="/security" element={<SiteSecurity />} />
+        <Route path="/about" element={<SiteAbout />} />
+        <Route path="/contact" element={<SiteContact />} />
+        <Route path="/faq" element={<SiteFaq />} />
+        <Route path="/changelog" element={<SiteChangelog />} />
+        <Route path="/privacy" element={<SitePrivacy />} />
+        <Route path="/terms" element={<SiteTerms />} />
         {/* Public customer tracking: the token in the link is the only credential */}
         <Route path="/track/:token" element={<Track />} />
         {/* Living style guide, development builds only */}

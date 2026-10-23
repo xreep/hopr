@@ -13,7 +13,11 @@ async function expectAccessible(page, name) {
 }
 
 test('public pages', async ({ page, request }) => {
-  for (const [path, name] of [['/', 'homepage'], ['/login', 'sign-in']]) {
+  for (const [path, name] of [
+    ['/', 'homepage'], ['/login', 'sign-in'], ['/forgot-password', 'forgot password'],
+    ['/product', 'product'], ['/use-cases', 'use cases'], ['/pricing', 'pricing'], ['/security', 'security'], ['/about', 'about'],
+    ['/contact', 'contact'], ['/faq', 'faq'], ['/changelog', 'changelog'], ['/privacy', 'privacy'], ['/terms', 'terms']
+  ]) {
     await page.goto(path)
     await page.waitForLoadState('networkidle')
     await expectAccessible(page, name)

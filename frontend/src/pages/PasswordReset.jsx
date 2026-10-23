@@ -24,7 +24,7 @@ export default function PasswordReset() {
           {token ? <NewPasswordForm token={token} /> : <RequestForm />}
           <p className="text-body text-ink-400 mt-4"><Link to="/login">Back to sign in</Link></p>
         </div>
-        <p className="text-micro text-ink-400">Route optimisation for last-mile delivery in India</p>
+        <p className="flex gap-4 text-micro text-ink-400"><Link to="/privacy">Privacy policy</Link><Link to="/terms">Terms of use</Link><Link to="/contact">Contact</Link></p>
       </main>
       <aside className="login-aside" aria-label="About Hopr">
         <DirectionSign title="Plan, dispatch and track deliveries across India."
