@@ -232,6 +232,41 @@ describe('route assignment and driver workflow', () => {
     expect(after.totalFuelConsumed).toBeCloseTo(done.fuelEstimate, 5)
   })
 
+  it('lets a manager put the stops of a planned route in their own order', async () => {
+    const manager = await createUser('fleet_manager')
+    const driver = await createUser('driver')
+    const route = await createRoute(manager.auth)
+    const reversed = [...route.stops].sort((a, b) => b.sequence - a.sequence).map(s => s._id)
+
+    const res = await api().patch(`/api/routes/${route._id}/order`).set(manager.auth).send({ order: reversed })
+    expect(res.status).toBe(200)
+    const updated = res.body.route
+    expect(updated.manualOrder).toBe(true)
+    expect(updated.stops.map(s => s._id)).toEqual(reversed)
+    expect(updated.stops.map(s => s.sequence)).toEqual([1, 2, 3, 4, 5])
+    // Re-timed in the new order: ETAs rise along it, and distance and fuel follow it
+    const etas = updated.stops.map(s => new Date(s.estimatedArrival).getTime())
+    expect([...etas].sort((a, b) => a - b)).toEqual(etas)
+    expect(updated.stops.map(s => s.plannedArrival)).toEqual(updated.stops.map(s => s.estimatedArrival))
+    expect(updated.totalDistance).toBeGreaterThanOrEqual(route.totalDistance - 1e-6)
+    expect(updated.fuelCost).toBeGreaterThan(0)
+    expect(updated.geometry.coordinates.length).toBeGreaterThan(1)
+
+    // Every stop exactly once, managers only, planned routes only
+    const one = [reversed[0]]
+    expect((await api().patch(`/api/routes/${route._id}/order`).set(manager.auth).send({ order: one })).status).toBe(400)
+    expect((await api().patch(`/api/routes/${route._id}/order`).set(manager.auth).send({ order: [...reversed.slice(1), reversed[1]] })).status).toBe(400)
+    expect((await api().patch(`/api/routes/${route._id}/order`).set(driver.auth).send({ order: reversed })).status).toBe(403)
+
+    // Re-optimizing replaces the manual order
+    const recalculated = await api().post(`/api/routes/${route._id}/recalculate`).set(manager.auth).send({ reason: 'Back to optimized' })
+    expect(recalculated.body.route.manualOrder).toBe(false)
+
+    await api().patch(`/api/routes/${route._id}`).set(manager.auth).send({ driver: driver.user._id }).expect(200)
+    await api().patch(`/api/routes/${route._id}/start`).set(driver.auth).expect(200)
+    expect((await api().patch(`/api/routes/${route._id}/order`).set(manager.auth).send({ order: reversed })).status).toBe(409)
+  })
+
   it('pushes back remaining ETAs when a delay is reported', async () => {
     const manager = await createUser('fleet_manager')
     const driver = await createUser('driver')

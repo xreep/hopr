@@ -220,6 +220,52 @@ export async function applyVehicle(route, vehicle) {
   return route
 }
 
+// A manager's own stop order for a planned route ("the customer called, go there first").
+// The stops are re-timed in that order with the route's vehicle and departure, distance,
+// fuel and the road line follow the new order, and the route is marked manualOrder so the
+// app asks before a re-optimization replaces it.
+export async function reorderPlannedRoute(route, stopIds) {
+  if (route.status !== 'planned') throw new OptimizationError('Only a planned route can be reordered', 409)
+  const byId = new Map(route.stops.map(s => [s._id.toString(), s]))
+  const ids = stopIds.map(String)
+  if (ids.length !== route.stops.length || new Set(ids).size !== ids.length || !ids.every(id => byId.has(id))) {
+    throw new OptimizationError('The new order must list every stop on the route exactly once', 400)
+  }
+  ids.forEach((id, i) => { byId.get(id).sequence = i + 1 })
+
+  const vehicle = route.vehicle?._id ? route.vehicle : (route.vehicle ? await Vehicle.findById(route.vehicle) : null)
+  const { result, pairs } = await retimeStops(route, vehicle, route.plannedStart || new Date())
+  for (const [stop, r] of pairs) {
+    stop.estimatedArrival = r.estimatedArrival
+    stop.plannedArrival = r.estimatedArrival
+    stop.windowStatus = r.windowStatus
+    stop.lateByMin = r.lateByMin
+    stop.legDistanceKm = r.legDistanceKm
+    stop.legMinutes = r.legMinutes
+  }
+  const ordered = ids.map(id => byId.get(id))
+  route.stops = ordered
+  const { fuel } = result.totals
+  Object.assign(route, {
+    totalDistance: result.totals.distanceKm,
+    estimatedTime: result.totals.totalMinutes,
+    trafficImpactFactor: result.totals.trafficImpactFactor,
+    trafficLevel: result.totals.trafficLevel,
+    fuelEstimate: fuel.quantity,
+    fuelPrice: fuel.unitPrice,
+    fuelCost: fuel.cost,
+    co2Kg: fuel.co2Kg,
+    violations: result.violations,
+    // "Saved by optimizing" no longer describes a hand-made order
+    savings: undefined,
+    manualOrder: true
+  })
+  const geometry = await geometryFor(route.depot, ordered, route.returnToDepot)
+  route.geometry = { type: 'LineString', coordinates: geometry.coordinates }
+  route.geometrySource = geometry.source
+  return route
+}
+
 export async function assertAssignableDriver(driverId) {
   const driver = await User.findOne({ _id: driverId, role: 'driver', isActive: true })
   if (!driver) throw new OptimizationError('Driver not found or inactive', 400)
@@ -272,6 +318,7 @@ export async function recalculateRoute(route, { reason = 'manual', now = new Dat
   route.trafficImpactFactor = result.totals.trafficImpactFactor
   route.trafficLevel = result.totals.trafficLevel
   route.needsRecalculation = false
+  route.manualOrder = false
   const newFinish = new Date(result.finishTime)
   route.recalculations.push({ at: now, reason, previousFinish, newFinish })
 
