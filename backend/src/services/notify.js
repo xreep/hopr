@@ -26,13 +26,13 @@ export const emailEnabled = () => Boolean(process.env.RESEND_API_KEY && process.
 const appUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '')
 const MANAGERS = ['admin', 'fleet_manager']
 
-export async function sendEmail({ to, subject, text }) {
+export async function sendEmail({ to, subject, text, replyTo }) {
   if (!emailEnabled() || !to) return false
   try {
     const res = await fetch(RESEND_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text }),
+      body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text, ...(replyTo && { reply_to: replyTo }) }),
       signal: AbortSignal.timeout(8000)
     })
     if (!res.ok) throw new Error(`Email provider answered ${res.status}`)
@@ -74,6 +74,26 @@ export function passwordReset(user, token) {
       'If it was not you, ignore this email: your password stays as it is.'
     ].join('\n')
   })
+}
+
+const TOPIC_LABELS = { demo: 'Demo request', question: 'Question', support: 'Support', data_request: 'Data request' }
+
+// A message from the website's contact form, to every admin (or CONTACT_EMAIL). Replies
+// go straight to the sender.
+export async function contactReceived(msg) {
+  if (!emailEnabled()) return 0
+  const to = process.env.CONTACT_EMAIL
+    ? [process.env.CONTACT_EMAIL]
+    : (await User.find({ role: 'admin', isActive: true }).select('email').lean()).map(u => u.email).filter(e => !isDemoEmail(e))
+  const text = [
+    `${msg.name} <${msg.email}>${msg.company ? `, ${msg.company}` : ''}${msg.fleetSize ? `, fleet of ${msg.fleetSize} vehicles` : ''}`,
+    '',
+    msg.message,
+    '',
+    `All website messages: ${appUrl()}/admin`
+  ].join('\n')
+  const sent = await Promise.all(to.map(address => sendEmail({ to: address, subject: `${TOPIC_LABELS[msg.topic]} from ${msg.name}`, text, replyTo: msg.email })))
+  return sent.filter(Boolean).length
 }
 
 // Route changes ---------------------------------------------------------------------
