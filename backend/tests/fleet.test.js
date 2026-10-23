@@ -135,3 +135,27 @@ describe('map', () => {
     expect(res.body.geometry.coordinates).toHaveLength(2)
   })
 })
+
+describe('Mapbox live-traffic routing', () => {
+  it('asks Mapbox for the driving-traffic profile and keeps its drive time', async () => {
+    const { vi } = await import('vitest')
+    const axios = (await import('axios')).default
+    const env = { NODE_ENV: process.env.NODE_ENV, MAPBOX_TOKEN: process.env.MAPBOX_TOKEN }
+    process.env.NODE_ENV = 'development'
+    process.env.MAPBOX_TOKEN = 'pk.test-token'
+    const get = vi.spyOn(axios, 'get').mockResolvedValue({
+      data: { routes: [{ geometry: { coordinates: [[85.35, 23.37], [85.34, 23.37]] }, distance: 1500, duration: 420 }] }
+    })
+    try {
+      const { buildRouteGeometry } = await import('../src/services/geometry.js')
+      const geometry = await buildRouteGeometry([[85.3521, 23.3756], [85.3383, 23.3722]])
+      expect(get.mock.calls[0][0]).toContain('/directions/v5/mapbox/driving-traffic/')
+      expect(geometry).toMatchObject({ source: 'mapbox', distanceKm: 1.5, durationMin: 7 })
+    } finally {
+      get.mockRestore()
+      process.env.NODE_ENV = env.NODE_ENV
+      if (env.MAPBOX_TOKEN === undefined) delete process.env.MAPBOX_TOKEN
+      else process.env.MAPBOX_TOKEN = env.MAPBOX_TOKEN
+    }
+  })
+})

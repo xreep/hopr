@@ -189,7 +189,10 @@ router.get('/directions', authenticate, managers, [
     res.json({
       geometry: { type: 'LineString', coordinates: geometry.coordinates },
       source: geometry.source,
-      distanceKm: geometry.distanceKm
+      distanceKm: geometry.distanceKm,
+      // With Mapbox (driving-traffic) this drive time includes live traffic
+      durationMin: geometry.durationMin,
+      liveTraffic: geometry.source === 'mapbox'
     })
   } catch (error) {
     res.status(500).json({ message: 'Directions failed' })

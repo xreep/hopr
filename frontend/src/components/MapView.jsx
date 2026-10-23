@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { INDIA_VIEW, INDIA_BOUNDS, ROUTE_GREEN } from '../config'
+import { INDIA_VIEW, INDIA_BOUNDS, ROUTE_GREEN, MAPBOX_TOKEN } from '../config'
 import { boundsOf, circlePolygon } from '../utils/geo'
 
 // One map component for every page.
@@ -16,6 +16,21 @@ export default function MapView(props) {
 }
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
+// With a Mapbox public token (VITE_MAPBOX_TOKEN) the street map comes from Mapbox (its
+// Static Tiles API, light style); without one, from OpenFreeMap
+const MAPBOX_STYLE = MAPBOX_TOKEN && {
+  version: 8,
+  sources: {
+    mapbox: {
+      type: 'raster',
+      tiles: [`https://api.mapbox.com/styles/v1/mapbox/light-v11/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`],
+      tileSize: 256,
+      maxzoom: 20,
+      attribution: '\u00a9 <a href="https://www.mapbox.com/about/maps/">Mapbox</a> \u00a9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }
+  },
+  layers: [{ id: 'mapbox', type: 'raster', source: 'mapbox' }]
+}
 const AMBER = '#F2B705'
 const RED = '#C8102E'
 
@@ -76,7 +91,7 @@ function StreetMap({ lines = [], points = [], driver, drivers, incidents = [], f
         try {
           map = new maplibregl.Map({
             container: container.current,
-            style: STYLE_URL,
+            style: MAPBOX_STYLE || STYLE_URL,
             center: INDIA_VIEW.center,
             zoom: INDIA_VIEW.zoom,
             attributionControl: { compact: true },

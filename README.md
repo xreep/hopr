@@ -29,7 +29,7 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
   | Customer tracking | 76–91 / 100 / 100 / private | |
 
   Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs. Tracking links are kept out of search engines on purpose. On phones the homepage loads its street map on the first touch or scroll, saving mobile data.
-- **Tests:** 201 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
+- **Tests:** 208 unit and API tests, plus 16 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen. All of them run on every pull request.
 
 ## What it does
 
@@ -105,7 +105,7 @@ npm run dev
 
 The API runs on 5001 locally because macOS uses port 5000 for AirPlay Receiver. To use another port, set `PORT` in `backend/.env` and start the app with the matching proxy target, e.g. `VITE_PROXY_TARGET=http://localhost:5050 npm run dev` (a shell variable, read by `vite.config.js`).
 
-No map key is needed. Street maps come from OpenFreeMap, address search from Photon and road-following routes from the public OSRM service, all built on OpenStreetMap. A server-side `MAPBOX_TOKEN` is optional and only swaps in Mapbox geocoding and directions.
+No map key is needed. Street maps come from OpenFreeMap, address search from Photon and road-following routes from the public OSRM service, all built on OpenStreetMap. With a Mapbox token (`MAPBOX_TOKEN` on the server, `VITE_MAPBOX_TOKEN` in the app) Hopr uses Mapbox instead: street tiles, geocoding, and directions with live traffic.
 
 ## Environment variables
 
@@ -123,7 +123,7 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | `PROOF_RETENTION_DAYS` | no | Days to keep proof photos and signatures (default 90; 0 keeps them forever). The delivery record stays |
 | `RESEND_API_KEY`, `EMAIL_FROM` | no | Email notifications through Resend's free tier: route changes, maintenance alerts, the weekly report. Unset: no email is sent |
 | `SENTRY_DSN` | no | Report server errors to Sentry (free tier), without personal data. Unset: nothing is sent |
-| `MAPBOX_TOKEN` | no | Server-side Mapbox token; when set, Mapbox is tried first for geocoding and road directions, with OpenStreetMap as the fallback |
+| `MAPBOX_TOKEN` | no | Mapbox token for the server: address search through Mapbox Geocoding and road routes through Mapbox Directions with live traffic (`driving-traffic`), with OpenStreetMap as the fallback |
 | `FUEL_PRICE_PETROL`, `FUEL_PRICE_DIESEL`, `FUEL_PRICE_CNG`, `FUEL_PRICE_ELECTRICITY` | no | Fuel prices in ₹ (defaults: typical Indian retail 97.90, 92.60, 91.50 and ₹10/kWh; set your state's prices) |
 
 ### Frontend (`frontend/.env`)
@@ -131,6 +131,7 @@ No map key is needed. Street maps come from OpenFreeMap, address search from Pho
 | Variable | Required | Description |
 |---|---|---|
 | `VITE_API_URL` | yes | `/api` locally (through the dev proxy); the full Render URL ending in `/api` in production |
+| `VITE_MAPBOX_TOKEN` | no | Mapbox public token (`pk.…`) for Mapbox street tiles in the web app; without it the map uses OpenFreeMap |
 | `VITE_SENTRY_DSN` | no | Report page crashes to Sentry. Unset: the Sentry code is never downloaded |
 
 Never commit `.env` files; they are git-ignored.
@@ -153,7 +154,7 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 150 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email
+npm test --workspace=backend    # 157 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
 npm test --workspace=frontend   # 51 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 npx playwright install chromium # once, for the end-to-end tests
 npm run test:e2e                # 16 browser tests at desktop and phone sizes, including accessibility checks

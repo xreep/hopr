@@ -28,3 +28,7 @@ export const ROUTE_COLORS = ['#1F4E9C', '#6B3FA0', '#B85C00', '#0E7C86', '#A1286
 
 // Icon names (components/icons.jsx) per vehicle type
 export const VEHICLE_ICONS = { bike: 'bike', van: 'van', truck: 'bigTruck', ev_van: 'plug' }
+
+// Mapbox public token (pk.…) for the street map. Without it the map uses OpenFreeMap.
+export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
+export const MAP_PROVIDER = MAPBOX_TOKEN ? 'mapbox' : 'openfreemap'

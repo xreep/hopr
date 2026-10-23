@@ -1,5 +1,6 @@
 import { istHour, istDay } from '../utils/time.js'
 import { pointToSegment } from '../utils/geo.js'
+import { closureDetourKm } from './shortestPath.js'
 
 // Simulated traffic: a weekday congestion profile typical of Indian cities (multiplier
 // on free-flow travel time, by IST hour), plus live incidents (congestion zones, road
@@ -35,6 +36,7 @@ export function legIncidentEffect(a, b, incidents = []) {
   let timeFactor = 1
   let extraKm = 0
   const hits = []
+  const closed = []
   for (const incident of incidents) {
     if (!incident?.coordinates) continue
     const radiusKm = incident.radiusKm ?? 0.5
@@ -42,12 +44,16 @@ export function legIncidentEffect(a, b, incidents = []) {
     if (distanceKm > radiusKm) continue
     hits.push(incident.id ?? incident._id?.toString() ?? incident.label)
     if (incident.type === 'closure') {
-      // Go around the closed zone: roughly half its circumference instead of its diameter
-      extraKm += radiusKm * (Math.PI - 2)
+      closed.push({ centre: incident.coordinates, radiusKm })
       timeFactor *= 1.15
     } else {
       timeFactor *= incident.severity ?? INCIDENT_DEFAULTS.congestion.severity
     }
+  }
+  if (closed.length) {
+    // The shortest way round every closure on this leg (A* on a visibility graph). A stop
+    // inside a closed area has no way round: count half of each circle instead.
+    extraKm = closureDetourKm(a, b, closed) ?? closed.reduce((km, c) => km + c.radiusKm * (Math.PI - 2), 0)
   }
   return { timeFactor, extraKm, incidents: hits }
 }

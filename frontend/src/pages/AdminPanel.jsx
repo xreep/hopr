@@ -6,6 +6,7 @@ import { Modal, StatusBadge, EmptyState, SkeletonRows, StatCard, TableRegion } f
 import { formatDate } from '../utils/time'
 import DemoSeedButton from '../components/DemoSeedButton'
 import useDemoMode from '../hooks/useDemoMode'
+import { MAP_PROVIDER } from '../config'
 import Icon from '../components/icons'
 import { useConfirm } from '../components/ConfirmDialog'
 
@@ -174,8 +175,9 @@ export default function AdminPanel() {
         <div className="card-header"><h3>System configuration</h3></div>
         <div className="card-body">
           <dl className="detail-list">
-            <dt>Street maps</dt><dd>OpenFreeMap (OpenStreetMap data), no key needed</dd>
+            <dt>Street maps</dt><dd>{MAP_PROVIDER === 'mapbox' ? 'Mapbox (light style)' : 'OpenFreeMap (OpenStreetMap data), no key needed. Set VITE_MAPBOX_TOKEN on Vercel for Mapbox'}</dd>
             <dt>Geocoding (server)</dt><dd>{config ? (config.geocoder === 'mapbox' ? 'Mapbox Geocoding API' : 'OpenStreetMap Photon (set MAPBOX_TOKEN on Render for Mapbox)') : '…'}</dd>
+            <dt>Road routing (server)</dt><dd>{config ? (config.geocoder === 'mapbox' ? 'Mapbox Directions, live traffic (driving-traffic)' : 'OpenStreetMap OSRM (set MAPBOX_TOKEN on Render for Mapbox live traffic)') : '…'}</dd>
             <dt>Email notifications</dt><dd>{config ? (config.email ? 'On (Resend)' : 'Off. Set RESEND_API_KEY and EMAIL_FROM on Render to send them') : '…'}</dd>
             <dt>Hubs</dt><dd>{config ? (config.hubs?.length ? config.hubs.map(h => h.name || h.address).join(', ') : 'None yet. Set a home hub on each vehicle.') : '…'}</dd>
             <dt>Fuel prices</dt><dd>Indian retail defaults; set FUEL_PRICE_* on the server for your state</dd>
