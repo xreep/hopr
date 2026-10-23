@@ -4,9 +4,8 @@
 
 Route optimization for last-mile delivery anywhere in India. Fleet managers plan multi-stop, multi-vehicle routes that account for traffic, delivery windows, priority and fuel; dispatch them to drivers; and watch them live. Drivers deliver with photo and signature proof. Customers follow their parcel on a live tracking link.
 
-- **Live app**: not deployed yet. See [Deployment](#deployment-free-tiers-0); add the URLs here once they exist.
-  - Frontend: `https://<your-app>.vercel.app`
-  - API: `https://<your-api>.onrender.com/api/health`
+- **Live app**: [hopr-one.vercel.app](https://hopr-one.vercel.app). Choose **Try the demo** to open it as the fleet manager, with routes in five cities.
+  - API: [hopr-api.onrender.com/api/health](https://hopr-api.onrender.com/api/health). It runs on Render's free plan, so the first request after a quiet spell takes up to a minute while the server wakes.
 - **Technical documentation**: [docs/TECHNICAL.md](docs/TECHNICAL.md), covering architecture, data models, the routing algorithm, traffic, fuel, security, the full API reference, NFRs and tests
 - **Routing benchmark**: [docs/BENCHMARK.md](docs/BENCHMARK.md), comparing the engine with the true optimum and simpler methods
 - **Security and operations**: [docs/SECURITY.md](docs/SECURITY.md), with the threat model, backups and incident steps
