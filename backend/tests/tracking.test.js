@@ -52,6 +52,17 @@ describe('F2 driver location pings', () => {
     expect((await Route.findById(route._id)).actualDistance).toBe(0)
   })
 
+  it('moves the van but not the odometer on a fix without a usable accuracy', async () => {
+    const { driver, route } = await activeRoute()
+    await ping(driver.auth, route._id, RANCHI_HUB.coordinates, { accuracy: 8 })
+    // A position set by hand on the map, then a coarse fix 300 m off
+    expect((await ping(driver.auth, route._id, L.lalpurChowk.coordinates, { accuracy: null })).body.movedKm).toBe(0)
+    expect((await ping(driver.auth, route._id, RANCHI_HUB.coordinates, { accuracy: 300 })).body.movedKm).toBe(0)
+    const stored = await Route.findById(route._id)
+    expect(stored.driverLocation.coordinates).toEqual(RANCHI_HUB.coordinates)
+    expect(stored.actualDistance).toBe(0)
+  })
+
   it('only accepts pings from the assigned driver on an active route', async () => {
     const { driver, route } = await activeRoute()
     const other = await createUser('driver')

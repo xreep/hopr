@@ -503,7 +503,9 @@ router.patch('/:id/location', authenticate, authorize('driver'), [
     // Odometer: add movement between fixes, ignoring GPS jitter (<15 m), poor fixes and jumps
     let movedKm = 0
     const prev = route.driverLocation?.coordinates
-    if (prev?.length === 2 && (accuracy === null || accuracy <= 100)) {
+    // Only a fix with a known accuracy within 100 m adds to the odometer. A position set by
+    // hand on the map (no accuracy) or a coarse fix still moves the van on the map
+    if (prev?.length === 2 && accuracy !== null && accuracy <= 100) {
       const d = haversineKm(prev, coordinates)
       if (d >= 0.015 && d < 3) movedKm = d
     }
