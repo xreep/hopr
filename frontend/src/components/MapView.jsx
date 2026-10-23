@@ -12,7 +12,7 @@ import { boundsOf, circlePolygon } from '../utils/geo'
 // If WebGL or the tiles are unavailable, a simplified SVG map is drawn instead.
 export default function MapView(props) {
   const [failed, setFailed] = useState(false)
-  return failed ? <SchematicMap {...props} /> : <StreetMap {...props} onFail={() => setFailed(true)} />
+  return failed ? <SchematicMap {...props} note="Street map unavailable. Showing a simplified view." /> : <StreetMap {...props} onFail={() => setFailed(true)} />
 }
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
@@ -288,7 +288,9 @@ const VARIANT_STYLE = {
   muted: { fill: '#FFFFFF', stroke: '#AEB6BD', text: '#5E6873' }
 }
 
-function SchematicMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, height = 420, className = '', insetBottom = 0 }) {
+// `note` explains why the street map is not shown; pages that show this view on purpose
+// (before a phone visitor interacts, to save data) leave it out
+function SchematicMap({ lines = [], points = [], driver, drivers, incidents = [], fitKey, onMapClick, height = 420, className = '', insetBottom = 0, note }) {
   const driverList = drivers || (driver ? [{ id: 'driver', ...driver }] : [])
   const svgRef = useRef(null)
   // SVG units per screen pixel, so markers and lines keep a constant on-screen size
@@ -387,7 +389,7 @@ function SchematicMap({ lines = [], points = [], driver, drivers, incidents = []
           )
         })}
       </svg>
-      <p className="schematic-note">Street map unavailable. Showing a simplified view.</p>
+      {note && <p className="schematic-note">{note}</p>}
     </div>
   )
 }
