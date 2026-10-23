@@ -181,7 +181,7 @@ All models are Mongoose schemas in `backend/src/models`. Each one is listed next
 | Estimated fuel consumption | `fuelEstimate`, `fuelUnit`, `fuelPrice`, `fuelCost` (INR), `co2Kg` |
 | Estimated delivery time | `estimatedTime` (min), `actualTime` |
 | Traffic impact factor | `trafficImpactFactor` (traffic time ÷ free-flow time), `trafficLevel` |
-| Route status | `status`: `planned`, `active`, `completed`, `cancelled` |
+| Route status | `status`: `planned`, `active`, `completed`, `cancelled`; `completionRecorded` is claimed atomically when a route completes, so a duplicate final delivery (a double tap, or the offline outbox retrying) adds it to the vehicle's lifetime distance and fuel, and sends the completion email, only once |
 | | `routeId`, `batchId`, `stops[]` (1–30), `depot`, `vehicle`, `vehicleType`, `driver`, `plannedStart`, `startedAt`, `completedAt` |
 | | `geometry` (GeoJSON LineString), `violations[]`, `savings`, `alternatives[]`, `loadKg`, `capacityKg` |
 | | `driverLocation` (live GPS), `needsRecalculation`, `recalculations[]` |
@@ -409,6 +409,8 @@ They are stored in MongoDB with `completedAt` and `completedBy`. Proof images ca
 
 Optional `windowStart` and `windowEnd` per stop. The objective penalises lateness heavily (₹30 a minute) and the search includes an earliest-deadline seed, so ETAs land inside windows where possible. Windows that cannot be met are flagged in plain language (for example "Stop 4 ETA 16:20, window ends 16:00"), and the planner and route detail show each stop's ETA against its window.
 
+A window is taken on the day it is next open from the route's planned departure (`windowMinutes` in `backend/src/utils/time.js`, mirrored in the driver app). An end before the start is an overnight window: 22:00 to 02:00 ends the next day, and a route leaving at 01:00 is already inside it. A window that has closed by the departure belongs to the next day, so a route leaving at 23:00 waits for a 09:00 to 12:00 window the next morning instead of counting it hours late. Recalculation keeps the route's planned departure as the reference, so a window missed while out on the road still shows as late. Only a window that starts and ends at the same time is rejected. The on-time KPI uses the same rule.
+
 ### 7.6 Address autocomplete (F5) and spoken notifications (F6)
 
 - **Autocomplete**: search as you type (debounced, keyboard accessible); see 2.4 for the providers. Choosing a result fills the address and coordinates.
@@ -613,7 +615,7 @@ All KPIs come from recorded deliveries; nothing is simulated. The analytics wind
 | KPI (spec) | Definition |
 |---|---|
 | Average delivery time | Minutes from the route starting to each parcel being delivered, averaged |
-| On-time delivery rate | Delivered stops completed by their window end (or, without a window, by the promised ETA + 15 minutes) ÷ delivered stops |
+| On-time delivery rate | Delivered stops completed by their window end, on the day the window is next open from the route's start (or, without a window, by the promised ETA + 15 minutes) ÷ delivered stops |
 | Fuel cost per delivery | Fuel cost of dispatched routes ÷ delivered stops |
 | Route efficiency score | Planned km ÷ driven km × 100 (capped at 100), averaged over completed routes with GPS distance |
 | Vehicle utilization rate | Distinct vehicles used ÷ active vehicles × 100 |
@@ -676,8 +678,8 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 157 tests, in-memory MongoDB
-npm test --workspace=frontend   # 51 tests, jsdom
+npm test --workspace=backend    # 164 tests, in-memory MongoDB
+npm test --workspace=frontend   # 54 tests, jsdom
 npm run test:e2e                # 16 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
@@ -687,14 +689,14 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 
 | Area | Tests | Highlights |
 |---|---|---|
-| Routing engine | 22 | Exactly optimal up to 8 stops and on a 9-stop case, never worse than the previous search, the same plan every time; brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
+| Routing engine | 27 | Exactly optimal up to 8 stops and on a 9-stop case, never worse than the previous search, the same plan every time; brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation, overnight and next-day windows, still late after recalculation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
 | Auth | 10 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit |
 | Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
-| Routes and workflow | 15 | Planning API, batches, assignment, end-to-end driver workflow, delays, recalculation, incidents, re-timing on vehicle change and on start |
+| Routes and workflow | 16 | Planning API, batches, assignment, end-to-end driver workflow, a completion counted once under duplicate requests, delays, recalculation, incidents, re-timing on vehicle change and on start |
 | Auto-dispatch | 10 | Proximity, stale GPS fallback, home hub position, never another city, capacity fit and exact score formula, global matching, preview and confirm with re-validation |
 | Proof of delivery | 9 | Photo, signature and note; type sniffing; 5 MB limit; privacy; deletion with the route |
 | Tracking | 10 | GPS pings and odometer filtering, dedicated rate limit, public page states, privacy |
-| Analytics | 8 | Every KPI formula, empty data, period comparison, CSV safety |
+| Analytics | 9 | Every KPI formula, empty data, period comparison, CSV safety |
 | Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
 | Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
