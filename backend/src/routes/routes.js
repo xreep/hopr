@@ -264,7 +264,7 @@ router.patch('/:id', authenticate, authorize('admin', 'fleet_manager'), [
         route.driver = undefined
         route.assignedAt = undefined
       } else {
-        await assertAssignableDriver(req.body.driver, route.plannedStart)
+        await assertAssignableDriver(req.body.driver, route.plannedStart || new Date(), route._id)
         if (String(route.driver || '') !== String(req.body.driver)) notify.inBackground(notify.routeAssigned(route, req.body.driver))
         route.driver = req.body.driver
         route.assignedAt = new Date()

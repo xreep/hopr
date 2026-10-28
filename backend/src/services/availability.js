@@ -23,10 +23,17 @@ export function normalizeDaysOff(days, now = new Date()) {
 
 export const isOffOn = (driver, date) => Boolean(driver?.daysOff?.includes(istDateKey(date)))
 
-export function offReason(driver, date) {
+// "2 Nov" for the IST day of a date
+export function dayLabel(date) {
   const [, month, day] = istDateKey(date).split('-').map(Number)
-  return `${driver.name} is off on ${day} ${MONTHS[month - 1]}`
+  return `${day} ${MONTHS[month - 1]}`
 }
+
+export const offReason = (driver, date) => `${driver.name} is off on ${dayLabel(date)}`
+
+// The day a route takes its driver: the day it started once it is on the road, else the
+// day it is planned for
+export const routeDay = route => (route.status === 'active' && route.startedAt) || route.plannedStart || route.createdAt
 
 export const daysOffValidators = [
   body('daysOff').isArray({ max: 2 * MAX_DAYS_OFF }).withMessage('Provide the days off as a list'),
