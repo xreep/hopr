@@ -200,6 +200,10 @@ export default function RoutesPage() {
       {dispatching && (
         <DispatchPreviewDialog
           onClose={closeDispatch}
+          onAssignByHand={() => {
+            closeDispatch()
+            setFilter('unassigned', 'true')
+          }}
           onApplied={result => {
             setDispatching(false)
             const n = result.assigned.length

@@ -7,7 +7,8 @@ import { formatKm, initials } from '../utils/format'
 import Icon from './icons'
 
 // Auto-dispatch: preview "Route A → Driver X" pairs, then Confirm or Cancel
-export default function DispatchPreviewDialog({ onClose, onApplied }) {
+// `onAssignByHand`: when nothing can be auto-assigned, the way out (shows the waiting routes)
+export default function DispatchPreviewDialog({ onClose, onApplied, onAssignByHand }) {
   const [preview, setPreview] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -37,7 +38,12 @@ export default function DispatchPreviewDialog({ onClose, onApplied }) {
   return (
     <Modal title="Auto-dispatch" onClose={busy ? () => {} : onClose} size="lg"
       footer={preview && (preview.assignments.length === 0 ? (
-        <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+        <>
+          <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+          {preview.unassignedRoutes > 0 && onAssignByHand && (
+            <button type="button" className="btn btn-primary" onClick={onAssignByHand}>Assign by hand</button>
+          )}
+        </>
       ) : (
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
@@ -59,10 +65,13 @@ export default function DispatchPreviewDialog({ onClose, onApplied }) {
               </EmptyState>
             ) : preview.availableDrivers === 0 ? (
               <EmptyState title="No drivers are free">
-                Drivers become free when they finish their current route. Active drivers with a vehicle are offered automatically.
+                Auto-dispatch only offers drivers with no route waiting or on the road. They become free when they finish. You can still
+                give a route to a driver by hand on its row, as long as they have no other route that day.
               </EmptyState>
             ) : (
-              <EmptyState title="Nothing can be assigned right now">The reasons for each route are listed below.</EmptyState>
+              <EmptyState title="Nothing can be assigned right now">
+                The reason for each route is below. Give a driver a vehicle on the Drivers page, or assign a driver by hand on the route&apos;s row.
+              </EmptyState>
             )
           ) : (
             <ul className="dispatch-list">
