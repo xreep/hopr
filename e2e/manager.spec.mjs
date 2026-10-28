@@ -49,3 +49,11 @@ test('every link in the website footer opens a page', async ({ page }) => {
     await expect(page.getByText('Page not found')).toHaveCount(0)
   }
 })
+
+test('forgot password says plainly when no email can be sent', async ({ page }) => {
+  await page.goto('/forgot-password')
+  await page.getByLabel('Email').fill('someone@example.test')
+  await page.getByRole('button', { name: 'Send reset link' }).click()
+  await expect(page.getByRole('heading', { name: 'Ask your administrator' })).toBeVisible()
+  await expect(page.getByText(/on its way/)).toHaveCount(0)
+})
