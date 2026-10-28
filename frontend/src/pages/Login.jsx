@@ -54,7 +54,7 @@ export default function Login() {
       }
       navigate('/dashboard')
     } catch (error) {
-      setErrors({ form: errorMessage(error, mode === 'login' ? 'Email or password is incorrect' : 'Could not create the account') })
+      setErrors({ form: errorMessage(error, mode === 'login' ? 'Could not sign in. Please try again.' : 'Could not create the account') })
     } finally {
       setLoading(false)
     }

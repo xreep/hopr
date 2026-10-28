@@ -92,7 +92,7 @@ router.post('/login', [
     if (!user) {
       // H12: Log failed login attempt
       console.warn(`[${new Date().toISOString()}] SECURITY LOGIN_FAILED - Email: ${email} - IP: ${req.ip}`)
-      return res.status(401).json({ message: 'Invalid credentials' })
+      return res.status(401).json({ message: 'Email or password is incorrect' })
     }
 
     if (!user.isActive) {
@@ -114,7 +114,7 @@ router.post('/login', [
       // H10: Increment failed attempts
       if (lockable) await user.incrementFailedAttempts()
       console.warn(`[${new Date().toISOString()}] SECURITY LOGIN_FAILED - Email: ${email} - IP: ${req.ip}`)
-      return res.status(401).json({ message: 'Invalid credentials' })
+      return res.status(401).json({ message: 'Email or password is incorrect' })
     }
 
     // H10: Reset failed attempts on successful login
