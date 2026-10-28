@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const API_PORT = 5055
-const WEB_PORT = 4180
+// Override with E2E_API_PORT / E2E_WEB_PORT when something else already uses these
+const API_PORT = Number(process.env.E2E_API_PORT || 5055)
+const WEB_PORT = Number(process.env.E2E_WEB_PORT || 4180)
 
 // End-to-end tests against a production build of the web app and a throwaway API
 export default defineConfig({
