@@ -74,6 +74,9 @@ const pathOf = req => req.originalUrl.split('?')[0]
 // High-frequency endpoints get their own dedicated limits instead of the global budget
 const isLocationPing = req => req.method === 'PATCH' && /^\/api\/routes\/[a-f\d]{24}\/location$/i.test(pathOf(req))
 const isTracking = req => req.method === 'GET' && /^\/api\/track\//.test(pathOf(req))
+// The host (Render) and the uptime monitor poll this constantly. A 429 here made Render mark
+// the server failed and stop sending it traffic, so it is never rate limited.
+const isHealthCheck = req => req.method === 'GET' && pathOf(req) === '/api/health'
 const isLiveRead = req => req.method === 'GET' && /^\/api\/(dashboard|incidents|routes)(\/|$)/.test(pathOf(req))
 
 const limiter = rateLimit({
@@ -82,7 +85,7 @@ const limiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: clientKey,
-  skip: req => isLocationPing(req) || isTracking(req) || isLiveRead(req),
+  skip: req => isHealthCheck(req) || isLocationPing(req) || isTracking(req) || isLiveRead(req),
   message: { message: 'Too many requests, please try again later' }
 })
 app.use('/api/', limiter)
