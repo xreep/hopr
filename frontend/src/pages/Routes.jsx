@@ -42,15 +42,19 @@ export default function RoutesPage() {
     setParams(next, { replace: true })
   }, [params, setParams])
 
+  const [loadError, setLoadError] = useState('')
   const load = useCallback(async () => {
     try {
       const res = await api.get('/routes', {
         params: { limit: 100, ...(status && { status }), ...(batch && { batchId: batch }), ...(unassigned && { unassigned: true }) }
       })
       setRoutes(res.data.routes)
+      setLoadError('')
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to load routes'))
-      setRoutes([])
+      // A failed refresh keeps the list already shown; with nothing loaded yet the page
+      // says it failed, rather than "No routes match"
+      setLoadError(errorMessage(err, 'Failed to load routes'))
+      toast.error(errorMessage(err, 'Failed to load routes'), { id: 'routes-load' })
     }
   }, [status, batch, unassigned])
   usePolling(load, 20000)
@@ -141,7 +145,9 @@ export default function RoutesPage() {
         </div>
       </div>
 
-      {!shown ? <div className="card"><SkeletonRows label="Loading routes" /></div> : shown.length === 0 ? (
+      {!shown && loadError ? (
+        <div className="card"><EmptyState title="Couldn’t load routes" action={<button type="button" className="btn btn-secondary btn-sm" onClick={load}>Try again</button>}>{loadError}</EmptyState></div>
+      ) : !shown ? <div className="card"><SkeletonRows label="Loading routes" /></div> : shown.length === 0 ? (
         <div className="card">
           {query
             ? <EmptyState title={`No routes match “${query}”`} action={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setFilter('q', '')}>Clear search</button>}>Search covers route names, route and batch IDs, drivers and vehicles.</EmptyState>
