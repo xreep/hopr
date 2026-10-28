@@ -4,7 +4,7 @@ import { seedDemo, demoMode } from '../services/demo.js'
 import Route from '../models/Route.js'
 import { planDispatch } from '../services/dispatch.js'
 import { applyVehicle } from '../services/routePlanning.js'
-import { startSimulatedRoute, simulatingFilter, SIM_SPEEDUP } from '../services/simulation.js'
+import { startSimulatedRoute, resetSimulatedRoute, simulatingFilter, simulationSettled, SIM_SPEEDUP } from '../services/simulation.js'
 import { availableCandidates } from './dispatch.js'
 import { requireDemoMode } from '../middleware/demo.js'
 
@@ -39,6 +39,7 @@ router.post('/simulate', authenticate, authorize('admin', 'fleet_manager'), asyn
   try {
     const waiting = await Route.find({ isDemo: true, status: 'planned', driver: { $in: [null] } })
       .select('routeId name depot loadKg vehicle vehicleType plannedStart stops.sequence totalDistance').lean()
+    const dispatched = new Set()
     if (waiting.length) {
       const { assignments } = planDispatch(waiting, await availableCandidates())
       for (const a of assignments) {
@@ -48,6 +49,7 @@ router.post('/simulate', authenticate, authorize('admin', 'fleet_manager'), asyn
         route.assignedAt = new Date()
         await applyVehicle(route, a.vehicle)
         await route.save()
+        dispatched.add(String(route._id))
       }
     }
 
@@ -60,6 +62,7 @@ router.post('/simulate', authenticate, authorize('admin', 'fleet_manager'), asyn
       if (busyDrivers.has(driverId)) continue
       busyDrivers.add(driverId)
       startSimulatedRoute(route, now)
+      route.simulation.dispatched = dispatched.has(String(route._id))
       await route.save()
       started.push({ _id: route._id, routeId: route.routeId, name: route.name, driver: route.driver.name })
     }
@@ -73,11 +76,22 @@ router.post('/simulate', authenticate, authorize('admin', 'fleet_manager'), asyn
   }
 })
 
-// Stop the simulated drives where they are; the routes stay on the road
+// Stop the demo morning and put its routes back as they were before it: planned, nothing
+// delivered, and the drivers it dispatched free again, so the fleet can be dispatched or
+// the demo morning run afresh. Real routes are never touched.
 router.delete('/simulate', authenticate, authorize('admin', 'fleet_manager'), async (req, res) => {
   try {
-    const { modifiedCount } = await Route.updateMany(simulatingFilter(), { $unset: { simulation: 1 } })
-    res.json({ stopped: modifiedCount })
+    // Take the routes out of the drive first, so no new tick moves them, and let a tick
+    // already in progress finish. A route that finished in that tick stays completed.
+    const ids = await Route.distinct('_id', simulatingFilter())
+    await Route.updateMany({ _id: { $in: ids } }, { $unset: { 'simulation.startedAt': 1 } })
+    await simulationSettled()
+    const routes = await Route.find({ _id: { $in: ids }, status: 'active' })
+    for (const route of routes) {
+      resetSimulatedRoute(route)
+      await route.save()
+    }
+    res.json({ stopped: ids.length })
   } catch (error) {
     console.error('Stopping the demo morning failed:', error)
     res.status(500).json({ message: 'Failed to stop the demo morning' })

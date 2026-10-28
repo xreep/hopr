@@ -140,18 +140,54 @@ export async function advanceRoute(route, now = new Date()) {
   return state
 }
 
+// Stopping a demo morning: the route goes back to how it was before it, planned with
+// nothing delivered, and a driver the demo morning dispatched is freed again. Only demo
+// routes are ever simulated, so only demo routes reach here.
+export function resetSimulatedRoute(route) {
+  if (route.simulation?.dispatched) {
+    route.driver = undefined
+    route.assignedAt = undefined
+  }
+  for (const stop of route.stops) {
+    stop.status = 'pending'
+    stop.estimatedArrival = stop.plannedArrival || stop.estimatedArrival
+    stop.completedAt = undefined
+    stop.failedAt = undefined
+    stop.failureReason = undefined
+    stop.receivedAt = undefined
+    stop.proof = undefined
+  }
+  route.status = 'planned'
+  route.startedAt = undefined
+  route.completedAt = undefined
+  route.actualTime = undefined
+  route.actualDistance = 0
+  route.driverLocation = undefined
+  route.simulation = undefined
+  route.refreshProgress()
+  return route
+}
+
 export const simulatingFilter = () => ({ isDemo: true, status: 'active', 'simulation.startedAt': { $ne: null } })
 
-export async function advanceSimulations(now = new Date()) {
-  const routes = await Route.find(simulatingFilter())
-  for (const route of routes) {
-    try {
-      await advanceRoute(route, now)
-    } catch (error) {
-      console.error(`Demo drive ${route.routeId} failed:`, error.message)
+// The tick in progress, so stopping can wait for it before resetting routes
+let inFlight = Promise.resolve()
+export const simulationSettled = () => inFlight
+
+export function advanceSimulations(now = new Date()) {
+  const run = (async () => {
+    const routes = await Route.find(simulatingFilter())
+    for (const route of routes) {
+      try {
+        await advanceRoute(route, now)
+      } catch (error) {
+        console.error(`Demo drive ${route.routeId} failed:`, error.message)
+      }
     }
-  }
-  return routes.length
+    return routes.length
+  })()
+  inFlight = run.catch(() => null)
+  return run
 }
 
 // One ticker per server process. Ticks never overlap; a slow database just skips a beat.

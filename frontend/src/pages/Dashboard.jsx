@@ -182,7 +182,7 @@ function FleetCard({ liveRoutes, demo, onDemoChange }) {
     }
   }
   const runDemo = () => demoAction(() => api.post('/demo/simulate'), d => `${d.started.length} demo vans are on the road`, 'Could not start the demo morning')
-  const stopDemo = () => demoAction(() => api.delete('/demo/simulate'), () => 'Demo morning stopped', 'Could not stop the demo morning')
+  const stopDemo = () => demoAction(() => api.delete('/demo/simulate'), () => 'Demo morning stopped. Its routes are back to planned', 'Could not stop the demo morning')
 
   return (
     <section className="card fleet-card mb-6" aria-label="Fleet on the road">
@@ -200,7 +200,7 @@ function FleetCard({ liveRoutes, demo, onDemoChange }) {
         {demo?.running > 0 && (
           <div className="demo-bar" role="status">
             <p className="text-small"><strong>Demo morning</strong>: {demo.running} van{demo.running > 1 ? 's' : ''} driving at {demo.speedup}&times; real time</p>
-            <button type="button" className="btn btn-outline btn-sm" onClick={stopDemo} disabled={busy}>Stop</button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={stopDemo} disabled={busy} title="Stops the vans and puts the demo routes back as planned">Stop and reset</button>
           </div>
         )}
         <div className="card-body">
