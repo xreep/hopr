@@ -30,7 +30,7 @@ Route optimization for last-mile delivery anywhere in India. Fleet managers plan
   | Customer tracking | 76–91 / 100 / 100 / private | |
 
   Scores are performance, accessibility, best practices and SEO. Phone performance (simulated slow 4G and CPU) varies between runs. Tracking links are kept out of search engines on purpose. On phones the homepage loads its street map on the first touch or scroll, saving mobile data.
-- **Tests:** 230 unit and API tests, plus 17 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen and every public page. All of them run on every pull request.
+- **Tests:** 237 unit and API tests, plus 20 end-to-end browser tests at desktop and phone sizes, including WCAG 2.1 AA accessibility checks on every main screen and every public page. All of them run on every pull request.
 
 ## What it does
 
@@ -158,8 +158,8 @@ Run from the repository root:
 ## Testing
 
 ```bash
-npm test --workspace=backend    # 176 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
-npm test --workspace=frontend   # 54 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
+npm test --workspace=backend    # 179 tests: routing engine, auth, roles, workflow, dispatch, proof, tracking, analytics, demo morning, offline updates, security, learned travel times, email, A* around closures
+npm test --workspace=frontend   # 58 tests: tracking animation, timing, session handling, dialogs, command palette, Hindi, offline outbox
 npx playwright install chromium # once, for the end-to-end tests
 npm run test:e2e                # 16 browser tests at desktop and phone sizes, including accessibility checks
 ```
