@@ -33,8 +33,17 @@ api.interceptors.response.use(
   }
 )
 
+export const UNREACHABLE = 'Can\u2019t reach Hopr right now. Check your connection and try again in a moment.'
+
+// The server's own message when it sent one. When it gave no answer (offline, a timeout)
+// or the host answered for it while the API restarts (502-504), say so rather than show a
+// fallback such as "Email or password is incorrect" that blames the user.
 export function errorMessage(error, fallback = 'Something went wrong') {
-  return error?.response?.data?.message || error?.response?.data?.errors?.[0]?.msg || fallback
+  const data = error?.response?.data
+  const message = data?.message || data?.errors?.[0]?.msg
+  if (message) return message
+  if (error?.isAxiosError && (!error.response || [502, 503, 504].includes(error.response.status))) return UNREACHABLE
+  return fallback
 }
 
 export default api

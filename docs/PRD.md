@@ -154,7 +154,7 @@ Status: ✅ built and tested.
 |---|---|---|---|
 | NFR-1 | Fast route computation | Under 10 s for batch planning | About 50 ms for 30 stops; about 480 ms for 300 stops on 10 vehicles |
 | NFR-2 | Secure authentication | Industry-standard practice | bcrypt, JWT with revocation, lockout, layered rate limits, input validation, role checks on every endpoint, 0 known vulnerabilities |
-| NFR-3 | High availability | 99% uptime | Vercel and Atlas are highly available; Render's free plan sleeps when idle. The app explains wake-up delays; an UptimeRobot check every 5 minutes keeps it awake, with a public status page |
+| NFR-3 | High availability | 99% uptime | Not yet shown. Vercel and Atlas are highly available; Render's free plan sleeps when idle, and an UptimeRobot check every 5 minutes keeps it awake, with a public status page. Measured uptime to 28 Oct 2026 was about 81%, because the rate limiter answered Render's health check with 429; that is fixed, and the figure is to be re-measured |
 | NFR-4 | Scalable architecture | Grows with the fleet | Stateless API, indexed queries, routing engine as pure functions; shared cache and rate-limit store needed only when running several instances |
 | NFR-5 | Responsive UI | Mobile and desktop | Every page verified at 375 px and up to 1440 px |
 | NFR-6 | Accessibility | Usable by keyboard and screen reader | Visible focus, skip link, labelled controls, dialog focus handling, reduced motion respected |
@@ -217,7 +217,7 @@ All six appear in Analytics with the previous period for comparison. Delivered-t
 | 1. Gap analysis | Specification vs codebase review | Done |
 | 2. Spec gaps and new features | Proof of delivery, live customer tracking, time windows, auto-dispatch, address autocomplete, spoken notifications, demo seeder | Done |
 | 3. Design | A design system and redesign of every page, later replaced by the light "road signage" system | Done |
-| 4. Testing | Unit and API tests (230) and end-to-end browser tests (17), end-to-end smoke test, zero console errors | Done |
+| 4. Testing | Unit and API tests (237) and end-to-end browser tests (20), end-to-end smoke test, zero console errors | Done |
 | 5. Documentation and deployment | Technical documentation, PRD, README; Vercel + Render + Atlas | Documentation done; deployment needs the owner's accounts |
 | 6. Product polish | Public homepage, demo morning, Hindi for drivers and customers, a driver app that works offline | Done |
 

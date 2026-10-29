@@ -156,6 +156,10 @@ function TrackDelivery() {
               <span>{t('track.away')} {eta.stopsBefore > 1 ? t('track.stopsBefore', { n: eta.stopsBefore }) : eta.stopsBefore === 1 ? t('track.oneStopBefore') : t('track.youreNext')}</span>
             </p>
           )}
+          {/* On the way without the driver's location: the route's expected time instead of a live countdown */}
+          {status === 'on_the_way' && !eta && (delivery.estimatedArrival || delivery.plannedArrival) && (
+            <p className="track-eta"><span>{t('track.expected')} <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong>. {t('track.noLiveLocation')}</span></p>
+          )}
           {status === 'arriving' && <p className="track-eta"><span><strong>{t('track.arrivingSoon', { m: data.arrivingRadiusM })}</strong>. {t('track.beReady')}</span></p>}
           {status === 'packed' && <p className="track-eta"><span>{t('track.expected')} <strong>{formatClock(delivery.estimatedArrival || delivery.plannedArrival)}</strong></span></p>}
           {status === 'delivered' && <p className="track-eta"><span>{t('track.deliveredAt')} <strong>{formatClock(delivery.completedAt)}</strong>. {t('track.thanks')}</span></p>}

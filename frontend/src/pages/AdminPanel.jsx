@@ -19,6 +19,7 @@ export default function AdminPanel() {
   const { user: me } = useAuth()
   const demo = useDemoMode()
   const [users, setUsers] = useState(null)
+  const [loadError, setLoadError] = useState('')
   const [config, setConfig] = useState(null)
   const [editing, setEditing] = useState(null) // null | 'new' | user
   const [formData, setFormData] = useState(initialFormData)
@@ -29,11 +30,13 @@ export default function AdminPanel() {
 
   const load = useCallback(async () => {
     try {
+      setLoadError('')
       const res = await api.get('/admin/users', { params: { limit: 100, ...(roleFilter && { role: roleFilter }), ...(search && { search }) } })
       setUsers(res.data.users)
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to load users'))
-      setUsers([])
+      // Keep the counts blank: a failed load is not an empty user list
+      setUsers(null)
+      setLoadError(errorMessage(err, 'Failed to load users'))
     }
   }, [roleFilter, search])
 
@@ -118,10 +121,11 @@ export default function AdminPanel() {
       </div>
 
       <div className="stats-strip mb-6">
-        <StatCard label="Users" value={list.length} />
-        <StatCard label="Admins" value={list.filter(u => u.role === 'admin').length} />
-        <StatCard label="Fleet managers" value={list.filter(u => u.role === 'fleet_manager').length} />
-        <StatCard label="Drivers" value={list.filter(u => u.role === 'driver').length} hint={`${list.filter(u => u.isActive).length} active accounts in total`} />
+        {/* Blank (—) until the users have loaded, never a misleading 0 */}
+        <StatCard label="Users" value={users && list.length} />
+        <StatCard label="Admins" value={users && list.filter(u => u.role === 'admin').length} />
+        <StatCard label="Fleet managers" value={users && list.filter(u => u.role === 'fleet_manager').length} />
+        <StatCard label="Drivers" value={users && list.filter(u => u.role === 'driver').length} hint={users ? `${list.filter(u => u.isActive).length} active accounts in total` : undefined} />
       </div>
 
       {demo && <div className="card mb-6">
@@ -142,7 +146,9 @@ export default function AdminPanel() {
           </select>
           <input type="search" className="form-input flex-1 min-w-[180px]" placeholder="Search name or email" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search users" />
         </div>
-        {!users ? <SkeletonRows label="Loading users" /> : list.length === 0 ? <EmptyState title="No users found" /> : (
+        {loadError ? (
+          <EmptyState title="Couldn’t load users" action={<button type="button" className="btn btn-secondary" onClick={load}>Try again</button>}>{loadError}</EmptyState>
+        ) : !users ? <SkeletonRows label="Loading users" /> : list.length === 0 ? <EmptyState title="No users found" /> : (
           <TableRegion label="Users">
             <table className="table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Phone</th><th>Status</th><th>Last login</th><th className="text-right">Actions</th></tr></thead>

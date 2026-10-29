@@ -94,6 +94,37 @@ describe('demo morning API', () => {
     expect(await advanceSimulations(new Date(Date.now() + 3600000))).toBe(0)
   })
 
+  it('stopping puts the demo routes back as planned and frees the drivers it dispatched', async () => {
+    const manager = await createUser('fleet_manager')
+    await api().post('/api/demo/seed').set(manager.auth)
+    await api().post('/api/demo/simulate').set(manager.auth).expect(200)
+    const startedAt = (await Route.findOne({ name: 'New Delhi morning run' })).simulation.startedAt
+    await advanceSimulations(new Date(startedAt.getTime() + 2 * 60000))
+    expect((await Route.find({ isDemo: true })).some(r => r.stops.some(s => s.status === 'completed'))).toBe(true)
+
+    const stop = await api().delete('/api/demo/simulate').set(manager.auth)
+    expect(stop.status).toBe(200)
+    expect(stop.body.stopped).toBe(5)
+
+    const routes = await Route.find({ isDemo: true }).populate('driver', 'name')
+    for (const r of routes) {
+      expect(r.status).toBe('planned')
+      expect(r.simulation?.startedAt).toBeFalsy()
+      expect(r.startedAt).toBeFalsy()
+      expect(r.driverLocation?.coordinates?.length ?? 0).toBe(0)
+      expect(r.actualDistance).toBe(0)
+      expect(r.stops.every(s => s.status === 'pending' && !s.completedAt && !s.proof?.note)).toBe(true)
+    }
+    // The seeded assignment stays; the four the demo morning dispatched wait for a driver again
+    const assigned = routes.filter(r => r.driver).map(r => `${r.name}: ${r.driver.name}`)
+    expect(assigned).toEqual(['Ranchi morning run: Ravi Kumar Oraon'])
+
+    // So auto-dispatch can place them again, and the demo morning can run again
+    const preview = await api().post('/api/dispatch/preview').set(manager.auth)
+    expect(preview.body.assignments).toHaveLength(4)
+    expect((await api().post('/api/demo/simulate').set(manager.auth)).body.started).toHaveLength(5)
+  })
+
   it('is for managers only', async () => {
     const driver = await createUser('driver')
     expect((await api().post('/api/demo/simulate').set(driver.auth)).status).toBe(403)

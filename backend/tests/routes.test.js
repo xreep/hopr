@@ -267,6 +267,36 @@ describe('route assignment and driver workflow', () => {
     expect((await api().patch(`/api/routes/${route._id}/order`).set(manager.auth).send({ order: reversed })).status).toBe(409)
   })
 
+  it('never gives a driver two routes on the same day', async () => {
+    const manager = await createUser('fleet_manager')
+    const driver = await createUser('driver', { name: 'Ravi Kumar' })
+    const day1 = '2026-11-02T04:30:00.000Z' // 10:00 IST on 2 Nov
+    const day1Evening = '2026-11-02T12:30:00.000Z' // 18:00 IST, same day
+    const day2 = '2026-11-03T04:30:00.000Z'
+    const morning = await createRoute(manager.auth, { departureTime: day1, assignments: [{ driver: driver.user._id }] })
+    const evening = await createRoute(manager.auth, { departureTime: day1Evening })
+    const nextDay = await createRoute(manager.auth, { departureTime: day2 })
+
+    const clash = await api().patch(`/api/routes/${evening._id}`).set(manager.auth).send({ driver: driver.user._id })
+    expect(clash.status).toBe(409)
+    expect(clash.body.message).toBe(`Ravi Kumar already has ${morning.name} (${morning.routeId}) on 2 Nov`)
+    // A batch saved with that driver is refused the same way
+    const batch = await api().post('/api/routes').set(manager.auth).send(planBody({ departureTime: day1Evening, assignments: [{ driver: driver.user._id }] }))
+    expect(batch.status).toBe(409)
+    // Another day is fine, and so is re-sending the driver a route already has
+    expect((await api().patch(`/api/routes/${nextDay._id}`).set(manager.auth).send({ driver: driver.user._id })).status).toBe(200)
+    expect((await api().patch(`/api/routes/${morning._id}`).set(manager.auth).send({ driver: driver.user._id })).status).toBe(200)
+
+    // A route on the road counts on the day it started, whatever day it was planned for
+    const other = await createUser('driver', { name: 'Pooja Kumari' })
+    const later = await createRoute(manager.auth, { departureTime: day2, assignments: [{ driver: other.user._id }] })
+    await api().patch(`/api/routes/${later._id}/start`).set(other.auth).expect(200)
+    const today = await createRoute(manager.auth, { departureTime: new Date().toISOString() })
+    const busy = await api().patch(`/api/routes/${today._id}`).set(manager.auth).send({ driver: other.user._id })
+    expect(busy.status).toBe(409)
+    expect(busy.body.message).toMatch(/^Pooja Kumari already has /)
+  })
+
   it('pushes back remaining ETAs when a delay is reported', async () => {
     const manager = await createUser('fleet_manager')
     const driver = await createUser('driver')

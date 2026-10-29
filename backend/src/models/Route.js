@@ -162,7 +162,9 @@ const routeSchema = new mongoose.Schema({
   // Demo morning: a simulated drive (demo routes only), see services/simulation.js
   simulation: {
     startedAt: Date,
-    speedup: Number
+    speedup: Number,
+    // The demo morning gave this route its driver (stopping it takes the driver back)
+    dispatched: Boolean
   }
 }, {
   timestamps: true

@@ -55,14 +55,21 @@ function RequestForm() {
     }
   }
 
+  // Without email on the server no link goes out, so say only that (the same for every
+  // address, so it still reveals nothing about who has an account)
+  if (sent?.emailEnabled === false) {
+    return (
+      <>
+        <h1 className="text-h1 font-extrabold">Ask your administrator</h1>
+        <p className="text-body text-ink-400 mt-1" role="status">Email isn&apos;t set up on this server yet, so no reset link can be sent. Your administrator can set a new password for you from the Admin page.</p>
+      </>
+    )
+  }
   if (sent) {
     return (
       <>
         <h1 className="text-h1 font-extrabold">Check your email</h1>
         <p className="text-body text-ink-400 mt-1" role="status">{sent.message}</p>
-        {sent.emailEnabled === false && (
-          <div className="alert alert-warning mt-4">Email isn&apos;t set up on this server yet, so no link can be sent. Ask your administrator to reset your password from the Admin page.</div>
-        )}
       </>
     )
   }

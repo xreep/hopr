@@ -379,6 +379,8 @@ The driver's position is their last GPS fix if it is under 12 hours old, else th
 
 **Days off.** Drivers mark days off on their profile and managers on the Drivers page (IST dates). Auto-dispatch never offers a driver for a route that runs on one of their days off, and says so in the preview; manual assignment refuses it.
 
+**One route a day per driver.** Assigning by hand (Route Detail, the routes list or a saved batch) refuses, with 409 and the other route's name, a driver who already has an open route that day. A planned route counts on its planned day; a route on the road counts on the day it started, whatever day it was planned for. A driver can still be given tomorrow's route while today's is planned. Auto-dispatch is stricter: it only offers drivers with no planned or active route at all. When it can place nothing, the dialog says how to fix the reason shown and offers **Assign by hand**.
+
 **Manual stop order.** On a planned route a manager can move stops up or down ("the customer called, go there first"). The route is re-timed in that order with its vehicle and departure, and distance, fuel and the road line follow it. The route is marked `manualOrder`, and recalculating asks before letting the optimizer choose the order again.
 
 **Printed route sheet.** "Print route sheet" on Route Detail prints the manifest alone: sequence, customer, address, notes, phone, window, ETA, parcel and a column for a signature or reason, for drivers without a smartphone or signal.
@@ -406,7 +408,7 @@ They are stored in MongoDB with `completedAt` and `completedBy`. Proof images ca
 - **Driver side**: while a route is active the driver app sends GPS every 5 seconds (`PATCH /api/routes/:id/location`), with "Update location" and "Pick on map" fallbacks and a demo drive mode. The demo drive stops at the next undelivered stop. The server ignores GPS jitter and implausible jumps when adding up driven distance.
 - **Customer side**: `/track/:token` needs no login; the random per-stop token is the only credential. It shows:
   - the driver's initials, smoothly animated along the remaining route (it never teleports), with the remaining-route line
-  - a live "N min away" ETA
+  - a live "N min away" ETA; when the driver shares no location, the expected arrival (moved by any reported delay) and a note that live location isn't shared yet
   - a timeline: Packed, On the way, Arriving (within 500 m), Delivered
   - a "stale" state after 60 seconds without a ping
 - **Privacy**: the tracking response contains no other customers' stops and no contact details.
@@ -424,7 +426,7 @@ A window is taken on the day it is next open from the route's planned departure 
 
 ### 7.7 Demo morning
 
-The dashboard can drive the demo routes so the product can be watched working without anyone holding a phone. `POST /api/demo/simulate` auto-dispatches the waiting demo routes (the same matching as 7.1), then starts every planned demo route as a simulated drive at 20 times real time. A server ticker (every 2 s) moves each van along its road geometry at the vehicle's speed, adjusted for the traffic profile, waits the service time at each stop, and completes stops with a "Demo delivery (simulated)" note. The position is derived from the start time, so a restarted server resumes at the right place. ETAs and the customer's countdown follow the simulated clock, and the tracking page says it is a demo. Only routes flagged `isDemo` are ever simulated. Before anyone is on the road, the dashboard map shows the day's planned routes and the hubs; the zoom button beside each driver follows one route.
+The dashboard can drive the demo routes so the product can be watched working without anyone holding a phone. `POST /api/demo/simulate` auto-dispatches the waiting demo routes (the same matching as 7.1), then starts every planned demo route as a simulated drive at 20 times real time. A server ticker (every 2 s) moves each van along its road geometry at the vehicle's speed, adjusted for the traffic profile, waits the service time at each stop, and completes stops with a "Demo delivery (simulated)" note. The position is derived from the start time, so a restarted server resumes at the right place. ETAs and the customer's countdown follow the simulated clock, and the tracking page says it is a demo. Only routes flagged `isDemo` are ever simulated. **Stop and reset** (`DELETE /api/demo/simulate`) takes the routes out of the drive, waits for a tick in progress, and puts each one still on the road back as planned with nothing delivered; drivers the demo morning dispatched are freed (a seeded assignment stays), so auto-dispatch and the demo morning work again. Before anyone is on the road, the dashboard map shows the day's planned routes and the hubs; the zoom button beside each driver follows one route.
 
 ### 7.8 Working offline (driver app)
 
@@ -513,6 +515,7 @@ Rate limits (per signed-in user, or per IP when anonymous):
 | Driver GPS pings | 30 per minute |
 | Public tracking page | 30 per minute per IP |
 | Live reads (dashboard, routes, incidents) | 60 per minute |
+| Health check (`GET /api/health`) | not limited: Render and the uptime monitor poll it constantly, and a 429 there made Render mark the server failed |
 
 Behind Render's proxy, `TRUST_PROXY` (on by default in production) makes the limits see the real client IP.
 
@@ -651,7 +654,7 @@ Also reported: capacity utilisation (load ÷ capacity), total distance, fuel cos
 |---|---|---|
 | Fast route computation, under 10 s for batch planning | Met | 30-stop route in about 50 ms; 300 stops on 10 vehicles in about 480 ms (hard budgets: 3 s per route, 7 s per batch). Covered by tests |
 | Secure user authentication | Met | Section 8: bcrypt, JWT with revocation, lockout, rate limits, validation, audit logging, 0 known vulnerabilities |
-| High availability (99% uptime) | Met on the ₹0 budget | Atlas M0 and Vercel are highly available. Render's free plan sleeps after 15 minutes idle; an UptimeRobot monitor requests `/api/health` every 5 minutes, which keeps it awake, alerts by email when it is down and publishes the record on a [public status page](https://stats.uptimerobot.com/NK50eDGlfC). If the server does sleep, the app tells the user after 4 seconds that it is waking. A paid Render instance removes the limitation entirely |
+| High availability (99% uptime) | Not yet shown | Atlas M0 and Vercel are highly available. Render's free plan sleeps after 15 minutes idle; an UptimeRobot monitor requests `/api/health` every 5 minutes, which keeps it awake, and publishes the record on a [public status page](https://stats.uptimerobot.com/NK50eDGlfC). Measured uptime up to 28 Oct 2026 was about 81%. The cause was not sleep: the global rate limit answered Render's own health check with 429, so Render marked the server failed about every 8 minutes. The health check is now exempt (28 Oct); judge availability from the status page after that date. If the server does sleep, the app tells the user after 4 seconds that it is waking. A paid Render instance removes the sleep entirely |
 | Scalable architecture | Met for this scope | Stateless API (JWT), indexed queries, routing engine as pure functions, so instances can scale horizontally. Rate-limit counters and the geocoding cache are in memory per instance; across several instances they would move to a shared store such as Redis |
 | Responsive UI | Met | Every page verified at 375 px wide (no horizontal scroll) and on desktop up to 1440 px; phone-specific driver dock and bottom-sheet dialogs |
 
@@ -697,9 +700,9 @@ Accessibility: keyboard focus is always visible, there is a skip link, dialogs t
 ## 13. Testing
 
 ```bash
-npm test --workspace=backend    # 176 tests, in-memory MongoDB
-npm test --workspace=frontend   # 54 tests, jsdom
-npm run test:e2e                # 17 Playwright tests in a real browser
+npm test --workspace=backend    # 179 tests, in-memory MongoDB
+npm test --workspace=frontend   # 58 tests, jsdom
+npm run test:e2e                # 20 Playwright tests in a real browser
 npm run lint --workspace=backend && npm run lint --workspace=frontend
 npm run build --workspace=frontend
 ```
@@ -711,13 +714,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, every unit and API test, 
 | Routing engine | 27 | Exactly optimal up to 8 stops and on a 9-stop case, never worse than the previous search, the same plan every time; brute-force-verified optimal order on 5 Ranchi stops; urgent stops earlier; windows (wait, flag, readable violation, overnight and next-day windows, still late after recalculation); rush hour vs night; incidents; fuel and CO₂; 30-stop limit; 300-stop batch under 10 s |
 | Auth | 14 | Register 201; admin role forced to driver; login 200; `/me` 200 with token and 401 without; lockout on the sixth bad login; tokens revoked on password change; profile whitelist; session checks not counted against the auth limit; `/me` without lockout internals; forgot password (same answer for unknown emails, one-use one-hour link, sessions revoked, per-address limit) |
 | Authorisation | 8 | Drivers limited to their own routes; manager and admin boundaries; regex-safe search; 400 for malformed IDs |
-| Routes and workflow | 17 | Planning API, batches, assignment, end-to-end driver workflow, a completion counted once under duplicate requests, manual stop order, delays, recalculation, incidents, re-timing on vehicle change and on start |
+| Routes and workflow | 18 | Planning API, batches, assignment (never two routes for one driver on one day), end-to-end driver workflow, a completion counted once under duplicate requests, manual stop order, delays, recalculation, incidents, re-timing on vehicle change and on start |
 | Auto-dispatch | 12 | Proximity, stale GPS fallback, home hub position, never another city, capacity fit and exact score formula, global matching, preview and confirm with re-validation; days off in scoring, preview and manual assignment |
 | Proof of delivery | 9 | Photo, signature and note; type sniffing; 5 MB limit; privacy; deletion with the route |
 | Tracking | 11 | GPS pings and odometer filtering (fixes without an accuracy do not count), dedicated rate limit, public page states, privacy |
 | Analytics | 9 | Every KPI formula, empty data, period comparison, CSV safety |
-| Fleet, maps, demo, health, geocoding | 24 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
-| Demo morning | 4 | Drive timeline (speed, time at the door), dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
+| Fleet, maps, demo, health, geocoding | 25 | Vehicles and drivers, geocoding validation, five-city demo seeder (including late at night) and city-by-city auto-dispatch, security headers, India-wide place matching, ranking near a hub, de-duplication |
+| Demo morning | 5 | Drive timeline (speed, time at the door), Stop and reset frees the drivers it dispatched, dispatch and drive of all five cities, ETAs and tracking on the simulated clock, never real routes, stop, managers only |
 | Website contact form | 4 | Stored and emailed to admins with the sender as reply-to, validation, bots dropped quietly, admin-only inbox, per-sender limit |
 | Security fixes | 9 | No demo endpoints without demo mode (a manager cannot create the known admin), demo accounts cannot be changed, deleted or locked out, planning tools for managers only, HS256 only, tracking links expire, late offline updates keep `receivedAt` |
 | Learned travel times | 6 | Leg timing against the plan, breaks and detours ignored, gradual and bounded correction, slower drives lead to later ETAs, demo drives never teach it, arrival accuracy |
