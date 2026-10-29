@@ -7,6 +7,9 @@ const PORT = Number(process.env.E2E_API_PORT || 5055)
 
 process.env.NODE_ENV = 'test'
 process.env.DEMO_MODE = 'true'
+// Tests that call the API directly can send their own X-Forwarded-For, so their sign-ins
+// do not use up the browser's sign-in limit (20 per 15 minutes per address)
+process.env.TRUST_PROXY = 'loopback'
 process.env.JWT_SECRET = 'e2e-only-secret-not-used-anywhere-else'
 process.env.FRONTEND_URL = `http://localhost:${process.env.E2E_WEB_PORT || 4180}`
 delete process.env.MAPBOX_TOKEN
